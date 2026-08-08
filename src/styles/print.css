@@ -1,0 +1,23 @@
+/* Print styles for the Book Designer print view (Save as PDF). */
+.t-signature { text-align: center; margin-top: 34px; color: #666; transform: rotate(-3deg); }
+.t-signature.signature-cormorant { font-family: 'Cormorant Garamond', Georgia, serif; font-style: italic; font-size: 2.1rem; }
+.t-signature.signature-literata { font-family: 'Literata', Georgia, serif; font-style: italic; font-size: 1.5rem; }
+.t-signature.signature-cursive { font-family: 'Brush Script MT', 'Snell Roundhand', 'Segoe Script', 'Comic Sans MS', cursive; font-size: 2.2rem; }
+.t-container { font-size: 1.35em !important; letter-spacing: 0.08em; margin-top: 2.5em; }
+
+@media print {
+  body { background: #fff !important; }
+  .print-toolbar,
+  .workspace-topbar,
+  .sidebar,
+  .toast-wrap { display: none !important; }
+  .print-view { max-width: none; padding: 0; margin: 0; }
+  .book-view {
+    box-shadow: none;
+    padding: 0 5%;
+    margin: 0;
+    border-radius: 0;
+  }
+  .chapter-block { break-before: page; }
+  .chapter-block:first-of-type { break-before: auto; }
+}

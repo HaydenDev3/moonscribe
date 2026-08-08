@@ -1,0 +1,207 @@
+/* ============================================================
+   Moonscribe design tokens — soft moonstone palette
+   Three themes: Daylight (light), Moonlight (dark), Amoled.
+   Every theme shares the same semantic token ladder so colours
+   always sit in one family. `auto` resolves to Daylight/Moonlight.
+   ============================================================ */
+:root {
+  color-scheme: light;
+
+  /* palette — Daylight (warm cream + moon blue) */
+  --moon: #7ba3c9;
+  --moon-deep: #6a92bb;
+  --twilight: #4a6b8a;
+  --cream: #f9f6f1;
+  --ivory: #fffcf9;
+  --ivory-warm: #fdf9f3;
+  --rose: #d4a5a5;
+  --rose-deep: #c08f8f;
+  --charcoal: #3d3a36;
+  --grey: #8a847c;
+  --grey-soft: #b3ada4;
+  --sage: #a8c5a8;
+  --sage-deep: #7ea37e;
+  --mist: #e8e2d9;
+  --mist-soft: #f0ebe3;
+
+  /* typography */
+  --font-heading: 'Cormorant Garamond', 'Georgia', serif;
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-editor: 'Literata', 'Georgia', 'Times New Roman', serif;
+
+  /* surfaces */
+  --bg: var(--cream);
+  --surface: var(--ivory);
+  --surface-warm: var(--ivory-warm);
+  --surface-elev: #ffffff;
+  --border: var(--mist);
+  --border-soft: var(--mist-soft);
+
+  /* accent states */
+  --active-bg: #eef3f8;
+  --active-border: #dce6ef;
+  --hover-bg: var(--mist-soft);
+
+  /* accent fills — filled pills & primary buttons */
+  --accent: var(--moon);
+  --accent-deep: var(--moon-deep);
+  --accent-soft: #eef3f8;
+  --accent-fill: var(--moon);
+  --accent-fill-hover: var(--moon-deep);
+  --accent-fg: #ffffff;
+
+  /* rose fills — warm actions (delete, remove, "for Storm") */
+  --rose-fill: var(--rose);
+  --rose-fill-hover: var(--rose-deep);
+  --rose-fg: #ffffff;
+
+  --toast-bg: var(--charcoal);
+  --toast-fg: #f5f2ec;
+
+  /* scrims & rings */
+  --overlay: rgba(61, 58, 54, 0.35);
+  --focus-ring: rgba(123, 163, 201, 0.28);
+
+  /* activity heatmap */
+  --heat-1: #dbe6f2;
+  --heat-2: #a9c4dd;
+  --heat-3: #6f95bf;
+  --heat-4: #4a6d94;
+
+  /* effects */
+  --shadow-sm: 0 1px 2px rgba(61, 58, 54, 0.05), 0 2px 8px rgba(61, 58, 54, 0.04);
+  --shadow-md: 0 2px 6px rgba(61, 58, 54, 0.06), 0 10px 32px rgba(61, 58, 54, 0.07);
+  --shadow-lg: 0 8px 24px rgba(61, 58, 54, 0.10), 0 24px 64px rgba(61, 58, 54, 0.10);
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 22px;
+
+  /* spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* editor measure */
+  --measure: 68ch;
+}
+
+/* ---------------- Moonlight (dark) — deep-sea night ----------------
+   One cool hue family end to end: warm text is gone, rose and sage are
+   cool-tinted, and every grey is a shade of the same blue-black. */
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --moon: #8fb5da;
+  --moon-deep: #b6d1ec;
+  --twilight: #c3d6e9;
+  --cream: #10151d;
+  --ivory: #161d27;
+  --ivory-warm: #1b232e;
+  --rose: #d2a3ad;
+  --rose-deep: #c18d99;
+  --charcoal: #dfe6ee;
+  --grey: #8d9bab;
+  --grey-soft: #64727f;
+  --sage: #a0b9a8;
+  --sage-deep: #87a990;
+  --mist: #28323f;
+  --mist-soft: #1e2630;
+
+  --bg: var(--cream);
+  --surface: var(--ivory);
+  --surface-warm: var(--ivory-warm);
+  --surface-elev: #1e2733;
+  --border: var(--mist);
+  --border-soft: var(--mist-soft);
+
+  --active-bg: #1d2734;
+  --active-border: #2c3a4a;
+  --hover-bg: var(--mist-soft);
+
+  --accent-soft: #1d2734;
+  --accent-fill: #4d7baa;
+  --accent-fill-hover: #5e8fbf;
+  --accent-fg: #ffffff;
+
+  --rose-fill: #a97d89;
+  --rose-fill-hover: #b98c98;
+  --rose-fg: #ffffff;
+
+  --toast-bg: var(--surface-elev);
+  --toast-fg: var(--charcoal);
+
+  --overlay: rgba(4, 8, 14, 0.55);
+  --focus-ring: rgba(143, 181, 218, 0.25);
+
+  --heat-1: #202a36;
+  --heat-2: #2c4a63;
+  --heat-3: #3f6d8f;
+  --heat-4: #5d90b8;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.3), 0 10px 32px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4), 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+/* ---------------- Amoled (dark) — pure night ----------------
+   True-black background for OLED screens. Elevation is carried by
+   borders, not shadows, so black pixels stay black. */
+[data-theme='amoled'] {
+  color-scheme: dark;
+
+  --moon: #9cc2e8;
+  --moon-deep: #c5daf2;
+  --twilight: #d0e0f0;
+  --cream: #000000;
+  --ivory: #0a0c10;
+  --ivory-warm: #10141a;
+  --rose: #d9a9b4;
+  --rose-deep: #cf94a1;
+  --charcoal: #e8ecf2;
+  --grey: #98a4b2;
+  --grey-soft: #64727f;
+  --sage: #a4c1ab;
+  --sage-deep: #8cae96;
+  --mist: #1d242e;
+  --mist-soft: #141922;
+
+  --bg: var(--cream);
+  --surface: var(--ivory);
+  --surface-warm: var(--ivory-warm);
+  --surface-elev: #141922;
+  --border: var(--mist);
+  --border-soft: var(--mist-soft);
+
+  --active-bg: #11161d;
+  --active-border: #24303d;
+  --hover-bg: var(--mist-soft);
+
+  --accent-soft: #10161f;
+  --accent-fill: #3b6ea8;
+  --accent-fill-hover: #4c82bd;
+  --accent-fg: #ffffff;
+
+  --rose-fill: #a97a87;
+  --rose-fill-hover: #bb8b98;
+  --rose-fg: #ffffff;
+
+  --toast-bg: var(--surface-elev);
+  --toast-fg: var(--charcoal);
+
+  --overlay: rgba(0, 0, 0, 0.7);
+  --focus-ring: rgba(156, 194, 232, 0.3);
+
+  --heat-1: #0f141b;
+  --heat-2: #1c3348;
+  --heat-3: #2f5a7d;
+  --heat-4: #4f8bb8;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.5), 0 10px 32px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.55), 0 24px 64px rgba(0, 0, 0, 0.45);
+}

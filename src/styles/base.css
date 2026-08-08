@@ -1,0 +1,242 @@
+/* ============================================================
+   Base — reset, typography, background
+   ============================================================ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--charcoal);
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--bg), var(--bg));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* soft paper texture — subtle, like morning light on a page */
+html.paper-texture {
+  background-image:
+    radial-gradient(rgba(61, 58, 54, 0.028) 1px, transparent 1.4px),
+    radial-gradient(rgba(122, 163, 201, 0.02) 1px, transparent 1.6px);
+  background-size: 26px 26px, 17px 17px;
+  background-position: 0 0, 9px 11px;
+}
+/* let the html texture show through the body */
+html.paper-texture body {
+  background-color: transparent;
+  background-image: none;
+}
+
+html.paper-texture[data-theme='dark'],
+html.paper-texture[data-theme='amoled'] {
+  background-image:
+    radial-gradient(rgba(255, 252, 250, 0.03) 1px, transparent 1.4px),
+    radial-gradient(rgba(122, 163, 201, 0.05) 1px, transparent 1.6px);
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--twilight);
+  margin: 0 0 0.4em;
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+
+p { margin: 0 0 1em; }
+
+a {
+  color: var(--moon-deep);
+  text-decoration: none;
+}
+a:hover { color: var(--twilight); }
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--charcoal);
+}
+
+::placeholder {
+  color: var(--grey-soft);
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--grey-soft);
+  border-radius: 10px;
+  border: 3px solid var(--bg);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--grey); }
+::-webkit-scrollbar-track { background: transparent; }
+
+img { max-width: 100%; }
+
+:focus-visible {
+  outline: 2px solid var(--moon);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+/* shared UI classes */
+.muted { color: var(--grey); }
+.small { font-size: 0.85rem; }
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-weight: 500;
+  font-size: 0.92rem;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+.button:active { transform: translateY(1px); }
+
+.button-primary {
+  background: var(--accent-fill);
+  color: var(--accent-fg);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--twilight) 35%, transparent);
+}
+.button-primary:hover { background: var(--accent-fill-hover); color: var(--accent-fg); }
+
+.button-ghost {
+  background: transparent;
+  color: var(--twilight);
+  border-color: var(--border);
+}
+.button-ghost:hover { background: var(--mist-soft); }
+
+.button-rose {
+  background: var(--rose-fill);
+  color: var(--rose-fg);
+}
+.button-rose:hover { background: var(--rose-fill-hover); color: var(--rose-fg); }
+
+.button-quiet {
+  background: transparent;
+  color: var(--grey);
+  border: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+.button-quiet:hover { background: var(--mist-soft); color: var(--charcoal); }
+
+.button[disabled] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* form fields */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--space-4);
+}
+.field label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--twilight);
+  letter-spacing: 0.02em;
+}
+.field input,
+.field select,
+.field textarea {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--moon);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.field textarea { resize: vertical; min-height: 90px; }
+.field .hint { font-size: 0.78rem; color: var(--grey-soft); }
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  background: var(--mist-soft);
+  color: var(--grey);
+  border: 1px solid var(--border-soft);
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.tag:hover { border-color: var(--moon); color: var(--charcoal); }
+
+/* pill used across nav / kinds / filters */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--grey);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+.pill:hover { border-color: var(--moon); color: var(--moon-deep); background: var(--surface-warm); }
+.pill:active { transform: translateY(1px); }
+.pill.active {
+  background: var(--accent-fill);
+  border-color: var(--accent-fill);
+  color: var(--accent-fg);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--twilight) 30%, transparent);
+}
+.pill .pill-icon { width: 16px; text-align: center; opacity: 0.9; }
+.pill.active .pill-icon { opacity: 1; }
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex: none;
+}
+
+.actions-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
