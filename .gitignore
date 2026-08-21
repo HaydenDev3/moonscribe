@@ -5,3 +5,5 @@ src-tauri/target
 *.local
 data/
 *.secret
+package-lock.json
+.claude/

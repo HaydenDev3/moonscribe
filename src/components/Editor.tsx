@@ -1,11 +1,12 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from 'react'
 import { countWords } from '../utils/words'
-import { sanitizePaste, sanitizeStoredHtml } from '../utils/formatHtml'
+import { normalizeSafeLinkUrl, sanitizePaste, sanitizeStoredHtml } from '../utils/formatHtml'
 import { annotateProse, stripAnnotations } from '../utils/highlight'
 import { useContextMenu } from './ContextMenu'
 import Icon from './Icon'
 import Select from './Select'
 import ScrollRail from './ScrollRail'
+import Modal from './Modal'
 import { useApp } from '../context/AppContext'
 import { buildEditorFontOptions } from '../utils/fonts'
 import { editorPageGeometry, PAGE_MARGIN_PRESETS, PAGE_PRESETS } from '../utils/pageSize'
@@ -161,6 +162,8 @@ export default function Editor({
   const [toolbarIdle, setToolbarIdle] = useState(false)
   const [dictationSupported, setDictationSupported] = useState(false)
   const [dictating, setDictating] = useState(false)
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false)
+  const [linkDraft, setLinkDraft] = useState('')
 
   // ── Pagination ───────────────────────────────────────────────────────────
   const [pageCount, setPageCount] = useState(1)
@@ -1304,17 +1307,73 @@ export default function Editor({
 
   // ── Link ─────────────────────────────────────────────────────────────────
   const insertLink = useCallback(() => {
-    const url = window.prompt(
-      'Link URL (https://…)',
-    )
+    const sel = window.getSelection()
+    const selectedText = sel && !sel.isCollapsed ? sel.toString().trim() : ''
+    const suggested = selectedText && /^https?:\/\//i.test(selectedText) ? selectedText : ''
 
-    if (url?.trim()) {
-      exec(
-        'createLink',
-        url.trim(),
-      )
+    setLinkDraft(suggested || 'https://')
+    setLinkDialogOpen(true)
+  }, [])
+
+  const applyLinkInsert = useCallback(() => {
+    const url = normalizeSafeLinkUrl(linkDraft)
+    if (!url) {
+      setLinkDialogOpen(false)
+      setLinkDraft('https://')
+      return
     }
-  }, [exec])
+
+    const editor = ref.current
+    if (!editor) {
+      setLinkDialogOpen(false)
+      setLinkDraft('https://')
+      return
+    }
+
+    const selection = window.getSelection()
+    const range = selection && selection.rangeCount ? selection.getRangeAt(0) : document.createRange()
+
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.target = '_blank'
+    anchor.rel = 'noopener noreferrer nofollow'
+
+    const fallbackText = range.toString().trim() || url
+    anchor.textContent = fallbackText
+
+    editor.focus()
+
+    if (selection && selection.rangeCount && editor.contains(selection.anchorNode)) {
+      if (!range.collapsed) {
+        try {
+          range.surroundContents(anchor)
+        } catch {
+          const fragment = range.extractContents()
+          anchor.appendChild(fragment)
+          range.insertNode(anchor)
+        }
+      } else {
+        range.insertNode(anchor)
+      }
+    } else {
+      const cursor = document.createRange()
+      cursor.selectNodeContents(editor)
+      cursor.collapse(false)
+      cursor.insertNode(anchor)
+    }
+
+    if (selection) {
+      const focus = document.createRange()
+      focus.selectNodeContents(anchor)
+      focus.collapse(false)
+      selection.removeAllRanges()
+      selection.addRange(focus)
+    }
+
+    setLinkDialogOpen(false)
+    setLinkDraft('https://')
+    report()
+  }, [linkDraft, report])
 
   // ── Comments ─────────────────────────────────────────────────────────────
   const addComment = useCallback(() => {
@@ -2269,6 +2328,44 @@ export default function Editor({
     : editorPageGeometry(pageSize, pageLayout?.pageMargin)
 
   return (
+    <>
+      <Modal open={linkDialogOpen} onClose={() => { setLinkDialogOpen(false); setLinkDraft('https://') }} title="Insert link" width={560} className="editor-link-modal">
+        <div className="space-y-5">
+          <div className="relative overflow-hidden rounded-[24px] border border-indigo-300/40 bg-[radial-gradient(circle_at_20%_20%,rgba(122,164,255,0.27),transparent_22%),radial-gradient(circle_at_80%_20%,rgba(170,130,255,0.25),transparent_18%),linear-gradient(135deg,#090d17_0%,#101a30_48%,#1a1b32_100%)] px-4 py-4 shadow-[0_24px_60px_rgba(72,78,180,0.22)]">
+            <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.08)_50%,transparent_100%)] opacity-60" />
+            <div className="relative flex items-center gap-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full border border-amber-200/80 bg-[radial-gradient(circle_at_30%_30%,#dff4ff_0%,#8bc2ff_22%,#285ae8_55%,#0d173f_100%)] shadow-[0_0_28px_rgba(99,131,255,0.75)] animate-[pulse_3.2s_ease-in-out_infinite]">
+                <span className="text-2xl text-white">◉</span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[10px] uppercase tracking-[0.42em] text-indigo-200/80">moon import</div>
+                <div className="mt-1 text-2xl font-black tracking-[-0.06em] text-white">Link import</div>
+              </div>
+            </div>
+          </div>
+
+          <label className="block text-left">
+            <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-300">Website URL</span>
+            <input
+              type="url"
+              value={linkDraft}
+              placeholder="https://example.com"
+              onChange={(e) => setLinkDraft(e.target.value)}
+              className="w-full rounded-2xl border border-slate-700/80 bg-slate-950/60 px-4 py-3 text-base text-slate-100 outline-none transition placeholder:text-slate-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/40"
+              autoFocus
+            />
+          </label>
+
+          <div className="flex items-center justify-end gap-3 pt-1">
+            <button type="button" className="rounded-full border border-slate-600/80 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-800" onClick={() => { setLinkDialogOpen(false); setLinkDraft('https://') }}>
+              Cancel
+            </button>
+            <button type="button" className="rounded-full bg-[linear-gradient(135deg,#9cc4ff_0%,#5f7efb_32%,#272369_100%)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(90,102,255,0.45)] transition hover:translate-y-[-1px] hover:shadow-[0_14px_36px_rgba(90,102,255,0.5)]" onClick={applyLinkInsert}>
+              Insert link
+            </button>
+          </div>
+        </div>
+      </Modal>
     <div
       className="editor-shell"
       onMouseMove={
@@ -3653,5 +3750,6 @@ export default function Editor({
           )
         })()}
     </div>
+    </>
   )
 }

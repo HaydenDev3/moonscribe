@@ -178,7 +178,12 @@
 .landing { min-height:100%; overflow:hidden; color:#f5efe5; background:#080a0d; --landing-line:rgba(255,255,255,.075); --landing-glass:rgba(16,18,22,.78); }
 .landing button{font-family:var(--font-ui)}
 .landing-nav { position:relative;z-index:10;height:76px;max-width:1240px;margin:auto;padding:0 30px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--landing-line); }
-.landing-brand { display:flex;align-items:center;gap:10px;font:600 1.55rem var(--font-heading);color:#fff }.landing-brand span{color:var(--accent)}.landing-brand-orbit{position:relative;width:22px;height:22px;border-radius:50%;border:1px solid color-mix(in srgb,var(--accent) 72%,transparent);box-shadow:inset -6px -1px 0 color-mix(in srgb,var(--accent) 55%,transparent),0 0 22px color-mix(in srgb,var(--accent) 18%,transparent)}
+.landing-brand { display:flex;align-items:center;gap:10px; font:600 1.55rem var(--font-heading); color:#fff; text-decoration:none; transition:transform .2s ease, opacity .2s ease; }
+.landing-brand:hover { transform:translateY(-1px); opacity:.98; }
+.landing-brand-copy { display:inline-flex; align-items:center; gap:6px; color:#fff; }
+.landing-brand-copy span { color:var(--accent); text-shadow:0 0 18px color-mix(in srgb, var(--accent) 32%, transparent); }
+.landing-brand-logo { width:28px; height:28px; border-radius:10px; object-fit:cover; box-shadow:0 0 0 1px rgba(255,255,255,.08), 0 12px 26px color-mix(in srgb, var(--accent) 26%, transparent); }
+.landing-brand-orbit{position:relative;width:22px;height:22px;border-radius:50%;border:1px solid color-mix(in srgb,var(--accent) 72%,transparent);box-shadow:inset -6px -1px 0 color-mix(in srgb,var(--accent) 55%,transparent),0 0 22px color-mix(in srgb,var(--accent) 18%,transparent)}
 .landing-nav-links{display:flex;align-items:center;gap:25px}.landing-nav-links>a:not(.button),.landing-nav-login{border:0;background:none;color:#aaaeb7;font:500 .76rem var(--font-ui);cursor:pointer}.landing-nav-links>a:hover,.landing-nav-login:hover{color:#fff}.landing-nav .button{min-height:38px;border-radius:999px;padding:0 18px}
 .landing-hero { position:relative;max-width:1240px;margin:auto;padding:80px 30px 86px;text-align:center;border-inline:1px solid rgba(255,255,255,.025) }
 .landing-hero-grid{position:absolute;inset:0 -140px auto;height:730px;pointer-events:none;opacity:.65;background-image:linear-gradient(var(--landing-line) 1px,transparent 1px),linear-gradient(90deg,var(--landing-line) 1px,transparent 1px),radial-gradient(ellipse at 50% 35%,color-mix(in srgb,var(--accent) 16%,transparent),transparent 58%);background-size:64px 64px,64px 64px,100% 100%;mask-image:linear-gradient(to bottom,#000 20%,transparent 92%)}

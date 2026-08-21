@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="500" viewBox="0 0 1600 500" role="img" aria-labelledby="title desc">
+<title id="title">MoonScribe Continue with Discord button</title>
+<desc id="desc">MoonScribe branded Discord OAuth sign-in button.</desc>
+<defs>
+  <linearGradient id="buttonFill" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#ffffff"/>
+    <stop offset="55%" stop-color="#f8f7fc"/>
+    <stop offset="100%" stop-color="#eef0fb"/>
+  </linearGradient>
+  <linearGradient id="borderGlow" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0%" stop-color="#8f9cff"/>
+    <stop offset="50%" stop-color="#d8d7ff"/>
+    <stop offset="100%" stop-color="#5865F2"/>
+  </linearGradient>
+  <linearGradient id="moonGold" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#f9e7a8"/>
+    <stop offset="55%" stop-color="#c9a35b"/>
+    <stop offset="100%" stop-color="#9e773b"/>
+  </linearGradient>
+  <filter id="shadow" x="-20%" y="-30%" width="140%" height="170%">
+    <feDropShadow dx="0" dy="20" stdDeviation="18" flood-color="#000000" flood-opacity="0.34"/>
+  </filter>
+</defs>
+
+<g filter="url(#shadow)">
+  <rect x="55" y="80" width="1490" height="340" rx="92" fill="url(#buttonFill)" stroke="url(#borderGlow)" stroke-width="5"/>
+
+  <!-- Discord icon compartment -->
+  <path d="M360 82V418" stroke="#d8d8e8" stroke-width="2"/>
+  <path d="M145 81H360V419H145C95 419 57 382 57 332V168C57 118 95 81 145 81Z" fill="#fbfbff"/>
+
+  <!-- Discord mark -->
+  <g transform="translate(210 250)">
+    <circle r="91" fill="#5865F2"/>
+    <path fill="#fff" d="M-51-42c19-14 38-17 38-17l5 10c-15 4-22 9-22 9 30-13 62-13 92 0 0 0-8-6-23-10l6-9s20 3 38 17c0 0 25 36 29 72 0 0-15 25-54 27l-13-17c25-7 34-20 34-20-8 5-16 9-24 12-10 4-20 6-30 8-20 4-39 3-57-1-11-2-21-5-31-9-6-3-13-6-20-10 0 0 9 13 33 20l-13 17c-39-2-54-27-54-27 4-36 29-72 29-72z"/>
+    <circle cx="-31" cy="8" r="12" fill="#5865F2"/>
+    <circle cx="31" cy="8" r="12" fill="#5865F2"/>
+  </g>
+
+  <!-- MoonScribe identity -->
+  <path d="M485 188H650" stroke="#b38a43" stroke-width="2"/>
+  <path d="M1225 188H1395" stroke="#b38a43" stroke-width="2"/>
+  <path d="M468 188l8 8 8-8-8-8z" fill="#c9a35b"/>
+  <path d="M1410 188l8 8 8-8-8-8z" fill="#c9a35b"/>
+
+  <g transform="translate(940 137)">
+    <circle r="27" fill="url(#moonGold)"/>
+    <circle cx="12" cy="-8" r="25" fill="#f7f7fc"/>
+  </g>
+
+  <circle cx="890" cy="137" r="3" fill="#c9a35b"/>
+  <circle cx="990" cy="137" r="3" fill="#c9a35b"/>
+
+  <text x="940" y="205" text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="39" letter-spacing="14" fill="#252a4a">MOONSCRIBE</text>
+
+  <text x="955" y="320" text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="78" font-weight="600" fill="#11162c">Continue with Discord</text>
+
+  <rect x="68" y="93" width="1464" height="314" rx="79"
+        fill="none" stroke="#ffffff" stroke-opacity="0.75" stroke-width="2"/>
+</g>
+</svg>

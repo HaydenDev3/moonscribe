@@ -46,6 +46,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
+    "resend": "^6.21.0",
     "three": "^0.170.0",
     "ws": "^8.21.3",
     "y-websocket": "^3.1.0",

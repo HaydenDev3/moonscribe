@@ -61,10 +61,6 @@ MoonScribe is a browser-based writing app built for authors who want a calm plac
   </tr>
 </table>
 
-<p align="center">
-  <img src="docs/moonscribe-hero.svg" width="100%" alt="MoonScribe writing studio illustration" />
-</p>
-
 ---
 
 ## Core features

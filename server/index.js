@@ -22,6 +22,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { WebSocketServer } from 'ws'
+import { isEmailConfigured, sendAccountUpdateEmail, sendReminderEmail, sendTwoFactorCode, sendVerificationCode } from './email.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = join(ROOT, 'dist')
@@ -188,6 +189,25 @@ function userRoleInfo(user) {
   }
 }
 
+function issueEmailCode(db, userId, purpose, ttlMs = 10 * 60 * 1000) {
+  const code = String(Math.floor(100000 + Math.random() * 900000))
+  const id = randomBytes(12).toString('hex')
+  const expiresAt = Date.now() + ttlMs
+  db.prepare('DELETE FROM email_tokens WHERE user_id = ? AND purpose = ?').run(userId, purpose)
+  db.prepare('INSERT INTO email_tokens (id, user_id, purpose, code, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(id, userId, purpose, code, expiresAt, Date.now())
+  return { code, expiresAt }
+}
+
+function verifyEmailCode(db, userId, purpose, code) {
+  const row = db.prepare('SELECT * FROM email_tokens WHERE user_id = ? AND purpose = ? ORDER BY created_at DESC LIMIT 1').get(userId, purpose)
+  if (!row) return false
+  if (row.used_at || row.expires_at < Date.now()) return false
+  if (String(row.code) !== String(code)) return false
+  db.prepare('UPDATE email_tokens SET used_at = ? WHERE id = ?').run(Date.now(), row.id)
+  return true
+}
+
 // Pre-account records have no owner. Claiming them automatically would let the
 // first person to sign up see data that may belong to somebody else. A server
 // owner can explicitly opt in during a controlled migration.
@@ -240,8 +260,27 @@ function setupSchema(db) {
   ensureColumn('users', 'google_id', 'google_id TEXT')
   ensureColumn('users', 'google_avatar', 'google_avatar TEXT')
   ensureColumn('users', 'email', 'email TEXT')
+  ensureColumn('users', 'notification_email', 'notification_email TEXT')
+  ensureColumn('users', 'email_verified', 'email_verified INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('users', 'email_verification_code', 'email_verification_code TEXT')
+  ensureColumn('users', 'email_verification_expires_at', 'email_verification_expires_at INTEGER')
+  ensureColumn('users', 'two_factor_enabled', 'two_factor_enabled INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('users', 'two_factor_secret', 'two_factor_secret TEXT')
+  ensureColumn('users', 'two_factor_code', 'two_factor_code TEXT')
+  ensureColumn('users', 'two_factor_expires_at', 'two_factor_expires_at INTEGER')
   ensureColumn('users', 'role', "role TEXT NOT NULL DEFAULT 'user'")
   ensureColumn('users', 'roles', "roles TEXT NOT NULL DEFAULT 'user'")
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS email_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      code TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER,
+      created_at INTEGER NOT NULL
+    );
+  `)
   db.exec('CREATE INDEX IF NOT EXISTS idx_records_user_since ON records(user_id, updated_at)')
   db.exec(`
     CREATE TABLE IF NOT EXISTS novel_members (
@@ -642,7 +681,23 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     }
 
     if (path === '/api/auth/status' && req.method === 'GET') {
-      json(res, 200, { online: true, emailAuth: true, discordAuth: !!DISCORD_CLIENT_SECRET, googleAuth: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET), appOrigin: publicOrigin(req) })
+      json(res, 200, { online: true, emailAuth: true, discordAuth: !!DISCORD_CLIENT_SECRET, googleAuth: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET), emailDelivery: isEmailConfigured(), appOrigin: publicOrigin(req) })
+      return
+    }
+
+    if (path === '/api/auth/request-verification' && req.method === 'POST') {
+      readBody(req, 8 * 1024)
+        .then(({ email }) => {
+          const address = String(email || '').trim().toLowerCase()
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) throw new Error('Enter a valid email address.')
+          const user = database.prepare('SELECT * FROM users WHERE email = ?').get(address)
+          if (!user) return json(res, 404, { error: 'No account is linked to that email yet.' })
+          const { code, expiresAt } = issueEmailCode(database, user.id, 'email_verification')
+          database.prepare('UPDATE users SET email_verification_code = ?, email_verification_expires_at = ? WHERE id = ?').run(code, expiresAt, user.id)
+          if (isEmailConfigured()) sendVerificationCode({ to: address, username: user.username, code, appOrigin: publicOrigin(req) })
+          json(res, 200, { ok: true, email: address, codeSent: true, expiresAt })
+        })
+        .catch((err) => json(res, 400, { error: err.message }))
       return
     }
 
@@ -654,27 +709,33 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         return
       }
       readBody(req)
-        .then(({ username, password }) => {
+        .then(async ({ username, password, email }) => {
           const identity = String(username || '').trim().toLowerCase()
-          const email = identity.includes('@') ? identity : null
-          let name = email ? email.split('@')[0].replace(/[^a-z0-9._-]/g, '_').slice(0, 28) : identity
-          if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid email address.')
-          if (email) { let candidate = name || 'writer'; let n = 0; while (database.prepare('SELECT 1 FROM users WHERE username = ?').get(candidate)) candidate = `${name || 'writer'}_${++n}`; name = candidate }
+          const normalizedEmail = String(email || '').trim().toLowerCase()
+          const resolvedEmail = normalizedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ? normalizedEmail : (identity.includes('@') ? identity : null)
+          let name = resolvedEmail ? resolvedEmail.split('@')[0].replace(/[^a-z0-9._-]/g, '_').slice(0, 28) : identity
+          if (resolvedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(resolvedEmail)) throw new Error('Enter a valid email address.')
+          if (resolvedEmail) { let candidate = name || 'writer'; let n = 0; while (database.prepare('SELECT 1 FROM users WHERE username = ?').get(candidate)) candidate = `${name || 'writer'}_${++n}`; name = candidate }
           if (name.length < 2 || name.length > 40) throw new Error('A username needs between 2 and 40 characters.')
           if (!/^[a-z0-9._-]+$/.test(name)) throw new Error('Usernames can only use letters, numbers, dots, dashes and underscores.')
           const pass = String(password || '')
           if (pass.length < 10) throw new Error('Your password needs at least 10 characters.')
           if (pass.length > 200) throw new Error('That password is too long.')
           const existing = database.prepare('SELECT 1 FROM users WHERE username = ?').get(name)
-          if (existing || (email && database.prepare('SELECT 1 FROM users WHERE email = ?').get(email))) throw new Error('That account already exists — try signing in instead.')
+          if (existing || (resolvedEmail && database.prepare('SELECT 1 FROM users WHERE email = ?').get(resolvedEmail))) throw new Error('That account already exists — try signing in instead.')
           const userId = randomBytes(12).toString('hex')
           const userCount = database.prepare('SELECT COUNT(*) AS n FROM users').get().n
-          database.prepare('INSERT INTO users (id, username, password_hash, email, created_at, role, roles) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-            userId, name, hashPassword(password), email, Date.now(), userCount === 0 ? 'admin' : 'user', userCount === 0 ? 'admin' : 'user'
+          database.prepare('INSERT INTO users (id, username, password_hash, email, created_at, role, roles, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+            userId, name, hashPassword(password), resolvedEmail, Date.now(), userCount === 0 ? 'admin' : 'user', userCount === 0 ? 'admin' : 'user', resolvedEmail ? 0 : 1
           )
           if (userCount === 0) claimLegacyRecords(database, userId)
+          if (resolvedEmail) {
+            const { code, expiresAt } = issueEmailCode(database, userId, 'email_verification')
+            database.prepare('UPDATE users SET email_verification_code = ?, email_verification_expires_at = ? WHERE id = ?').run(code, expiresAt, userId)
+            if (isEmailConfigured()) await sendVerificationCode({ to: resolvedEmail, username: name, code, appOrigin: publicOrigin(req) }).catch(() => null)
+          }
           const { token } = issueToken(database, userId, device(req))
-          json(res, 200, { token, accountId: userId, username: name })
+          json(res, 200, { token, accountId: userId, username: name, emailVerified: resolvedEmail ? false : true })
         })
         .catch((err) => json(res, 400, { error: err.message }))
       return
@@ -687,14 +748,20 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         return
       }
       readBody(req)
-        .then(({ username, password }) => {
+        .then(async ({ username, password }) => {
           const name = String(username || '').trim().toLowerCase()
           const user = database.prepare('SELECT * FROM users WHERE username = ? OR email = ?').get(name, name)
           if (!user || !verifyPassword(password, user.password_hash)) {
             return json(res, 401, { error: 'That username or password didn’t match.' })
           }
+          if (Number(user.two_factor_enabled) === 1) {
+            const { code, expiresAt } = issueEmailCode(database, user.id, 'two_factor')
+            database.prepare('UPDATE users SET two_factor_code = ?, two_factor_expires_at = ? WHERE id = ?').run(code, expiresAt, user.id)
+            if (isEmailConfigured() && user.email) await sendTwoFactorCode({ to: user.email, username: user.username, code }).catch(() => null)
+            return json(res, 200, { requires2fa: true, userId: user.id, username: user.username, email: user.email || null })
+          }
           const { token } = issueToken(database, user.id, device(req))
-          json(res, 200, { token, accountId: user.id, username: user.username })
+          json(res, 200, { token, accountId: user.id, username: user.username, emailVerified: Number(user.email_verified) === 1 })
         })
         .catch(() => json(res, 400, { error: 'Bad request.' }))
       return
@@ -714,11 +781,92 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       return
     }
 
+    if (path === '/api/auth/verify-email' && req.method === 'POST') {
+      readBody(req, 8 * 1024).then(({ code }) => {
+        const user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+        if (!user || !user.email) return json(res, 400, { error: 'Add an email address before verifying it.' })
+        const valid = verifyEmailCode(database, user.id, 'email_verification', code)
+        if (!valid) return json(res, 400, { error: 'That verification code is invalid or expired.' })
+        database.prepare('UPDATE users SET email_verified = 1, email_verification_code = NULL, email_verification_expires_at = NULL WHERE id = ?').run(user.id)
+        json(res, 200, { ok: true, verified: true })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/auth/verify-2fa' && req.method === 'POST') {
+      readBody(req, 8 * 1024).then(({ userId: targetId, code }) => {
+        const target = database.prepare('SELECT * FROM users WHERE id = ?').get(targetId || userId)
+        if (!target) return json(res, 404, { error: 'Account not found.' })
+        const valid = verifyEmailCode(database, target.id, 'two_factor', code)
+        if (!valid) return json(res, 400, { error: 'That 2FA code is invalid or expired.' })
+        const { token } = issueToken(database, target.id, device(req))
+        json(res, 200, { token, accountId: target.id, username: target.username })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/auth/update-account' && req.method === 'POST') {
+      readBody(req, 12 * 1024).then(async ({ email, password, content, notify }) => {
+        const user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+        if (!user) return json(res, 401, { error: 'Account no longer exists.' })
+        const nextEmail = typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : user.email
+        if (nextEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) throw new Error('Enter a valid email address.')
+        if (typeof password === 'string' && password.trim()) {
+          if (password.length < 10) throw new Error('Your password needs at least 10 characters.')
+          database.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), userId)
+        }
+        if (nextEmail && nextEmail !== user.email) {
+          database.prepare('UPDATE users SET email = ?, email_verified = 0 WHERE id = ?').run(nextEmail, userId)
+          if (isEmailConfigured()) {
+            const { code, expiresAt } = issueEmailCode(database, user.id, 'email_verification')
+            database.prepare('UPDATE users SET email_verification_code = ?, email_verification_expires_at = ? WHERE id = ?').run(code, expiresAt, userId)
+            await sendAccountUpdateEmail({ to: nextEmail, username: user.username, summary: 'Your email address was updated. Verify it to keep your account protected.' }).catch(() => null)
+            await sendVerificationCode({ to: nextEmail, username: user.username, code, appOrigin: publicOrigin(req) }).catch(() => null)
+          }
+        }
+        if (content && typeof content === 'object') {
+          if (content.remindersEnabled !== undefined) {
+            database.prepare('UPDATE users SET notification_email = ? WHERE id = ?').run(content.remindersEnabled ? (nextEmail || user.email) : null, userId)
+          }
+        }
+        if (notify && typeof notify === 'string' && user.email) {
+          await sendAccountUpdateEmail({ to: user.email, username: user.username, summary: notify }).catch(() => null)
+        }
+        json(res, 200, { ok: true, email: nextEmail || null })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/auth/enable-2fa' && req.method === 'POST') {
+      readBody(req, 8 * 1024).then(async ({ enable }) => {
+        const user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+        if (!user || !user.email) return json(res, 400, { error: 'Add and verify an email address before enabling 2FA.' })
+        const shouldEnable = enable !== false
+        const { code, expiresAt } = issueEmailCode(database, user.id, 'two_factor')
+        database.prepare('UPDATE users SET two_factor_enabled = ?, two_factor_code = ?, two_factor_expires_at = ? WHERE id = ?').run(shouldEnable ? 1 : 0, code, expiresAt, userId)
+        if (isEmailConfigured()) await sendTwoFactorCode({ to: user.email, username: user.username, code }).catch(() => null)
+        json(res, 200, { ok: true, enabled: shouldEnable, requiresVerification: shouldEnable })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/auth/reminder' && req.method === 'POST') {
+      readBody(req, 8 * 1024).then(async ({ title, message }) => {
+        const user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+        if (!user || !user.email) return json(res, 400, { error: 'No email is attached to this account.' })
+        const summary = String(title || 'MoonScribe reminder')
+        const details = String(message || 'A quick reminder from your writing studio.')
+        if (isEmailConfigured()) await sendReminderEmail({ to: user.email, username: user.username, title: summary, message: details })
+        json(res, 200, { ok: true, sent: isEmailConfigured() })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
     if (path === '/api/auth/me' && req.method === 'GET') {
-      const user = database.prepare('SELECT id, username, email, discord_id, discord_username, discord_avatar, google_id, google_avatar, created_at, role, roles FROM users WHERE id = ?').get(userId)
+      const user = database.prepare('SELECT id, username, email, discord_id, discord_username, discord_avatar, google_id, google_avatar, email_verified, two_factor_enabled, created_at, role, roles FROM users WHERE id = ?').get(userId)
       if (!user) return json(res, 401, { error: 'Account no longer exists.' })
       const roleInfo = userRoleInfo(user)
-      json(res, 200, { account: { id: user.id, username: user.username, email: user.email || null, provider: user.discord_id ? 'discord' : user.google_id ? 'google' : 'email', discordUsername: user.discord_username || null, discordAvatar: user.discord_avatar || user.google_avatar || null, createdAt: user.created_at, role: roleInfo.role, roles: roleInfo.roles, isAdmin: roleInfo.isAdmin, isDeveloper: roleInfo.isDeveloper } })
+      json(res, 200, { account: { id: user.id, username: user.username, email: user.email || null, provider: user.discord_id ? 'discord' : user.google_id ? 'google' : 'email', discordUsername: user.discord_username || null, discordAvatar: user.discord_avatar || user.google_avatar || null, emailVerified: Number(user.email_verified) === 1, twoFactorEnabled: Number(user.two_factor_enabled) === 1, createdAt: user.created_at, role: roleInfo.role, roles: roleInfo.roles, isAdmin: roleInfo.isAdmin, isDeveloper: roleInfo.isDeveloper } })
       return
     }
 

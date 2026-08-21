@@ -10,6 +10,27 @@ function parse(html) {
   return new DOMParser().parseFromString(String(html || ''), 'text/html')
 }
 
+export function normalizeSafeLinkUrl(value) {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+
+  const cleaned = raw.replace(/[\u0000-\u001F\u007F]/g, '')
+  if (!cleaned) return ''
+
+  if (/^(?:javascript:|vbscript:|data:|file:)/i.test(cleaned)) return ''
+  if (/^(?:https?:|mailto:|tel:|#|\/|\.\/|\.\.\/)/i.test(cleaned)) return cleaned
+
+  try {
+    const parsed = new URL(cleaned, 'https://example.invalid')
+    const protocol = parsed.protocol.toLowerCase()
+    if (['http:', 'https:', 'mailto:', 'tel:'].includes(protocol)) return parsed.href
+  } catch {
+    return ''
+  }
+
+  return ''
+}
+
 function canonicalSceneBreak(doc) {
   const d = doc.createElement('div')
   d.className = 'scene-break'
@@ -28,7 +49,7 @@ function stripAttrs(el) {
   const attrs = Array.from(el.attributes || [])
   for (const a of attrs) {
     const n = a.name.toLowerCase()
-    const keep = (n === 'href' && el.tagName === 'A') || n === 'data-scene-break'
+    const keep = ((n === 'href' || n === 'target' || n === 'rel') && el.tagName === 'A') || n === 'data-scene-break'
     if (!keep) el.removeAttribute(a.name)
   }
 }
@@ -276,7 +297,22 @@ export function sanitizePaste(input) {
         strip(el)
         return
       }
-      if (tag === 'A') child.setAttribute('href', child.getAttribute('href') || '#')
+      if (tag === 'A') {
+        const href = normalizeSafeLinkUrl(child.getAttribute('href'))
+        if (href) {
+          child.setAttribute('href', href)
+          const isExternal = /^https?:\/\//i.test(href) || /^mailto:|^tel:/i.test(href)
+          child.setAttribute('target', isExternal ? '_blank' : '_self')
+          child.setAttribute('rel', isExternal ? 'noopener noreferrer nofollow' : 'noopener')
+        } else {
+          child.removeAttribute('href')
+          child.removeAttribute('target')
+          child.removeAttribute('rel')
+          child.replaceWith(...Array.from(child.childNodes))
+          strip(el)
+          return
+        }
+      }
       stripAttrs(child)
       strip(child)
     }
@@ -304,11 +340,14 @@ export function sanitizeStoredHtml(input) {
   const allowedClasses = new Set(['scene-break', 'page-break', 'pg-break', 'hl-name', 'hl-term', 'hl-entity', 'comment-anchor'])
   const allowedData = new Set(['data-scene-break', 'data-page-break', 'data-char-id', 'data-term-id', 'data-entity-id', 'data-entity-kind', 'data-comment-id'])
   const safeUrl = (value, image = false) => {
-    const url = String(value || '').trim()
-    if (!url) return ''
-    if (/^(https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(url)) return url
-    if (image && /^data:image\/(png|gif|jpe?g|webp);base64,/i.test(url)) return url
-    return ''
+    if (image) {
+      const url = String(value || '').trim()
+      if (!url) return ''
+      if (/^data:image\/(png|gif|jpe?g|webp);base64,/i.test(url)) return url
+      if (/^(https?:|blob:)/i.test(url)) return url
+      return ''
+    }
+    return normalizeSafeLinkUrl(value)
   }
   const clean = (parent) => {
     for (const node of Array.from(parent.childNodes)) {
@@ -350,8 +389,24 @@ export function sanitizeStoredHtml(input) {
           else node.removeAttribute('class')
         } else if (name === 'href' && tag === 'A') {
           const url = safeUrl(attr.value)
-          if (url) node.setAttribute('href', url)
-          else node.removeAttribute('href')
+          if (url) {
+            node.setAttribute('href', url)
+            const isExternal = /^https?:\/\//i.test(url) || /^(?:mailto:|tel:)/i.test(url)
+            node.setAttribute('target', isExternal ? '_blank' : '_self')
+            node.setAttribute('rel', isExternal ? 'noopener noreferrer nofollow' : 'noopener')
+          } else {
+            node.removeAttribute('href')
+            node.removeAttribute('target')
+            node.removeAttribute('rel')
+          }
+        } else if (name === 'target' && tag === 'A') {
+          const target = String(attr.value || '').trim().toLowerCase()
+          if (target === '_blank' || target === '_self') node.setAttribute('target', target)
+          else node.removeAttribute('target')
+        } else if (name === 'rel' && tag === 'A') {
+          const cleaned = String(attr.value || '').trim().split(/\s+/).filter((part) => ['noopener', 'noreferrer', 'nofollow'].includes(part.toLowerCase())).join(' ')
+          if (cleaned) node.setAttribute('rel', cleaned)
+          else node.removeAttribute('rel')
         } else if (name === 'src' && tag === 'IMG') {
           const url = safeUrl(attr.value, true)
           if (url) node.setAttribute('src', url)

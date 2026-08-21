@@ -25,7 +25,7 @@ export default function Landing() {
 
   return <main className="landing">
     <nav className="landing-nav">
-      <Link className="landing-brand" to="/"><i className="landing-brand-orbit" />MoonScribe<span>✦</span></Link>
+      <Link className="landing-brand" to="/"><img src="/moonscribelogo.png" alt="MoonScribe logo" className="landing-brand-logo" /><span className="landing-brand-copy">MoonScribe<span>✦</span></span></Link>
       <div className="landing-nav-links"><a href="#studio">Studio</a><a href="#features">Features</a><a href="#privacy">Privacy</a><button className="landing-nav-login" onClick={signIn}>Sign in</button><button className="button button-primary" onClick={signIn}>Start writing</button></div>
     </nav>
     <section className="landing-hero">

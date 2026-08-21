@@ -1,0 +1,55 @@
+name: MoonScribe desktop release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: --target x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install Windows build tools
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host 'Using the Windows runner’s native C++ toolchain for Tauri packaging.'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build app and package desktop installer
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name || 'v0.1.0' }}
+          releaseName: 'MoonScribe ${{ github.ref_name || "v0.1.0" }}'
+          releaseBody: 'MoonScribe desktop release for Windows.'
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}
