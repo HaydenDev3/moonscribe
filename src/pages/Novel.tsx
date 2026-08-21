@@ -300,9 +300,15 @@ export default function Novel() {
         setSavedAt(now)
         setDirty(false)
       }
+    }).catch((error) => {
+      // Keep the draft in memory and make a later autosave/manual save retry the
+      // same revision. A local write failure must never look like a saved chapter.
+      queuedRevisionRef.current = persistedRevisionRef.current
+      setDirty(true)
+      toast(error?.message || 'MoonScribe could not save this change locally. Your draft is still open — try Save again.')
     })
     return saveQueueRef.current
-  }, [])
+  }, [toast])
 
   saveNowRef.current = saveNow
 

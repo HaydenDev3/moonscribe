@@ -5,6 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { request as httpRequest } from 'node:http'
+import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -169,6 +170,27 @@ describe('accounts', () => {
     expect(other.id).toBeTruthy()
     expect((await post('/api/auth/sessions/revoke', { sessionId: other.id }, first.body.token)).status).toBe(200)
     expect((await get('/api/sync/pull?since=0', secondToken)).status).toBe(401)
+  })
+
+  it('completes a two-factor login without an existing session token', async () => {
+    const account = await register('two-factor-writer')
+    db.prepare('UPDATE users SET two_factor_enabled = 1, email = ?, email_verified = 1 WHERE id = ?')
+      .run('writer@example.com', account.body.accountId)
+
+    const login = await post('/api/auth/login', { username: 'two-factor-writer', password: 'secret1234' })
+    expect(login.status).toBe(200)
+    expect(await login.json()).toMatchObject({ requires2fa: true, userId: account.body.accountId })
+
+    const code = '123456'
+    db.prepare("UPDATE email_tokens SET code = ?, expires_at = ?, used_at = NULL WHERE user_id = ? AND purpose = 'two_factor'")
+      .run(createHash('sha256').update(code).digest('hex'), Date.now() + 60_000, account.body.accountId)
+
+    const verified = await post('/api/auth/verify-2fa', { userId: account.body.accountId, code })
+    expect(verified.status).toBe(200)
+    expect((await verified.json()).token).toBeTruthy()
+
+    const replay = await post('/api/auth/verify-2fa', { userId: account.body.accountId, code })
+    expect(replay.status).toBe(400)
   })
 })
 

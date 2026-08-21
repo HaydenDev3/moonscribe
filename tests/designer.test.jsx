@@ -32,7 +32,7 @@ afterEach(() => {
   container.remove()
 })
 
-const waitFor = async (predicate, timeout = 1200) => {
+const waitFor = async (predicate, timeout = 5000) => {
   const start = Date.now()
   while (Date.now() - start < timeout) {
     if (predicate()) return

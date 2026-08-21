@@ -72,6 +72,7 @@ const HIGHLIGHT_COLORS = [
 ]
 
 const PRESENCE_COLORS = ['#7db6f4', '#d99b75', '#9ecb9d', '#c39adf', '#e2bb72', '#7fc8c0']
+const MAX_EMBEDDED_IMAGE_BYTES = 5 * 1024 * 1024
 
 function presenceColor(seed) {
   const value = String(seed || '').split('').reduce((total, char) => total + char.charCodeAt(0), 0)
@@ -118,7 +119,7 @@ export default function Editor({
   const wrapRef = useRef(null)
   const titleRef = useRef(null)
   const onReportRef = useRef(onReport)
-  const { customFonts, systemFonts } = useApp()
+  const { customFonts, systemFonts, toast } = useApp()
   const editorFontOptions = useMemo(() => buildEditorFontOptions({ systemFonts, customFonts }), [systemFonts, customFonts])
 
   const liveCollaborators = useMemo(() => {
@@ -1511,14 +1512,18 @@ export default function Editor({
 
   // ── Image drop ───────────────────────────────────────────────────────────
   const handleImageDrop = useCallback((e) => {
-    const files = Array.from(e.dataTransfer?.files || []).filter((file) => {
+    const droppedFiles = Array.from(e.dataTransfer?.files || []).filter((file): file is File => {
       const candidate = file as File & { type?: unknown }
       return typeof candidate.type === 'string' && candidate.type.startsWith('image/')
     })
-
-    if (!files.length) return
-
+    const files = droppedFiles.filter((file) => file.size <= MAX_EMBEDDED_IMAGE_BYTES)
+    if (!droppedFiles.length) return
+    if (!droppedFiles.length) return
     e.preventDefault()
+    if (files.length !== droppedFiles.length) {
+      toast('Images larger than 5 MB are not embedded in manuscripts. Resize the image and try again.')
+    }
+    if (!files.length) return
 
     const selection = window.getSelection()
 
@@ -1562,9 +1567,12 @@ export default function Editor({
         report()
       }
 
+      reader.onerror = () => {
+        toast('MoonScribe could not read that image. Your manuscript was not changed.')
+      }
       reader.readAsDataURL(safeFile)
     })
-  }, [report])
+  }, [report, toast])
 
   // ── Selection toolbar state ──────────────────────────────────────────────
   useEffect(() => {
@@ -1642,13 +1650,19 @@ export default function Editor({
   // ── Paste ────────────────────────────────────────────────────────────────
   const handlePaste = useCallback((e) => {
     const clipboardHtml = e.clipboardData?.getData('text/html') || ''
-    const imageFiles = Array.from(e.clipboardData?.items || [])
+    const clipboardImageFiles = Array.from(e.clipboardData?.items || [])
       .filter((item) => {
         const candidate = item as DataTransferItem & { kind?: string; type?: string }
         return candidate.kind === 'file' && typeof candidate.type === 'string' && candidate.type.startsWith('image/')
       })
       .map((item) => (item as DataTransferItem).getAsFile())
       .filter((file): file is File => Boolean(file))
+    const imageFiles = clipboardImageFiles.filter((file) => file.size <= MAX_EMBEDDED_IMAGE_BYTES)
+    if (clipboardImageFiles.length !== imageFiles.length) {
+      e.preventDefault()
+      toast('Images larger than 5 MB are not embedded in manuscripts. Resize the image and try again.')
+      if (!imageFiles.length) return
+    }
     const htmlImageSources = imageFiles.length || !clipboardHtml
       ? []
       : Array.from(new DOMParser().parseFromString(clipboardHtml, 'text/html').querySelectorAll('img'))
@@ -1692,7 +1706,9 @@ export default function Editor({
         selection?.removeAllRanges()
         selection?.addRange(range)
         report()
-      }).catch(() => {})
+      }).catch(() => {
+        toast('MoonScribe could not read that image. Your manuscript was not changed.')
+      })
       return
     }
 
@@ -1718,7 +1734,7 @@ export default function Editor({
     )
 
     report()
-  }, [report])
+  }, [report, toast])
 
   // ── Remove scene break ──────────────────────────────────────────────────
   const removeSceneBreak = useCallback((node) => {

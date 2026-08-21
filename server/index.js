@@ -190,12 +190,12 @@ function userRoleInfo(user) {
 }
 
 function issueEmailCode(db, userId, purpose, ttlMs = 10 * 60 * 1000) {
-  const code = String(Math.floor(100000 + Math.random() * 900000))
+  const code = String((randomBytes(4).readUInt32BE(0) % 900000) + 100000)
   const id = randomBytes(12).toString('hex')
   const expiresAt = Date.now() + ttlMs
   db.prepare('DELETE FROM email_tokens WHERE user_id = ? AND purpose = ?').run(userId, purpose)
   db.prepare('INSERT INTO email_tokens (id, user_id, purpose, code, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(id, userId, purpose, code, expiresAt, Date.now())
+    .run(id, userId, purpose, sha(code), expiresAt, Date.now())
   return { code, expiresAt }
 }
 
@@ -203,7 +203,9 @@ function verifyEmailCode(db, userId, purpose, code) {
   const row = db.prepare('SELECT * FROM email_tokens WHERE user_id = ? AND purpose = ? ORDER BY created_at DESC LIMIT 1').get(userId, purpose)
   if (!row) return false
   if (row.used_at || row.expires_at < Date.now()) return false
-  if (String(row.code) !== String(code)) return false
+  const expected = Buffer.from(String(row.code))
+  const received = Buffer.from(sha(String(code || '')))
+  if (expected.length !== received.length || !timingSafeEqual(expected, received)) return false
   db.prepare('UPDATE email_tokens SET used_at = ? WHERE id = ?').run(Date.now(), row.id)
   return true
 }
@@ -767,6 +769,26 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       return
     }
 
+    // A second-factor confirmation cannot require a session token: the preceding
+    // password step deliberately does not issue one. It is still rate-limited,
+    // short-lived, one-use, and scoped to the account id returned by that step.
+    if (path === '/api/auth/verify-2fa' && req.method === 'POST') {
+      const retryAfter = limiter.limited(clientAddress(req), Date.now())
+      if (retryAfter) {
+        json(res, 429, { error: 'Too many attempts — wait a bit, then try again.' })
+        return
+      }
+      readBody(req, 8 * 1024).then(({ userId: targetId, code }) => {
+        const target = database.prepare('SELECT * FROM users WHERE id = ? AND two_factor_enabled = 1').get(String(targetId || ''))
+        if (!target) return json(res, 400, { error: 'The sign-in request is no longer valid. Start again.' })
+        const valid = verifyEmailCode(database, target.id, 'two_factor', code)
+        if (!valid) return json(res, 400, { error: 'That security code is invalid or expired.' })
+        const { token } = issueToken(database, target.id, device(req))
+        json(res, 200, { token, accountId: target.id, username: target.username })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
     if (path === '/api/auth/logout' && req.method === 'POST') {
       const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
       database.prepare('DELETE FROM tokens WHERE token_hash = ?').run(sha(token))
@@ -789,18 +811,6 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         if (!valid) return json(res, 400, { error: 'That verification code is invalid or expired.' })
         database.prepare('UPDATE users SET email_verified = 1, email_verification_code = NULL, email_verification_expires_at = NULL WHERE id = ?').run(user.id)
         json(res, 200, { ok: true, verified: true })
-      }).catch((err) => json(res, 400, { error: err.message }))
-      return
-    }
-
-    if (path === '/api/auth/verify-2fa' && req.method === 'POST') {
-      readBody(req, 8 * 1024).then(({ userId: targetId, code }) => {
-        const target = database.prepare('SELECT * FROM users WHERE id = ?').get(targetId || userId)
-        if (!target) return json(res, 404, { error: 'Account not found.' })
-        const valid = verifyEmailCode(database, target.id, 'two_factor', code)
-        if (!valid) return json(res, 400, { error: 'That 2FA code is invalid or expired.' })
-        const { token } = issueToken(database, target.id, device(req))
-        json(res, 200, { token, accountId: target.id, username: target.username })
       }).catch((err) => json(res, 400, { error: err.message }))
       return
     }
@@ -840,12 +850,25 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     if (path === '/api/auth/enable-2fa' && req.method === 'POST') {
       readBody(req, 8 * 1024).then(async ({ enable }) => {
         const user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
-        if (!user || !user.email) return json(res, 400, { error: 'Add and verify an email address before enabling 2FA.' })
         const shouldEnable = enable !== false
+        if (!user) return json(res, 401, { error: 'Account no longer exists.' })
+        if (!shouldEnable) {
+          database.prepare('UPDATE users SET two_factor_enabled = 0, two_factor_code = NULL, two_factor_expires_at = NULL WHERE id = ?').run(userId)
+          database.prepare("DELETE FROM email_tokens WHERE user_id = ? AND purpose = 'two_factor'").run(userId)
+          json(res, 200, { ok: true, enabled: false })
+          return
+        }
+        if (!user.email || Number(user.email_verified) !== 1) return json(res, 400, { error: 'Verify an email address before enabling 2FA.' })
+        if (!isEmailConfigured()) return json(res, 503, { error: 'Email delivery is not configured, so 2FA cannot be enabled yet.' })
         const { code, expiresAt } = issueEmailCode(database, user.id, 'two_factor')
-        database.prepare('UPDATE users SET two_factor_enabled = ?, two_factor_code = ?, two_factor_expires_at = ? WHERE id = ?').run(shouldEnable ? 1 : 0, code, expiresAt, userId)
-        if (isEmailConfigured()) await sendTwoFactorCode({ to: user.email, username: user.username, code }).catch(() => null)
-        json(res, 200, { ok: true, enabled: shouldEnable, requiresVerification: shouldEnable })
+        database.prepare('UPDATE users SET two_factor_enabled = 1, two_factor_code = NULL, two_factor_expires_at = ? WHERE id = ?').run(expiresAt, userId)
+        const delivery = await sendTwoFactorCode({ to: user.email, username: user.username, code })
+        if (!delivery.ok) {
+          database.prepare('UPDATE users SET two_factor_enabled = 0, two_factor_expires_at = NULL WHERE id = ?').run(userId)
+          database.prepare("DELETE FROM email_tokens WHERE user_id = ? AND purpose = 'two_factor'").run(userId)
+          throw new Error('MoonScribe could not send the security code. 2FA was not enabled.')
+        }
+        json(res, 200, { ok: true, enabled: true, requiresVerification: true })
       }).catch((err) => json(res, 400, { error: err.message }))
       return
     }
