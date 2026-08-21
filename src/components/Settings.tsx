@@ -14,6 +14,7 @@ import Icon from './Icon'
 import RolePermissions from './RolePermissions'
 import * as syncEngine from '../sync/engine'
 import { NOVEL_NAV } from '../nav'
+import { isSupabaseConfigured } from '../lib/supabase'
 
 const IDLE_OPTIONS = [
   { value: '0', label: 'Never' },
@@ -328,6 +329,41 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
     ['dark', 'Moonlight', '#17161c', '#e8e0d5'], ['ember', 'Ember', '#211713', '#f0c7a3'],
     ['moss', 'Moss', '#142019', '#d9e5d4'], ['midnight', 'Midnight', '#121225', '#dddaf5'], ['amoled', 'AMOLED', '#000', '#f4f4f4'],
   ]
+
+  const renderFontShelf = (fonts, kind) => {
+    const grouped = (Object.entries(
+      ((fonts || []) as Array<any>).reduce((acc: Record<string, any[]>, font: any) => {
+        const groupKey = font.group || (kind === 'custom' ? 'Custom' : 'System')
+        if (!acc[groupKey]) acc[groupKey] = []
+        acc[groupKey].push(font)
+        return acc
+      }, {} as Record<string, any[]>)) as Array<[string, any[]]>
+    ).sort(([left], [right]) => left.localeCompare(right))
+
+    return grouped.map(([group, items]) => (
+      <div className="font-shelf-group" key={`${kind}-${group}`}>
+        <div className="font-shelf-group-label">{group}</div>
+        <div className="font-shelf-grid">
+          {(items || []).map((font) => (
+            <div key={`${kind}-${font.id || font.family}-${font.label || font.family}`} className={`font-shelf-card${kind === 'custom' ? ' removable' : ''}`} style={{ fontFamily: font.family }}>
+              <div className="font-shelf-preview" title={font.label || font.family}>{font.label || font.family}</div>
+              <div className="font-shelf-meta">
+                <span>{font.kind || (kind === 'custom' ? 'Installed' : 'Detected')}</span>
+                {kind === 'custom' && (
+                  <button type="button" className="font-shelf-remove" onClick={() => deleteCustomFont(font)} aria-label={`Remove ${font.label || font.family}`}>
+                    <Icon icon="fa-solid fa-xmark" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ))
+  }
+
+  const supabaseReady = isSupabaseConfigured()
+
   return (
     <section className="settings-panel">
       <div className="settings-panel-kicker">Look &amp; feel</div>
@@ -368,6 +404,7 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
 
       <div className="settings-subheading">Fonts</div>
       <p className="settings-row-sub">MoonScribe can use built-in Google fonts, detected system fonts, and fonts you install from file.</p>
+      {supabaseReady && <div className="settings-status-pill safe" style={{ marginBottom: 14 }}>Supabase ready</div>}
       <div className="settings-section-card">
         <div className="settings-section-head">
           <span className="settings-section-icon"><Icon icon="fa-solid fa-font" /></span>
@@ -410,8 +447,8 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
         </div>
         <button className="button button-secondary" onClick={refreshSystemFonts}>Refresh fonts</button>
       </div>
-      <div className="settings-font-chip-row">
-        {(systemFonts || []).slice(0, 10).map((font) => <span key={font.id || font.family} className="settings-font-chip" style={{ fontFamily: font.family }}>{font.label || font.family}</span>)}
+      <div className="font-shelf">
+        {renderFontShelf((systemFonts || []).sort((a, b) => String(a.label || a.family).localeCompare(String(b.label || b.family))), 'system')}
         {!systemFonts?.length && <span className="muted small">No system fonts detected yet.</span>}
       </div>
 
@@ -421,13 +458,8 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
           <div className="settings-row-sub">These are stored locally with your MoonScribe data.</div>
         </div>
       </div>
-      <div className="settings-font-chip-row">
-        {(customFonts || []).map((font) => (
-          <button key={font.id || font.family} className="settings-font-chip is-removable" style={{ fontFamily: font.family }} onClick={() => deleteCustomFont(font)} title="Remove font">
-            <span>{font.label || font.family}</span>
-            <Icon icon="fa-solid fa-xmark" />
-          </button>
-        ))}
+      <div className="font-shelf">
+        {renderFontShelf((customFonts || []).sort((a, b) => String(a.label || a.family).localeCompare(String(b.label || b.family))), 'custom')}
         {!customFonts?.length && <span className="muted small">No custom fonts installed yet.</span>}
       </div>
 
