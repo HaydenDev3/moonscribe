@@ -163,6 +163,31 @@ function userFromToken(db, token) {
   return row.user_id
 }
 
+const APP_ROLES = ['user', 'developer', 'admin']
+
+function normalizeRoles(rawValue) {
+  const values = Array.isArray(rawValue) ? rawValue : String(rawValue || '').split(',')
+  const chosen = new Set()
+  for (const item of values) {
+    const role = String(item || '').trim().toLowerCase()
+    if (APP_ROLES.includes(role)) chosen.add(role)
+  }
+  if (!chosen.size) chosen.add('user')
+  return APP_ROLES.filter((role) => chosen.has(role))
+}
+
+function userRoleInfo(user) {
+  if (!user) return { roles: ['user'], role: 'user', isAdmin: false, isDeveloper: false }
+  const roles = normalizeRoles(user.roles || user.role || 'user')
+  const primaryRole = roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user'
+  return {
+    roles,
+    role: primaryRole,
+    isAdmin: roles.includes('admin'),
+    isDeveloper: roles.includes('developer'),
+  }
+}
+
 // Pre-account records have no owner. Claiming them automatically would let the
 // first person to sign up see data that may belong to somebody else. A server
 // owner can explicitly opt in during a controlled migration.
@@ -192,7 +217,9 @@ function setupSchema(db) {
       id            TEXT PRIMARY KEY,
       username      TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
-      created_at    INTEGER NOT NULL
+      created_at    INTEGER NOT NULL,
+      role          TEXT NOT NULL DEFAULT 'user',
+      roles         TEXT NOT NULL DEFAULT 'user'
     );
   `)
 
@@ -213,6 +240,8 @@ function setupSchema(db) {
   ensureColumn('users', 'google_id', 'google_id TEXT')
   ensureColumn('users', 'google_avatar', 'google_avatar TEXT')
   ensureColumn('users', 'email', 'email TEXT')
+  ensureColumn('users', 'role', "role TEXT NOT NULL DEFAULT 'user'")
+  ensureColumn('users', 'roles', "roles TEXT NOT NULL DEFAULT 'user'")
   db.exec('CREATE INDEX IF NOT EXISTS idx_records_user_since ON records(user_id, updated_at)')
   db.exec(`
     CREATE TABLE IF NOT EXISTS novel_members (
@@ -502,8 +531,8 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           }
           const userCount = database.prepare('SELECT COUNT(*) AS n FROM users').get().n
           database.prepare(
-            'INSERT INTO users (id, username, password_hash, discord_id, discord_avatar, discord_username, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
-          ).run(userId, uname, '', discordUser.id, discordUser.avatar || '', discordUser.username || '', Date.now())
+            'INSERT INTO users (id, username, password_hash, discord_id, discord_avatar, discord_username, created_at, role, roles) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          ).run(userId, uname, '', discordUser.id, discordUser.avatar || '', discordUser.username || '', Date.now(), userCount === 0 ? 'admin' : 'user', userCount === 0 ? 'admin' : 'user')
           if (userCount === 0) claimLegacyRecords(database, userId)
           user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
         } else {
@@ -565,13 +594,14 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         let user = database.prepare('SELECT * FROM users WHERE google_id = ? OR email = ?').get(profile.sub, email)
         if (!user) {
           const userId = randomBytes(12).toString('hex')
-          let base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '_').slice(0, 28) || 'writer'
-          let uname = base
-          let n = 0
-          while (database.prepare('SELECT 1 FROM users WHERE username = ?').get(uname)) uname = `${base}_${++n}`
-          database.prepare('INSERT INTO users (id, username, password_hash, google_id, google_avatar, email, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .run(userId, uname, '', profile.sub, profile.picture || '', email, Date.now())
-          user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+        const userCount = database.prepare('SELECT COUNT(*) AS n FROM users').get().n
+        let base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '_').slice(0, 28) || 'writer'
+        let uname = base
+        let n = 0
+        while (database.prepare('SELECT 1 FROM users WHERE username = ?').get(uname)) uname = `${base}_${++n}`
+        database.prepare('INSERT INTO users (id, username, password_hash, google_id, google_avatar, email, created_at, role, roles) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(userId, uname, '', profile.sub, profile.picture || '', email, Date.now(), userCount === 0 ? 'admin' : 'user', userCount === 0 ? 'admin' : 'user')
+        user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
         } else {
           database.prepare('UPDATE users SET google_id = ?, google_avatar = ?, email = ? WHERE id = ?').run(profile.sub, profile.picture || '', email, user.id)
         }
@@ -639,8 +669,8 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           if (existing || (email && database.prepare('SELECT 1 FROM users WHERE email = ?').get(email))) throw new Error('That account already exists — try signing in instead.')
           const userId = randomBytes(12).toString('hex')
           const userCount = database.prepare('SELECT COUNT(*) AS n FROM users').get().n
-          database.prepare('INSERT INTO users (id, username, password_hash, email, created_at) VALUES (?, ?, ?, ?, ?)').run(
-            userId, name, hashPassword(password), email, Date.now()
+          database.prepare('INSERT INTO users (id, username, password_hash, email, created_at, role, roles) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+            userId, name, hashPassword(password), email, Date.now(), userCount === 0 ? 'admin' : 'user', userCount === 0 ? 'admin' : 'user'
           )
           if (userCount === 0) claimLegacyRecords(database, userId)
           const { token } = issueToken(database, userId, device(req))
@@ -685,9 +715,37 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     }
 
     if (path === '/api/auth/me' && req.method === 'GET') {
-      const user = database.prepare('SELECT id, username, email, discord_id, discord_username, discord_avatar, google_id, google_avatar, created_at FROM users WHERE id = ?').get(userId)
+      const user = database.prepare('SELECT id, username, email, discord_id, discord_username, discord_avatar, google_id, google_avatar, created_at, role, roles FROM users WHERE id = ?').get(userId)
       if (!user) return json(res, 401, { error: 'Account no longer exists.' })
-      json(res, 200, { account: { id: user.id, username: user.username, email: user.email || null, provider: user.discord_id ? 'discord' : user.google_id ? 'google' : 'email', discordUsername: user.discord_username || null, discordAvatar: user.discord_avatar || user.google_avatar || null, createdAt: user.created_at } })
+      const roleInfo = userRoleInfo(user)
+      json(res, 200, { account: { id: user.id, username: user.username, email: user.email || null, provider: user.discord_id ? 'discord' : user.google_id ? 'google' : 'email', discordUsername: user.discord_username || null, discordAvatar: user.discord_avatar || user.google_avatar || null, createdAt: user.created_at, role: roleInfo.role, roles: roleInfo.roles, isAdmin: roleInfo.isAdmin, isDeveloper: roleInfo.isDeveloper } })
+      return
+    }
+
+    if (path === '/api/admin/users' && req.method === 'GET') {
+      const user = database.prepare('SELECT id, role, roles FROM users WHERE id = ?').get(userId)
+      const currentRoleInfo = userRoleInfo(user)
+      if (!currentRoleInfo.isAdmin) return json(res, 403, { error: 'Admin access required.' })
+      const users = database.prepare('SELECT id, username, email, role, roles, created_at FROM users ORDER BY created_at DESC').all().map((row) => {
+        const roleInfo = userRoleInfo(row)
+        return { id: row.id, username: row.username, email: row.email || null, role: roleInfo.role, roles: roleInfo.roles, createdAt: row.created_at }
+      })
+      json(res, 200, { users })
+      return
+    }
+
+    if (path.startsWith('/api/admin/users/') && req.method === 'POST') {
+      const user = database.prepare('SELECT id, role, roles FROM users WHERE id = ?').get(userId)
+      const currentRoleInfo = userRoleInfo(user)
+      if (!currentRoleInfo.isAdmin) return json(res, 403, { error: 'Admin access required.' })
+      const targetId = path.replace(/^\/api\/admin\/users\//, '').split('/')[0]
+      if (!targetId) return json(res, 400, { error: 'No user was selected.' })
+      readBody(req, 8 * 1024).then(({ roles }) => {
+        const nextRoles = normalizeRoles(Array.isArray(roles) ? roles : [roles])
+        const nextRole = nextRoles.includes('admin') ? 'admin' : nextRoles.includes('developer') ? 'developer' : 'user'
+        database.prepare('UPDATE users SET role = ?, roles = ? WHERE id = ?').run(nextRole, nextRoles.join(','), targetId)
+        json(res, 200, { ok: true, roles: nextRoles, role: nextRole })
+      }).catch((err) => json(res, 400, { error: err.message }))
       return
     }
 

@@ -60,6 +60,16 @@ const DEFAULT_SETTINGS = {
 }
 
 const DEFAULT_SYNC = { server: null, username: null, status: 'offline', discordAvatar: null, provider: null }
+const DEFAULT_ACCOUNT = { id: null, username: null, roles: ['user'], role: 'user', isAdmin: false, isDeveloper: false }
+
+function normalizeRoles(input) {
+  const raw = Array.isArray(input) ? input : String(input || '').split(',')
+  const allowed = ['user', 'developer', 'admin']
+  const roles = raw.map((item) => String(item).trim().toLowerCase()).filter(Boolean)
+  const selected = new Set(roles.filter((role) => allowed.includes(role)))
+  if (!selected.size) selected.add('user')
+  return allowed.filter((role) => selected.has(role))
+}
 
 function discordServer() {
   if (import.meta.env.VITE_SYNC_SERVER) return import.meta.env.VITE_SYNC_SERVER.replace(/\/+$/, '')
@@ -75,6 +85,7 @@ export function AppProvider({ children }) {
   const [focusMode, setFocusMode] = useState(false)
   const [toasts, setToasts] = useState([])
   const [sync, setSync] = useState(DEFAULT_SYNC)
+  const [account, setAccount] = useState(DEFAULT_ACCOUNT)
   const [accountReady, setAccountReady] = useState(false)
   const [appLock, setAppLockState] = useState(undefined) // undefined = loading, null = none
   const [locked, setLocked] = useState(false)
@@ -133,14 +144,28 @@ export function AppProvider({ children }) {
     })()
     ;(async () => {
       let cfg = await syncEngine.getConfig()
+      let parsedProfile = null
       if (cfg.token && cfg.server) {
         try {
-          await syncEngine.validateSession()
+          parsedProfile = await syncEngine.validateSession()
           cfg = await syncEngine.getConfig()
         } catch (error) {
           console.error('[Account session]', error)
           cfg = await syncEngine.getConfig()
         }
+      }
+      if (parsedProfile) {
+        const roles = normalizeRoles(parsedProfile.roles || parsedProfile.role || 'user')
+        setAccount({
+          id: parsedProfile.id || null,
+          username: parsedProfile.username || cfg.username || null,
+          roles,
+          role: roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user',
+          isAdmin: roles.includes('admin'),
+          isDeveloper: roles.includes('developer'),
+        })
+      } else {
+        setAccount(DEFAULT_ACCOUNT)
       }
       const discordAvatar = await getMeta('discordAvatar', null)
       const discordUsername = await getMeta('discordUsername', null)
@@ -177,6 +202,18 @@ export function AppProvider({ children }) {
           await setMeta('authProvider', account.provider || oauthProvider || 'discord')
           const res = await syncEngine.connectWithToken({ server: account.server || oauthServer, token: account.token, username: account.username })
           if (res.ok) {
+            const profile = await syncEngine.validateSession().catch(() => null)
+            if (profile) {
+              const roles = normalizeRoles(profile.roles || profile.role || 'user')
+              setAccount({
+                id: profile.id || null,
+                username: profile.username || account.username || null,
+                roles,
+                role: roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user',
+                isAdmin: roles.includes('admin'),
+                isDeveloper: roles.includes('developer'),
+              })
+            }
             setSync({ server: account.server || oauthServer, username: account.username, status: 'synced', discordAvatar: account.avatar || null, provider: account.provider || oauthProvider || 'discord' })
             // OAuth should always finish in the signed-in library. This also
             // heals bookmarks or older callback URLs that still land on `/`.
@@ -608,6 +645,10 @@ export function AppProvider({ children }) {
     }
   }, [sync.server])
 
+  const accountRoles = useMemo(() => normalizeRoles(account.roles), [account.roles])
+  const hasRole = useCallback((role) => accountRoles.includes(role), [accountRoles])
+  const userRoleLabel = accountRoles.includes('admin') ? 'Admin' : accountRoles.includes('developer') ? 'Developer' : 'User'
+
   const appValue = useMemo(
     () => ({
       novels,
@@ -642,6 +683,11 @@ export function AppProvider({ children }) {
       syncDiscordAvatar: sync.discordAvatar,
       syncProvider: sync.provider,
       accountReady,
+      accountRoles,
+      userRoleLabel,
+      hasRole,
+      isAdmin: hasRole('admin'),
+      isDeveloper: hasRole('developer'),
       syncNow,
       connectSync,
       connectDiscord,
@@ -654,7 +700,7 @@ export function AppProvider({ children }) {
       deleteCustomFont,
       refreshSystemFonts,
     }),
-    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, conflicts, resolveConflict, sync, accountReady, syncNow, connectSync, connectDiscord, connectGoogle, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts]
+    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, conflicts, resolveConflict, sync, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts]
   )
 
   return (

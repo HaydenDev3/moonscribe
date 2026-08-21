@@ -11,6 +11,7 @@ import SyncStatus from './SyncStatus'
 import AuthModal from './AuthModal'
 import Select from './Select'
 import Icon from './Icon'
+import RolePermissions from './RolePermissions'
 import * as syncEngine from '../sync/engine'
 import { NOVEL_NAV } from '../nav'
 
@@ -125,6 +126,7 @@ export default function Settings() {
               <h2>Account &amp; sync</h2>
               <p className="muted">Manage who you are in MoonScribe, where your library lives, and which devices can reach it.</p>
               <SyncPanel onOpen={() => setConnectOpen(true)} />
+              <RolePermissions />
               <AccountSessions />
               <div className="settings-section-card">
                 <div className="settings-section-head"><span className="settings-section-icon"><Icon icon="fa-solid fa-laptop-file" /></span><div><strong>Local writing identity</strong><small>Your offline library is available without an account.</small></div><span className="settings-status-pill safe">Active</span></div>
