@@ -28,12 +28,16 @@ body {
 
 /* soft paper texture — subtle, like morning light on a page */
 html.paper-texture {
+  --paper-opacity: .22;
+  background-color: var(--bg);
   background-image:
-    radial-gradient(rgba(61, 58, 54, 0.028) 1px, transparent 1.4px),
-    radial-gradient(rgba(122, 163, 201, 0.02) 1px, transparent 1.6px);
-  background-size: 26px 26px, 17px 17px;
-  background-position: 0 0, 9px 11px;
+    repeating-radial-gradient(ellipse at 17% 23%, rgba(92,69,42,var(--paper-opacity)) 0 .35px, transparent .6px 4px),
+    repeating-linear-gradient(87deg, transparent 0 7px, rgba(112,88,55,calc(var(--paper-opacity) * .28)) 8px, transparent 9px 17px),
+    linear-gradient(104deg, rgba(255,255,255,.08), transparent 34%, rgba(86,62,36,.025) 72%, transparent);
+  background-size: 83px 67px, 137px 103px, 100% 100%;
 }
+html.paper-texture[data-paper-strength='natural'] { --paper-opacity: .34; }
+html.paper-texture[data-paper-strength='rich'] { --paper-opacity: .5; }
 /* let the html texture show through the body */
 html.paper-texture body {
   background-color: transparent;
@@ -42,6 +46,7 @@ html.paper-texture body {
 
 html.paper-texture[data-theme='dark'],
 html.paper-texture[data-theme='amoled'] {
+  --paper-opacity: .1;
   background-image:
     radial-gradient(rgba(255, 252, 250, 0.03) 1px, transparent 1.4px),
     radial-gradient(rgba(122, 163, 201, 0.05) 1px, transparent 1.6px);
@@ -71,26 +76,133 @@ button {
   font-family: inherit;
   font-size: inherit;
   cursor: pointer;
+  /* Reset the UA button chrome so an unstyled <button> never renders as a
+     light "buttonface" box on the dark theme. Styled buttons override this. */
+  background: transparent;
+  border: none;
+  color: inherit;
 }
 
-input, select, textarea {
-  font-family: inherit;
-  font-size: inherit;
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+/* ---- Global custom form controls (no browser chrome) ---- */
+input,
+textarea,
+select {
   color: var(--charcoal);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, transform 0.1s ease;
+  -webkit-appearance: none;
+  appearance: none;
+}
+input:hover,
+textarea:hover,
+select:hover {
+  border-color: color-mix(in srgb, var(--moon) 52%, var(--border));
+}
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--moon);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+input:disabled,
+textarea:disabled,
+select:disabled,
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+input[type='search'] {
+  background-image: linear-gradient(to right, transparent 0, transparent 100%);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 96px;
+}
+
+/* Custom styled select — arrow via background SVG, no browser chrome */
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23a3b9d3'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 8px 5px;
+  padding-right: 30px;
+  cursor: pointer;
+}
+
+/* checkbox + radio styling to match the app instead of native UI */
+input[type='checkbox'],
+input[type='radio'] {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  border-radius: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  vertical-align: middle;
+  cursor: pointer;
+}
+input[type='checkbox']:checked,
+input[type='radio']:checked {
+  border-color: var(--moon);
+  background: color-mix(in srgb, var(--moon) 18%, var(--surface));
+}
+input[type='checkbox']:checked::after,
+input[type='radio']:checked::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 2px;
+  background: var(--moon);
+}
+input[type='radio'] {
+  border-radius: 50%;
+}
+input[type='radio']:checked::after {
+  border-radius: 50%;
 }
 
 ::placeholder {
   color: var(--grey-soft);
 }
 
-::-webkit-scrollbar { width: 10px; height: 10px; }
+/* ---- Moonscribe scrollbar — ultra-thin, accent-tinted, ink-track ---- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-thumb {
-  background: var(--grey-soft);
-  border-radius: 10px;
-  border: 3px solid var(--bg);
+  background: color-mix(in srgb, var(--accent) 35%, var(--mist));
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background-clip: padding-box;
 }
-::-webkit-scrollbar-thumb:hover { background: var(--grey); }
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--accent) 60%, var(--mist));
+  background-clip: padding-box;
+}
 ::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--accent) 35%, var(--mist)) transparent; }
+
+/* themed text selection — a soft moonlit wash */
+::selection {
+  background: color-mix(in srgb, var(--moon) 32%, transparent);
+  color: var(--charcoal);
+}
 
 img { max-width: 100%; }
 
@@ -99,53 +211,88 @@ img { max-width: 100%; }
   outline-offset: 2px;
   border-radius: 4px;
 }
+/* hide focus rings unless the user opted in or navigated via keyboard */
+html:not(.focus-ring-visible) :focus-visible:not(:focus:focus-within) {
+  outline-color: transparent;
+}
+html.focus-ring-visible :focus-visible { outline-width: 3px; }
+
+/* high-contrast mode: max ink/paper contrast, thicker borders */
+html.high-contrast {
+  --border: color-mix(in srgb, var(--charcoal) 40%, transparent);
+  --border-soft: color-mix(in srgb, var(--charcoal) 24%, transparent);
+  --grey: var(--charcoal);
+  --grey-soft: var(--charcoal);
+  --mist-soft: color-mix(in srgb, var(--charcoal) 10%, transparent);
+}
+html.high-contrast .button { border-width: 1.5px; }
+html.high-contrast .chapter-item { border-width: 1px; }
+
+/* editor CSS var defaults (overridden by AppContext JS) */
+:root {
+  --editor-font-size: 1rem;
+  --editor-line-height: 1.85;
+}
 /* shared UI classes */
 .muted { color: var(--grey); }
 .small { font-size: 0.85rem; }
 
+/* Brand buttons: outline, accent-on-tint, never a solid fill. Cormorant at a
+   semibold ceiling; tight radius. */
 .button {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 9px 16px;
+  justify-content: center;
+  gap: 6px;
+  padding: var(--space-2) calc(var(--space-3) * 1.15);
   border: 1px solid transparent;
-  border-radius: 999px;
-  font-weight: 500;
-  font-size: 0.92rem;
-  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+  border-radius: var(--radius);
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 1rem;
+  line-height: 1.2;
+  letter-spacing: 0.005em;
+  color: var(--charcoal);
+  transition: background 0.16s var(--ease), color 0.16s var(--ease),
+    border-color 0.16s var(--ease), box-shadow 0.16s var(--ease), transform 0.1s var(--ease-out);
   user-select: none;
   white-space: nowrap;
 }
-.button:active { transform: translateY(1px); }
+.button:active { transform: translateY(0.5px); }
 
 .button-primary {
-  background: var(--accent-fill);
-  color: var(--accent-fg);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--twilight) 35%, transparent);
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent);
 }
-.button-primary:hover { background: var(--accent-fill-hover); color: var(--accent-fg); }
+.button-primary:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.button-primary:active { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 
 .button-ghost {
   background: transparent;
-  color: var(--twilight);
+  color: var(--charcoal);
   border-color: var(--border);
 }
-.button-ghost:hover { background: var(--mist-soft); }
+.button-ghost:hover { background: color-mix(in srgb, var(--charcoal) 7%, transparent); border-color: color-mix(in srgb, var(--charcoal) 32%, transparent); }
+.button-ghost:active { background: color-mix(in srgb, var(--charcoal) 12%, transparent); }
 
 .button-rose {
-  background: var(--rose-fill);
-  color: var(--rose-fg);
+  background: transparent;
+  color: var(--rose-deep);
+  border-color: color-mix(in srgb, var(--rose) 55%, transparent);
 }
-.button-rose:hover { background: var(--rose-fill-hover); color: var(--rose-fg); }
+.button-rose:hover { background: color-mix(in srgb, var(--rose) 12%, transparent); color: var(--rose-deep); border-color: var(--rose); }
 
 .button-quiet {
   background: transparent;
   color: var(--grey);
   border: none;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius);
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
 }
-.button-quiet:hover { background: var(--mist-soft); color: var(--charcoal); }
+.button-quiet:hover { background: var(--hover-bg); color: var(--charcoal); }
 
 .button[disabled] {
   opacity: 0.5;
@@ -189,16 +336,16 @@ img { max-width: 100%; }
   align-items: center;
   gap: 6px;
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: calc(var(--radius) * 0.75);
   font-size: 0.74rem;
   font-weight: 500;
   letter-spacing: 0.02em;
   background: var(--mist-soft);
-  color: var(--grey);
-  border: 1px solid var(--border-soft);
+  color: var(--charcoal);
+  border: 1px solid transparent;
   transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
 }
-.tag:hover { border-color: var(--moon); color: var(--charcoal); }
+.tag:hover { border-color: var(--active-border); color: var(--charcoal); }
 
 /* pill used across nav / kinds / filters */
 .pill {

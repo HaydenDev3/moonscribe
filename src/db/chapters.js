@@ -2,11 +2,12 @@ import { getDB, uid, putRecord, removeRecord } from './db'
 import { countWords } from '../utils/words'
 import { composeMergedContent, tidyHtml } from '../utils/formatHtml'
 import { KINDS, flatOrder } from '../utils/numbering'
+import { trashRecord } from './trash'
 
 export async function listChapters(novelId) {
   const db = await getDB()
   const all = await db.getAllFromIndex('chapters', 'by-novel', novelId)
-  return all.sort((a, b) => a.order - b.order)
+  return all.filter((c) => !c.trashedAt).sort((a, b) => a.order - b.order)
 }
 
 export async function getChapter(id) {
@@ -16,24 +17,34 @@ export async function getChapter(id) {
 
 export async function createChapter(novelId, { title = '', part = '', content = '', kind = 'chapter', parentId = null } = {}) {
   const all = await listChapters(novelId)
-  const order = all.length ? Math.max(...all.map((c) => c.order)) + 1 : 1
+  const parent = parentId ? all.find((c) => c.id === parentId) : null
+  const siblings = parentId
+    ? all.filter((c) => (c.parentId || null) === parentId)
+    : all.filter((c) => !c.parentId)
+  const order = siblings.length ? Math.max(...siblings.map((c) => c.order || 0)) + 1 : 1
+  const inheritedPart = parent?.part || ''
   const now = Date.now()
   const chapter = {
     id: uid(),
     novelId,
     title: title || '',
-    part: part || (all.length ? all[all.length - 1].part : ''),
+    part: part || inheritedPart,
     kind: KINDS.includes(kind) ? kind : 'chapter',
     parentId: parentId || null,
     content,
     order,
     status: 'draft',
     wordCount: countWords(content),
+    meta: {}, // { pov, location, timeOfDay, tone, beat }
     createdAt: now,
     updatedAt: now,
     versions: []
   }
   return putRecord('chapters', chapter)
+}
+
+export async function trashChapter(id) {
+  return trashRecord('chapters', id)
 }
 
 export async function updateChapter(id, patch) {

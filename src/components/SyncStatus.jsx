@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { onStatus } from '../sync/engine'
 
 const LABELS = {
-  offline: 'Offline — stored safely on this device',
+  offline: 'Offline — changes queued safely',
   connecting: 'Connecting…',
   syncing: 'Syncing…',
   synced: 'Synced across your devices',
+  attention: 'Synced — local changes waiting',
   error: 'Sync needs attention'
 }
 
@@ -14,6 +15,7 @@ const DOTS = {
   connecting: '',
   syncing: 'pulse',
   synced: 'ok',
+  attention: 'pulse',
   error: 'err'
 }
 

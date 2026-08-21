@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useDraftRecovery, readDraft, draftKey } from '../utils/draftRecovery'
 import { useParams } from 'react-router-dom'
 import { getNovel } from '../db/novels'
 import { listChapters } from '../db/chapters'
 import { listCharacters } from '../db/characters'
-import { listNotes, createNote, updateNote, deleteNote } from '../db/notes'
+import { listNotes, createNote, updateNote, trashNote } from '../db/notes'
 import { useApp } from '../context/AppContext'
 import SubPageTopbar from '../components/SubPageTopbar'
 import Modal from '../components/Modal'
@@ -13,7 +14,7 @@ import { timeAgo } from '../utils/dates'
 import { useContextMenu } from '../components/ContextMenu'
 import Icon from '../components/Icon'
 
-export default function Notes({ novelId, embedded }) {
+export default function Notes({ novelId, embedded, moodboard = false }) {
   const { id } = useParams()
   const nid = novelId || id
   const { toast } = useApp()
@@ -23,6 +24,8 @@ export default function Notes({ novelId, embedded }) {
   const [characters, setCharacters] = useState([])
   const [editing, setEditing] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [draftRestored, setDraftRestored] = useState(false)
+  const newNoteDraftKey = draftKey(nid, 'note', 'new')
 
   const load = useCallback(async () => {
     setNovel(await getNovel(nid))
@@ -35,7 +38,19 @@ export default function Notes({ novelId, embedded }) {
     load()
   }, [load])
 
-  const save = async () => {
+  const openNewNote = () => {
+    const saved = readDraft(newNoteDraftKey)
+    const base = { __new: true, title: '', content: '', link: null }
+    if (saved && (saved.title || saved.content)) {
+      setDraftRestored(true)
+      setEditing({ ...base, ...saved, __new: true })
+    } else {
+      setDraftRestored(false)
+      setEditing(base)
+    }
+  }
+
+  const save = async (clearDraftFn) => {
     if (!editing) return
     if (editing.__new) {
       await createNote(nid, editing)
@@ -44,15 +59,23 @@ export default function Notes({ novelId, embedded }) {
       await updateNote(editing.id, editing)
       toast('Note updated.')
     }
+    clearDraftFn?.()
     setEditing(null)
+    setDraftRestored(false)
     load()
   }
 
+  const cancelEditing = (clearDraftFn) => {
+    clearDraftFn?.()
+    setEditing(null)
+    setDraftRestored(false)
+  }
+
   const remove = async () => {
-    await deleteNote(deleting.id)
+    await trashNote(deleting.id)
     setDeleting(null)
     load()
-    toast('Note gone.')
+    toast('Moved to the Trash — recoverable for 30 days.')
   }
 
   const requestDelete = (n) => {
@@ -77,16 +100,19 @@ export default function Notes({ novelId, embedded }) {
   return (
     <div className={embedded ? undefined : 'app'}>
       {!embedded && novel && <SubPageTopbar novel={novel} title="Notes" />}
-      <div className="page page-wide">
+      <div className={moodboard ? 'moodboard-notes' : 'page page-wide'}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-5)' }}>
-          <h2 style={{ margin: 0 }}>Notes</h2>
-          <button className="button button-primary" onClick={() => setEditing({ __new: true, title: '', content: '', link: null })}>
+          <div>
+            <h2 style={{ margin: 0 }}>{moodboard ? 'Writing notes' : 'Notes'}</h2>
+            {moodboard && <p className="muted small" style={{ margin: '4px 0 0' }}>Keep chapter ideas and character reminders beside your visual references.</p>}
+          </div>
+          <button className="button button-primary" onClick={openNewNote}>
             <Icon icon="fa-solid fa-plus" style={{ marginRight: 6 }} /> Add note
           </button>
         </div>
 
         {notes.length === 0 ? (
-          <EmptyState icon="fa-regular fa-note-sticky" title="A place for stray thoughts" action={<button className="button button-primary" onClick={() => setEditing({ __new: true, title: '', content: '', link: null })}>Write the first one</button>}>
+          <EmptyState icon="fa-regular fa-note-sticky" title="A place for stray thoughts" action={<button className="button button-primary" onClick={openNewNote}>Write the first one</button>}>
             Ideas, fragments, the shape of a plot — write them here and pin them to a chapter or a character.
           </EmptyState>
         ) : (
@@ -111,9 +137,11 @@ export default function Notes({ novelId, embedded }) {
           chapters={chapters}
           characters={characters}
           onChange={setEditing}
-          onClose={() => setEditing(null)}
+          onClose={cancelEditing}
           onSave={save}
           onDelete={requestDelete}
+          draftKey={editing.__new ? newNoteDraftKey : draftKey(nid, 'note', editing.id)}
+          draftRestored={draftRestored && !!editing.__new}
         />
       )}
       <ConfirmDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={remove} title="Discard this note?">
@@ -123,11 +151,17 @@ export default function Notes({ novelId, embedded }) {
   )
 }
 
-function NoteModal({ note, chapters, characters, onChange, onClose, onSave, onDelete }) {
+function NoteModal({ note, chapters, characters, onChange, onClose, onSave, onDelete, draftKey: dk, draftRestored }) {
+  const { clearDraft } = useDraftRecovery(dk, note)
   const set = (patch) => onChange({ ...note, ...patch })
 
   return (
-    <Modal open onClose={onClose} title={note.__new ? 'New note' : 'Edit note'} width={560}>
+    <Modal open onClose={() => onClose(clearDraft)} title={note.__new ? 'New note' : 'Edit note'} width={560}>
+      {draftRestored && (
+        <div className="draft-restored-banner">
+          <Icon icon="fa-solid fa-rotate-left" /> Draft recovered — your unsaved work is back.
+        </div>
+      )}
       <div className="field">
         <label>Title</label>
         <input value={note.title || ''} onChange={(e) => set({ title: e.target.value })} autoFocus />
@@ -164,8 +198,8 @@ function NoteModal({ note, chapters, characters, onChange, onClose, onSave, onDe
           )}
         </div>
         <div className="actions-row">
-          <button className="button button-ghost" onClick={onClose}>Cancel</button>
-          <button className="button button-primary" onClick={onSave}>{note.__new ? 'Save note' : 'Save changes'}</button>
+          <button className="button button-ghost" onClick={() => onClose(clearDraft)}>Cancel</button>
+          <button className="button button-primary" onClick={() => onSave(clearDraft)}>{note.__new ? 'Save note' : 'Save changes'}</button>
         </div>
       </div>
     </Modal>

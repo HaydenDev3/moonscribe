@@ -4,9 +4,9 @@
 import { openDB } from 'idb'
 
 const DB_NAME = 'moonscribe'
-const DB_VERSION = 2
+const DB_VERSION = 7
 
-const STORES = ['novels', 'chapters', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'tombstones', 'meta']
+const STORES = ['novels', 'chapters', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'glossary', 'annotations', 'branches', 'suggestions', 'tombstones', 'meta', 'snapshots']
 
 let dbPromise = null
 
@@ -23,13 +23,19 @@ export function getDB() {
           stats: { keyPath: 'id', index: 'by-novel' },
           world: { keyPath: 'id', index: 'by-novel' },
           moodboard: { keyPath: 'id', index: 'by-novel' },
+          glossary: { keyPath: 'id', index: 'by-novel' },
+          annotations: { keyPath: 'id', index: 'by-novel' },
+          branches: { keyPath: 'id', index: 'by-novel' },
+          suggestions: { keyPath: 'id', index: 'by-novel' },
           tombstones: { keyPath: 'id' },
-          meta: { keyPath: 'key' }
+          meta: { keyPath: 'key' },
+          snapshots: { keyPath: 'id', index: 'by-chapter' }
         }
         for (const [name, spec] of Object.entries(defs)) {
           if (!db.objectStoreNames.contains(name)) {
             const s = db.createObjectStore(name, { keyPath: spec.keyPath })
-            if (spec.index) s.createIndex(spec.index, spec.index === 'by-novel' ? 'novelId' : spec.index)
+            const INDEX_FIELDS = { 'by-novel': 'novelId', 'by-chapter': 'chapterId' }
+            if (spec.index) s.createIndex(spec.index, INDEX_FIELDS[spec.index] ?? spec.index)
           }
         }
       }
@@ -63,6 +69,12 @@ export async function putRecord(storeName, record, { sync = true } = {}) {
   const prev = await db.get(storeName, record.id)
   const next = sync ? markDirty(record, prev) : record
   await db.put(storeName, next)
+  const liveNovelId = next.novelId || (storeName === 'novels' ? next.id : null)
+  if (sync && typeof window !== 'undefined' && liveNovelId) {
+    window.dispatchEvent(new CustomEvent('moonscribe:record-written', {
+      detail: { store: storeName, id: next.id, novelId: liveNovelId, updatedAt: next.updatedAt, deleted: false, payload: next }
+    }))
+  }
   return next
 }
 
@@ -82,11 +94,20 @@ export async function removeRecord(storeName, id, novelId = null, { sync = true 
     pendingSync: true
   }
   await db.put('tombstones', row)
+  if (typeof window !== 'undefined' && novelId) {
+    window.dispatchEvent(new CustomEvent('moonscribe:record-written', {
+      detail: { store: storeName, id, novelId, updatedAt: now, deleted: true, payload: null }
+    }))
+  }
   return row
 }
 
 export function listStores() {
   // 'stats' is derived, per-device tracking data (daily word deltas) and is
   // deliberately not synced — each device counts its own writing.
-  return STORES.filter((s) => s !== 'tombstones' && s !== 'meta' && s !== 'stats')
+  //
+  // 'snapshots' power local replay only. They are intentionally device-local:
+  // pushing them bloats sync traffic and, more importantly, older builds would
+  // fail their whole sync batch before shared novels could even pull down.
+  return STORES.filter((s) => s !== 'tombstones' && s !== 'meta' && s !== 'stats' && s !== 'snapshots')
 }

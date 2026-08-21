@@ -3,6 +3,17 @@ import { getDB, uid, putRecord, removeRecord } from './db'
 export async function listNovels() {
   const db = await getDB()
   const novels = await db.getAll('novels')
+  // Backup v2 encoded Blob covers as `{}`. Repair those legacy records while
+  // keeping the manuscript itself intact and eligible for sync.
+  for (let i = 0; i < novels.length; i++) {
+    const novel = novels[i]
+    const validBlob = typeof Blob !== 'undefined' && novel.cover instanceof Blob
+    const validString = typeof novel.cover === 'string' && /^(data:|blob:|https?:\/\/)/i.test(novel.cover)
+    if (novel.cover != null && !validBlob && !validString) {
+      novels[i] = { ...novel, cover: null, pendingSync: true }
+      await db.put('novels', novels[i])
+    }
+  }
   return novels.sort((a, b) => (b.lastOpened || b.createdAt || 0) - (a.lastOpened || a.createdAt || 0))
 }
 
@@ -11,7 +22,7 @@ export async function getNovel(id) {
   return db.get('novels', id)
 }
 
-export async function createNovel({ title, blurb = '', cover = null, coverStyle = 'moonstone', genres = [] }) {
+export async function createNovel({ title, blurb = '', cover = null, coverStyle = 'moonstone', genres = [], series = null }) {
   const now = Date.now()
   const novel = {
     id: uid(),
@@ -20,6 +31,8 @@ export async function createNovel({ title, blurb = '', cover = null, coverStyle 
     cover,
     coverStyle,
     genres: Array.isArray(genres) ? genres : [],
+    series: series || null,
+    milestones: [],
     createdAt: now,
     updatedAt: now,
     lastOpened: now,
@@ -39,6 +52,19 @@ export async function updateNovel(id, patch, { sync = true } = {}) {
 
 export async function touchNovel(id) {
   return updateNovel(id, { lastOpened: Date.now() }, { sync: false })
+}
+
+export async function archiveNovel(id) {
+  return updateNovel(id, { archived: true })
+}
+
+export async function unarchiveNovel(id) {
+  const db = await getDB()
+  const novel = await db.get('novels', id)
+  if (!novel) return null
+  const next = { ...novel, id: novel.id }
+  delete next.archived
+  return putRecord('novels', next)
 }
 
 export async function deleteNovel(id) {
@@ -70,6 +96,42 @@ export async function deleteNovel(id) {
   }
   await tombstones.done
   await removeRecord('novels', id, id)
+}
+
+export async function duplicateNovelStructure(sourceId) {
+  const db = await getDB()
+  const source = await db.get('novels', sourceId)
+  if (!source) return null
+  const { listChapters } = await import('./chapters')
+  const now = Date.now()
+  const newNovel = {
+    ...source,
+    id: uid(),
+    title: `Copy of ${source.title || 'Untitled'}`,
+    createdAt: now,
+    updatedAt: now,
+    lastOpened: now,
+    collection: null,
+    pinned: false,
+    archived: false,
+    lock: null,
+    cover: null
+  }
+  await putRecord('novels', newNovel)
+  const chapters = await listChapters(sourceId)
+  for (const ch of chapters) {
+    await putRecord('chapters', {
+      ...ch,
+      id: uid(),
+      novelId: newNovel.id,
+      content: '',
+      wordCount: 0,
+      versions: [],
+      createdAt: now,
+      updatedAt: now
+    })
+  }
+  return newNovel
 }
 
 export function defaultLayout() {

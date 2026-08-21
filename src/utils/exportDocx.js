@@ -39,31 +39,26 @@ function toRuns(node) {
 export function buildDocxDocument(novel, chapters, layout) {
   const paragraphs = []
   const symbol = layout?.sceneBreak || '❦'
+  const includeFrontMatter = layout?.includeFrontMatter !== false
+  const lineSpacing = Math.round(Number(layout?.lineSpacing || 1.5) * 240)
+  const bodyFont = layout?.printFont || 'Georgia'
 
   // Title page
-  paragraphs.push(new Paragraph({ text: '', spacing: { after: 3200 } }))
-  paragraphs.push(
-    new Paragraph({
+  if (includeFrontMatter) {
+    const byline = layout?.cover?.byline || novel?.byline || ''
+    paragraphs.push(new Paragraph({ text: '', spacing: { after: 3200 } }))
+    paragraphs.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 200 },
-      children: [new TextRun({ text: novel.title, size: 56, bold: true, font: 'Cormorant Garamond' })]
-    })
-  )
-  paragraphs.push(
-    new Paragraph({
+      children: [new TextRun({ text: novel.title || 'Untitled novel', size: 56, bold: true, font: 'Cormorant Garamond' })]
+    }))
+    if (byline) paragraphs.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 400 },
-      children: [new TextRun({ text: 'for Storm', italics: true, size: 28, color: '777777' })]
-    })
-  )
-  paragraphs.push(
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 400 },
-      children: [new TextRun({ text: symbol, size: 26, color: 'D4A5A5' })]
-    })
-  )
-  paragraphs.push(new Paragraph({ pageBreakBefore: true, children: [] }))
+      children: [new TextRun({ text: byline, italics: true, size: 28, color: '777777' })]
+    }))
+    paragraphs.push(new Paragraph({ pageBreakBefore: true, children: [] }))
+  }
 
   for (const chapter of chapters) {
     const title = chapter.title || 'Untitled'
@@ -88,6 +83,8 @@ export function buildDocxDocument(novel, chapters, layout) {
             children: [new TextRun({ text: symbol, color: 'D4A5A5', size: 26 })]
           })
         )
+      } else if (child.matches?.('.page-break, .pg-break, [data-page-break="true"]')) {
+        paragraphs.push(new Paragraph({ pageBreakBefore: true, children: [] }))
       } else if (tag === 'H2' || tag === 'H3') {
         paragraphs.push(
           new Paragraph({
@@ -108,7 +105,7 @@ export function buildDocxDocument(novel, chapters, layout) {
           })
         )
       } else if (tag === 'P' || tag === 'DIV') {
-        paragraphs.push(new Paragraph({ spacing: { after: 220, line: 360 }, children: toRuns(child) }))
+        paragraphs.push(new Paragraph({ spacing: { after: 220, line: lineSpacing }, children: toRuns(child) }))
       } else if (tag === 'UL') {
         child.querySelectorAll(':scope > li').forEach((li) => {
           paragraphs.push(new Paragraph({ text: `• ${(li.textContent || '').trim()}`, spacing: { after: 120 } }))
@@ -119,7 +116,7 @@ export function buildDocxDocument(novel, chapters, layout) {
         })
       }
     }
-    paragraphs.push(new Paragraph({ pageBreakBefore: true, children: [] }))
+    if (chapter !== chapters.at(-1)) paragraphs.push(new Paragraph({ pageBreakBefore: true, children: [] }))
   }
 
   const { width, height } = pageSizeTwips(layout?.pageSize)
@@ -129,7 +126,7 @@ export function buildDocxDocument(novel, chapters, layout) {
     styles: {
       default: {
         document: {
-          run: { font: 'Literata', size: 24, color: '1F1C18' }
+          run: { font: bodyFont, size: 24, color: '1F1C18' }
         }
       },
       paragraphStyles: [
@@ -157,10 +154,10 @@ export function buildDocxDocument(novel, chapters, layout) {
   })
 }
 
-export async function exportNovelDocx(novel, chapters, layout) {
+export async function exportNovelDocx(novel, chapters, layout, filename) {
   const doc = buildDocxDocument(novel, chapters, layout)
   const blob = await Packer.toBlob(doc)
-  downloadBlob(blob, `${safeName(novel.title)}.docx`)
+  downloadBlob(blob, filename || `${safeName(novel.title)}.docx`)
 }
 
 export { downloadBlob, safeName } from './download'

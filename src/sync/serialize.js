@@ -2,9 +2,16 @@
 // We convert a novel's cover Blob to a dataURL when pushing and back to a
 // Blob when applying. Everything else already round-trips through JSON.
 
+function isBlobLike(value) {
+  return !!value && typeof value === 'object' && (
+    (typeof Blob !== 'undefined' && value instanceof Blob) ||
+    (typeof value.arrayBuffer === 'function' && typeof value.type === 'string' && typeof value.size === 'number')
+  )
+}
+
 export function blobToDataUrl(blob) {
   if (!blob) return null
-  if (typeof Blob !== 'undefined' && blob instanceof Blob) {
+  if (isBlobLike(blob)) {
     return new Promise((resolve) => {
       const reader = new FileReader()
       reader.onload = () => resolve(reader.result)
@@ -33,7 +40,7 @@ export function dataUrlToBlob(dataUrl) {
 export async function toWire(record) {
   if (!record) return null
   const copy = { ...record }
-  if (record.cover instanceof Blob) {
+  if (isBlobLike(record.cover)) {
     copy.cover = await blobToDataUrl(record.cover)
     copy.__hadCover = true
   }
@@ -44,8 +51,18 @@ export async function toWire(record) {
 export function fromWire(record) {
   if (!record) return null
   const copy = { ...record }
-  if (record.__hadCover && typeof record.cover === 'string') {
+  if (isBlobLike(record.cover)) {
+    copy.cover = record.cover
+  } else if (typeof record.cover === 'string' && record.cover.startsWith('data:')) {
     copy.cover = dataUrlToBlob(record.cover) || null
+  } else if (typeof record.cover === 'string' && /^https?:\/\//i.test(record.cover)) {
+    // Imported libraries may legitimately reference a hosted cover.
+    copy.cover = record.cover
+  } else if (record.__hadCover || record.cover != null) {
+    // Older JSON backups serialized Blob as `{}`. The image bytes cannot be
+    // recovered from that value, but the malformed cover must never prevent
+    // the rest of the novel from loading.
+    copy.cover = null
   }
   delete copy.__hadCover
   delete copy.pendingSync

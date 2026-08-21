@@ -9,6 +9,7 @@ import {
   updateChapter,
   moveChapter,
   reorderChapter,
+  mergeChapters,
   wordsAndChapters
 } from '../src/db/chapters'
 import { createCharacter, listCharacters, updateCharacter } from '../src/db/characters'
@@ -17,6 +18,7 @@ import { createRelationship, listRelationships } from '../src/db/relationships'
 import { addTodayWords, todayWords } from '../src/db/stats'
 import { recordSession, todaySessionStats } from '../src/db/stats'
 import { exportBackup, importBackup } from '../src/db/backup'
+import { toWire, fromWire } from '../src/sync/serialize'
 
 beforeEach(async () => {
   const db = await getDB()
@@ -77,6 +79,20 @@ describe('chapters', () => {
     expect(await listChapters(n.id)).toEqual([])
   })
 
+  it('creates child chapters in the correct parent sequence and inherits the parent part', async () => {
+    const n = await createNovel({ title: 'T' })
+    const book = await createChapter(n.id, { title: 'Book', kind: 'book', part: 'Part I' })
+    const chapterA = await createChapter(n.id, { title: 'A', part: 'Part I' })
+    const chapterB = await createChapter(n.id, { title: 'B', parentId: book.id })
+    const chapterC = await createChapter(n.id, { title: 'C', parentId: book.id })
+
+    const children = (await listChapters(n.id)).filter((c) => c.parentId === book.id)
+    expect(children.map((c) => c.title)).toEqual(['B', 'C'])
+    expect(children.every((c) => c.part === 'Part I')).toBe(true)
+    expect(chapterA.part).toBe('Part I')
+    expect(chapterB.order).toBeLessThan(chapterC.order)
+  })
+
   it('creates hierarchy nodes and reorders across parents', async () => {
     const n = await createNovel({ title: 'T' })
     const book = await createChapter(n.id, { title: '', kind: 'book' })
@@ -103,17 +119,16 @@ describe('chapters', () => {
     expect(list.find((c) => c.id === book.id).parentId).toBeNull()
   })
 
-  it('saves versions with a cap', async () => {
+  it('caps stored versions at 20', async () => {
     const n = await createNovel({ title: 'T' })
-    const c = await createChapter(n.id, { title: 'A', content: '' })
-    for (let i = 1; i <= 25; i++) {
-      const now = Date.now() + i * 120000
-      vi.spyOn(Date, 'now').mockReturnValue(now)
-      await updateChapter(c.id, { content: `<p>v${i}</p>` })
+    const keep = await createChapter(n.id, { title: 'Keep', content: '<p>base</p>' })
+    for (let i = 0; i < 25; i++) {
+      const absorb = await createChapter(n.id, { title: `A${i}`, content: `<p>a${i}</p>` })
+      await mergeChapters(n.id, keep.id, absorb.id)
     }
-    vi.restoreAllMocks()
-    const got = await getChapterForTest(n.id, c.id)
-    expect(got.versions.length).toBeLessThanOrEqual(20)
+    const got = await getChapterForTest(n.id, keep.id)
+    expect(got.versions.length).toBe(20)
+    expect(got.versions[19].words).toBeGreaterThan(got.versions[0].words)
   })
 })
 
@@ -181,5 +196,32 @@ describe('backup', () => {
     expect(restored.length).toBe(1)
     expect(restored[0].title).toBe('Backup Me')
     expect((await listChapters(restored[0].id)).length).toBe(1)
+  })
+
+  it('serializes cover blobs and restores them as usable blobs', async () => {
+    const cover = new Blob(['cover-bytes'], { type: 'image/png' })
+    const encoded = await toWire({ id: 'covered', title: 'Covered', cover, createdAt: 1, updatedAt: 1 })
+    expect(encoded.cover).toMatch(/^data:image\/png;base64,/)
+    const decoded = fromWire(encoded)
+    expect(decoded.cover).toBeInstanceOf(Blob)
+    expect(decoded.cover.type).toBe('image/png')
+    expect(await decoded.cover.text()).toBe('cover-bytes')
+
+    await importBackup({ app: 'moonscribe', version: 3, novels: [encoded] })
+    const restored = await getNovel('covered')
+    expect(restored.cover).toBeTruthy()
+    expect(restored.cover.type).toBe('image/png')
+  })
+
+  it('keeps an old malformed-cover backup usable', async () => {
+    await importBackup({
+      app: 'moonscribe',
+      version: 2,
+      novels: [{ id: 'legacy', title: 'Recovered words', cover: {}, createdAt: 1, updatedAt: 1 }]
+    })
+    const restored = await listNovels()
+    expect(restored).toHaveLength(1)
+    expect(restored[0].title).toBe('Recovered words')
+    expect(restored[0].cover).toBeNull()
   })
 })

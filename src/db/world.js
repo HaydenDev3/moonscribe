@@ -1,4 +1,5 @@
 import { getDB, uid, putRecord, removeRecord } from './db'
+import { trashRecord } from './trash'
 
 // Worldbuilding: places, factions, artefacts, lore, timeline entries.
 export const WORLD_KINDS = [
@@ -12,7 +13,7 @@ export const WORLD_KINDS = [
 export async function listWorld(novelId) {
   const db = await getDB()
   const all = await db.getAllFromIndex('world', 'by-novel', novelId)
-  return all.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+  return all.filter((i) => !i.trashedAt).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
 }
 
 export async function createWorldItem(novelId, data) {
@@ -45,4 +46,8 @@ export async function deleteWorldItem(id) {
   const item = await db.get('world', id)
   await db.delete('world', id)
   await removeRecord('world', id, item?.novelId)
+}
+
+export async function trashWorldItem(id) {
+  return trashRecord('world', id)
 }

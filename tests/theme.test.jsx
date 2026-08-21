@@ -26,18 +26,38 @@ const render = () => {
   )
 }
 
+async function waitForTheme(value, tries = 100) {
+  for (let i = 0; i < tries; i++) {
+    if (document.documentElement.dataset.theme === value) return
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  throw new Error(`Timed out waiting for theme "${value}"`)
+}
+
 describe('theme system', () => {
-  it('defaults to light when no system preference is set', async () => {
+  it('defaults to light (Parchment) when no preference is set', async () => {
     render()
-    await new Promise((r) => setTimeout(r, 100))
-    expect(document.documentElement.dataset.theme).toBe('light')
+    await waitForTheme('light')
   })
 
   it('sets amoled on the html element when persisted', async () => {
     const { setMeta } = await import('../src/db/meta')
     await setMeta('settings', { theme: 'amoled', paperTexture: false })
     render()
-    await new Promise((r) => setTimeout(r, 100))
-    expect(document.documentElement.dataset.theme).toBe('amoled')
+    await waitForTheme('amoled')
+  })
+
+  it('sets light on the html element when persisted', async () => {
+    const { setMeta } = await import('../src/db/meta')
+    await setMeta('settings', { theme: 'light', paperTexture: false })
+    render()
+    await waitForTheme('light')
+  })
+
+  it('coerces unsupported theme values to light', async () => {
+    const { setMeta } = await import('../src/db/meta')
+    await setMeta('settings', { theme: 'sepia', paperTexture: false })
+    render()
+    await waitForTheme('light')
   })
 })

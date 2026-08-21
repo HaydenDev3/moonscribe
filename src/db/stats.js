@@ -104,6 +104,45 @@ export async function todaySessionStats(novelId, now = new Date()) {
   return { words, minutes }
 }
 
+export async function monthlyWordsAllNovels() {
+  const db = await getDB()
+  const all = await db.getAll('stats')
+  const now = new Date()
+  const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  let total = 0
+  for (const r of all) {
+    if (r.kind === 'session') continue
+    if ((r.date || '').startsWith(ym)) total += r.words || 0
+  }
+  return total
+}
+
+export async function currentStreak() {
+  const db = await getDB()
+  const all = await db.getAll('stats')
+  const days = new Set()
+  for (const r of all) {
+    if (r.kind === 'session') continue
+    if (r.words > 0) days.add(r.date)
+  }
+  let streak = 0
+  const d = new Date()
+  while (true) {
+    const iso = toISODate(d)
+    if (!days.has(iso)) {
+      if (streak === 0 && iso === toISODate(new Date())) {
+        // today not yet written — check yesterday before giving up
+        d.setDate(d.getDate() - 1)
+        continue
+      }
+      break
+    }
+    streak++
+    d.setDate(d.getDate() - 1)
+  }
+  return streak
+}
+
 function toISODate(d) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')

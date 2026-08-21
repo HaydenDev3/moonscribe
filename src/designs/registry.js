@@ -46,11 +46,120 @@ export const DESIGNS = [
     swatches: ['#9bb8d4', '#232a33', '#4a6b8a'],
     editorClass: 'design-midnight',
     cover: { coverStyle: 'twilight', titleColor: '#ffffff', ornament: '✦' }
+  },
+  {
+    id: 'parchment',
+    name: 'Parchment',
+    blurb: 'Aged paper, warm and sepia-toned',
+    tags: ['editor'],
+    swatches: ['#f5ecd0', '#c9a86a', '#4a3d28'],
+    editorClass: 'design-parchment',
+    cover: { coverStyle: 'sand', titleColor: '#ffffff', ornament: '❧' }
+  },
+  {
+    id: 'crimson',
+    name: 'Crimson',
+    blurb: 'Deep red ink, dark romanticism',
+    tags: ['editor', 'cover'],
+    swatches: ['#c0404a', '#fdf0ef', '#5a1e1e'],
+    editorClass: 'design-crimson',
+    cover: { coverStyle: 'rose', titleColor: '#ffffff', ornament: '✦' }
+  },
+  {
+    id: 'forest',
+    name: 'Forest',
+    blurb: 'Hunter greens, deep and quiet',
+    tags: ['editor', 'cover'],
+    swatches: ['#5a8c60', '#f0f5ee', '#1f3a26'],
+    editorClass: 'design-forest',
+    cover: { coverStyle: 'sage', titleColor: '#ffffff', ornament: '◆' }
+  },
+  {
+    id: 'slate',
+    name: 'Slate',
+    blurb: 'Cool blue-grey, clean focus',
+    tags: ['editor'],
+    swatches: ['#6a88a8', '#f2f4f6', '#38475a'],
+    editorClass: 'design-slate',
+    cover: { coverStyle: 'twilight', titleColor: '#ffffff', ornament: '✧' }
+  },
+  {
+    id: 'lavender',
+    name: 'Lavender',
+    blurb: 'Soft purple, dreamy and still',
+    tags: ['editor'],
+    swatches: ['#8a74c0', '#f4f2f8', '#4a3a6a'],
+    editorClass: 'design-lavender',
+    cover: { coverStyle: 'moonstone', titleColor: '#ffffff', ornament: '✦' }
+  },
+  {
+    id: 'noir',
+    name: 'Noir',
+    blurb: 'Black pages, silver ink',
+    tags: ['editor'],
+    swatches: ['#1a1a1a', '#333333', '#e8e8e0'],
+    editorClass: 'design-noir',
+    cover: { coverStyle: 'twilight', titleColor: '#e8e8e0', ornament: '◆' }
+  },
+  {
+    id: 'ivory',
+    name: 'Ivory',
+    blurb: 'Clean cream, distraction-free',
+    tags: ['editor'],
+    swatches: ['#fafaf6', '#e8e8e0', '#2a2a28'],
+    editorClass: 'design-ivory',
+    cover: { coverStyle: 'moonstone', titleColor: '#ffffff', ornament: '✧' }
+  },
+  {
+    id: 'copper',
+    name: 'Copper',
+    blurb: 'Warm bronze, old-world craft',
+    tags: ['editor', 'cover'],
+    swatches: ['#b06830', '#faf4ee', '#5a3820'],
+    editorClass: 'design-copper',
+    cover: { coverStyle: 'sand', titleColor: '#ffffff', ornament: '❦' }
+  },
+  {
+    id: 'dusk',
+    name: 'Dusk',
+    blurb: 'Purple-pink twilight hour',
+    tags: ['editor'],
+    swatches: ['#9858b8', '#f8f0f8', '#4a2860'],
+    editorClass: 'design-dusk',
+    cover: { coverStyle: 'moonstone', titleColor: '#ffffff', ornament: '✦' }
   }
 ]
 
 export function designById(id) {
   return DESIGNS.find((d) => d.id === id) || null
+}
+
+const PRINT_THEMES = {
+  moonlight: { paper: '#f2f7fc', ink: '#3a4f66', accent: '#7ba3c9' },
+  ember: { paper: '#fdf3ec', ink: '#6b4a3a', accent: '#d4897b' },
+  moss: { paper: '#f1f6ef', ink: '#43594a', accent: '#8aa97f' },
+  sand: { paper: '#faf3e7', ink: '#6f5b41', accent: '#c9a86a' },
+  midnight: { paper: '#232a33', ink: '#e8e4dc', accent: '#9bb8d4' },
+  parchment: { paper: '#f5ecd0', ink: '#4a3d28', accent: '#c9a86a' },
+  crimson: { paper: '#fdf0ef', ink: '#5a1e1e', accent: '#c0404a' },
+  forest: { paper: '#f0f5ee', ink: '#1f3a26', accent: '#5a8c60' },
+  slate: { paper: '#f2f4f6', ink: '#38475a', accent: '#6a88a8' },
+  lavender: { paper: '#f4f2f8', ink: '#4a3a6a', accent: '#8a74c0' },
+  noir: { paper: '#1a1a1a', ink: '#e8e8e0', accent: '#999999' },
+  ivory: { paper: '#fafaf6', ink: '#2a2a28', accent: '#9a8c72' },
+  copper: { paper: '#faf4ee', ink: '#5a3820', accent: '#b06830' },
+  dusk: { paper: '#f8f0f8', ink: '#4a2860', accent: '#9858b8' },
+}
+
+export function designPrintTheme(layout = {}) {
+  if (layout.editorDesign === 'custom') {
+    return {
+      paper: layout.customPageBg || '#fffdf9',
+      ink: layout.customPageText || '#211d19',
+      accent: layout.customPageText || '#8a6a3d',
+    }
+  }
+  return PRINT_THEMES[layout.editorDesign] || { paper: '#fffdf9', ink: '#211d19', accent: '#8a6a3d' }
 }
 
 export const DESIGN_MIME = 'application/x-moonscribe-design'

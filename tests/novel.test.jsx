@@ -33,6 +33,15 @@ afterEach(() => {
   container.remove()
 })
 
+const waitFor = async (predicate, timeout = 1200) => {
+  const start = Date.now()
+  while (Date.now() - start < timeout) {
+    if (predicate()) return
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  throw new Error('Timed out waiting for expected DOM state')
+}
+
 const renderNovel = async (path = '/novel/n1') => {
   root.render(
     <AppProvider>
@@ -47,7 +56,19 @@ const renderNovel = async (path = '/novel/n1') => {
       </ContextMenuProvider>
     </AppProvider>
   )
-  await new Promise((r) => setTimeout(r, 150))
+
+  if (path === '/novel/missing') {
+    await waitFor(() => container.textContent.includes('The book’s not here'))
+  } else if (path.includes('/design')) {
+    await waitFor(() => container.querySelector('.cover-studio'))
+  } else if (path.includes('/analytics')) {
+    await waitFor(() => container.querySelector('.mode-body h2'))
+  } else if (path.includes('/binder/')) {
+    await waitFor(() => container.querySelector('.mode-body h2'))
+  } else {
+    await waitFor(() => container.querySelector('.workspace'))
+    await waitFor(() => container.querySelector('.editor-shell'))
+  }
 }
 
 describe('Novel workspace', () => {
@@ -56,6 +77,7 @@ describe('Novel workspace', () => {
     const ws = container.querySelector('.workspace')
     expect(ws).not.toBeNull()
     expect(ws.className).toContain('design-ember')
+    await waitFor(() => container.querySelector('[contenteditable]'))
     expect(container.querySelector('[contenteditable]')).not.toBeNull()
   })
 
@@ -64,10 +86,10 @@ describe('Novel workspace', () => {
     const toggle = [...container.querySelectorAll('button')].find((b) => b.textContent.includes('Designs'))
     expect(toggle).not.toBeNull()
     toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    await new Promise((r) => setTimeout(r, 50))
+    await waitFor(() => container.querySelector('.design-card'))
     const cards = container.querySelectorAll('.design-card')
     expect(cards.length).toBeGreaterThan(0)
-    expect(container.textContent).toContain('Drag a design onto the page')
+    expect(container.textContent).toContain('Click to apply, or drag onto the page.')
   })
 
   it('renders a binder section inline for a binder route', async () => {
@@ -80,13 +102,14 @@ describe('Novel workspace', () => {
 
   it('renders the designer as a workspace mode with its own control rail and the chapter sidebar', async () => {
     await renderNovel('/novel/n1/design')
-    expect(container.querySelector('.designer-workspace')).not.toBeNull()
-    expect(container.textContent).toContain('Cover preview')
+    expect(container.querySelector('.cover-studio')).not.toBeNull()
+    expect(container.querySelector('.ds-icons')).not.toBeNull()
     expect(container.querySelector('.sidebar')).not.toBeNull()
   })
 
   it('renders analytics as a workspace mode', async () => {
     await renderNovel('/novel/n1/analytics')
+    await waitFor(() => container.querySelector('.mode-body h2'))
     expect(container.textContent).toContain('Total words')
     expect(container.querySelector('.mode-body h2')?.textContent).toBe('Analytics')
   })

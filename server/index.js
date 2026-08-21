@@ -10,92 +10,88 @@
 // Run:  node server/index.js
 // Env:  PORT (default 3001), DATA_DIR
 // The first account to register claims any records left by an older server.
+//
+// Testable: createMoonscribeServer({ db, rateLimit }) builds the whole app
+// around an injected database (use new DatabaseSync(':memory:') in tests) and
+// returns { server, db } — call server.listen(0) and use the real HTTP API.
 
 import { createServer } from 'node:http'
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs'
 import { join, dirname, extname, normalize } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { pathToFileURL, fileURLToPath } from 'node:url'
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
+import { WebSocketServer } from 'ws'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = join(ROOT, 'dist')
-const DATA_DIR = process.env.DATA_DIR || join(ROOT, 'data')
 const PORT = Number(process.env.PORT || 3001)
 
-mkdirSync(DATA_DIR, { recursive: true })
-const DB = new DatabaseSync(join(DATA_DIR, 'moonscribe.db'))
+const STORES = new Set([
+  'novels',
+  'chapters',
+  'characters',
+  'notes',
+  'relationships',
+  'world',
+  'moodboard',
+  'glossary',
+  'annotations',
+  'branches',
+  'suggestions'
+])
 
-// ---- schema (with migrations for pre-account databases) ----
-DB.exec(`
-  CREATE TABLE IF NOT EXISTS records (
-    store      TEXT NOT NULL,
-    id         TEXT NOT NULL,
-    novel_id   TEXT,
-    payload    TEXT,
-    updated_at INTEGER NOT NULL,
-    deleted    INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (store, id)
-  );
-  CREATE INDEX IF NOT EXISTS idx_records_since ON records(updated_at);
-  CREATE TABLE IF NOT EXISTS tokens (
-    token_hash TEXT PRIMARY KEY,
-    created_at INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS users (
-    id            TEXT PRIMARY KEY,
-    username      TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,
-    created_at    INTEGER NOT NULL
-  );
-`)
+// ---- OAuth ----
+// Providers always return through the public application origin. In local
+// development Vite proxies /auth to this process, so backend ports never leak
+// into provider-facing redirect URIs.
+const APP_ORIGIN = (process.env.APP_ORIGIN || 'http://localhost:5173').replace(/\/+$/, '')
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID || '1537750421458780170'
+// Never provide a fallback here. A Discord client secret must only live in the
+// deployment environment, and the previous exposed secret must be rotated.
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET
+const DISCORD_SCOPES = 'identify'
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
+const ALLOW_DEV_TUNNELS = process.env.ALLOW_DEV_TUNNELS === 'true' || process.env.NODE_ENV !== 'production'
+const DEV_TUNNEL_HOST = /(?:^|\.)(?:ngrok-free\.app|ngrok-free\.dev|ngrok\.io|loca\.lt)$/i
 
-function ensureColumn(table, column, ddl) {
-  const cols = DB.prepare(`PRAGMA table_info(${table})`).all()
-  if (!cols.some((c) => c.name === column)) DB.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`)
-}
-ensureColumn('records', 'user_id', 'user_id TEXT')
-ensureColumn('tokens', 'user_id', 'user_id TEXT')
-DB.exec('CREATE INDEX IF NOT EXISTS idx_records_user_since ON records(user_id, updated_at)')
+const OAUTH_STATE_SECRET = process.env.OAUTH_STATE_SECRET || DISCORD_CLIENT_SECRET || GOOGLE_CLIENT_SECRET
+const oauthExchanges = new Map()
+setInterval(() => {
+  const now = Date.now()
+  for (const [k, v] of oauthExchanges) {
+    if (now - v.ts > 2 * 60 * 1000) oauthExchanges.delete(k)
+  }
+}, 60_000).unref?.()
 
-// ---- passwords & tokens ----
-const sha = (s) => createHash('sha256').update(String(s)).digest('hex')
-
-function hashPassword(password) {
-  const salt = randomBytes(16).toString('hex')
-  const hash = scryptSync(String(password), salt, 32).toString('hex')
-  return `${salt}:${hash}`
-}
-
-function verifyPassword(password, stored) {
-  const [salt, hash] = String(stored).split(':')
-  if (!salt || !hash) return false
-  const candidate = scryptSync(String(password), salt, 32)
-  const expected = Buffer.from(hash, 'hex')
-  return candidate.length === expected.length && timingSafeEqual(candidate, expected)
+function oauthState(payload) {
+  if (!OAUTH_STATE_SECRET) throw new Error('OAuth state signing is not configured.')
+  const encoded = Buffer.from(JSON.stringify({ ...payload, exp: Date.now() + 10 * 60 * 1000, nonce: randomBytes(12).toString('hex') })).toString('base64url')
+  const signature = createHmac('sha256', OAUTH_STATE_SECRET).update(encoded).digest('base64url')
+  return `${encoded}.${signature}`
 }
 
-function issueToken(userId) {
-  const token = randomBytes(24).toString('base64url')
-  DB.prepare('INSERT INTO tokens (token_hash, user_id, created_at) VALUES (?, ?, ?)').run(sha(token), userId, Date.now())
-  return token
+function readOauthState(value, provider) {
+  try {
+    const [encoded, signature] = String(value || '').split('.')
+    if (!encoded || !signature || !OAUTH_STATE_SECRET) return null
+    const expected = createHmac('sha256', OAUTH_STATE_SECRET).update(encoded).digest()
+    const received = Buffer.from(signature, 'base64url')
+    if (expected.length !== received.length || !timingSafeEqual(expected, received)) return null
+    const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'))
+    if (payload.exp < Date.now() || payload.provider !== provider || !payload.redirectTo) return null
+    return payload
+  } catch { return null }
 }
 
-function userFromToken(token) {
-  if (!token) return null
-  const row = DB.prepare('SELECT user_id FROM tokens WHERE token_hash = ?').get(sha(token))
-  return row ? row.user_id : null
-}
+// Auth tokens live for 30 days; expired tokens are rejected and swept.
+const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
-// The very first account to register adopts any records from a pre-account
-// database, so nothing written before accounts existed is lost.
-function claimLegacyRecords(userId) {
-  DB.prepare("UPDATE records SET user_id = ? WHERE user_id IS NULL OR user_id = ''").run(userId)
-}
+// A single record (a chapter, or a cover as a data-URL) must fit in this many
+// bytes. Guards against a client pushing absurdly large payloads.
+const MAX_RECORD_BYTES = 10 * 1024 * 1024
 
-const STORES = new Set(['novels', 'chapters', 'characters', 'notes', 'relationships', 'world', 'moodboard'])
-
-// ---- http plumbing ----
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -114,26 +110,240 @@ const MIME = {
   '.map': 'application/json'
 }
 
-async function readBody(req) {
+function publicAvatar(user) {
+  if (!user) return null
+  if (user.discord_id && user.discord_avatar) {
+    if (/^https?:\/\//i.test(user.discord_avatar)) return user.discord_avatar
+    const extension = user.discord_avatar.startsWith('a_') ? 'gif' : 'png'
+    return `https://cdn.discordapp.com/avatars/${encodeURIComponent(user.discord_id)}/${encodeURIComponent(user.discord_avatar)}.${extension}?size=128`
+  }
+  return user.google_avatar && /^https?:\/\//i.test(user.google_avatar) ? user.google_avatar : null
+}
+
+// ---- passwords & tokens ----
+const sha = (s) => createHash('sha256').update(String(s)).digest('hex')
+
+function hashPassword(password) {
+  const salt = randomBytes(16).toString('hex')
+  const hash = scryptSync(String(password), salt, 32).toString('hex')
+  return `${salt}:${hash}`
+}
+
+function verifyPassword(password, stored) {
+  const [salt, hash] = String(stored).split(':')
+  if (!salt || !hash) return false
+  const candidate = scryptSync(String(password), salt, 32)
+  const expected = Buffer.from(hash, 'hex')
+  return candidate.length === expected.length && timingSafeEqual(candidate, expected)
+}
+
+function issueToken(db, userId, { deviceId = null, deviceName = 'Unknown device' } = {}) {
+  const token = randomBytes(24).toString('base64url')
+  const sessionId = randomBytes(16).toString('hex')
+  const expiresAt = Date.now() + TOKEN_TTL_MS
+  // One current token per device. Signing in again rotates that device's
+  // token, without unexpectedly signing the writer out elsewhere.
+  if (deviceId) db.prepare('DELETE FROM tokens WHERE user_id = ? AND device_id = ?').run(userId, deviceId)
+  db.prepare('INSERT INTO tokens (token_hash, user_id, created_at, expires_at, device_id, device_name, last_seen_at, session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    sha(token), userId, Date.now(), expiresAt, deviceId, deviceName.slice(0, 120), Date.now(), sessionId
+  )
+  return { token, expiresAt, sessionId }
+}
+
+function userFromToken(db, token) {
+  if (!token) return null
+  const row = db.prepare('SELECT user_id, expires_at FROM tokens WHERE token_hash = ?').get(sha(token))
+  if (!row) return null
+  if (row.expires_at && row.expires_at < Date.now()) {
+    // Expired — consume the row and treat the token as invalid.
+    db.prepare('DELETE FROM tokens WHERE token_hash = ?').run(sha(token))
+    return null
+  }
+  db.prepare('UPDATE tokens SET last_seen_at = ? WHERE token_hash = ?').run(Date.now(), sha(token))
+  return row.user_id
+}
+
+// Pre-account records have no owner. Claiming them automatically would let the
+// first person to sign up see data that may belong to somebody else. A server
+// owner can explicitly opt in during a controlled migration.
+function claimLegacyRecords(db, userId) {
+  if (process.env.CLAIM_LEGACY_RECORDS_ON_FIRST_ACCOUNT !== 'true') return
+  db.prepare("UPDATE records SET user_id = ? WHERE user_id IS NULL OR user_id = ''").run(userId)
+}
+
+// ---- schema (with migrations for pre-account databases) ----
+function setupSchema(db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS records (
+      store      TEXT NOT NULL,
+      id         TEXT NOT NULL,
+      novel_id   TEXT,
+      payload    TEXT,
+      updated_at INTEGER NOT NULL,
+      deleted    INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (store, id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_records_since ON records(updated_at);
+    CREATE TABLE IF NOT EXISTS tokens (
+      token_hash TEXT PRIMARY KEY,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS users (
+      id            TEXT PRIMARY KEY,
+      username      TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at    INTEGER NOT NULL
+    );
+  `)
+
+  const ensureColumn = (table, column, ddl) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all()
+    if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`)
+  }
+  ensureColumn('records', 'user_id', 'user_id TEXT')
+  ensureColumn('tokens', 'user_id', 'user_id TEXT')
+  ensureColumn('tokens', 'expires_at', 'expires_at INTEGER')
+  ensureColumn('tokens', 'device_id', 'device_id TEXT')
+  ensureColumn('tokens', 'device_name', 'device_name TEXT')
+  ensureColumn('tokens', 'last_seen_at', 'last_seen_at INTEGER')
+  ensureColumn('tokens', 'session_id', 'session_id TEXT')
+  ensureColumn('users', 'discord_id', 'discord_id TEXT')
+  ensureColumn('users', 'discord_avatar', 'discord_avatar TEXT')
+  ensureColumn('users', 'discord_username', 'discord_username TEXT')
+  ensureColumn('users', 'google_id', 'google_id TEXT')
+  ensureColumn('users', 'google_avatar', 'google_avatar TEXT')
+  ensureColumn('users', 'email', 'email TEXT')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_records_user_since ON records(user_id, updated_at)')
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS novel_members (
+      novel_id TEXT NOT NULL, owner_user_id TEXT NOT NULL, member_user_id TEXT NOT NULL,
+      role TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER,
+      PRIMARY KEY (novel_id, member_user_id)
+    );
+    CREATE TABLE IF NOT EXISTS share_invites (
+      code TEXT PRIMARY KEY, novel_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
+      role TEXT NOT NULL, expires_at INTEGER NOT NULL, access_expires_at INTEGER, created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS share_presence (
+      novel_id TEXT NOT NULL, user_id TEXT NOT NULL, chapter_id TEXT,
+      last_seen_at INTEGER NOT NULL, PRIMARY KEY (novel_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS share_rooms (
+      novel_id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL,
+      max_users INTEGER NOT NULL DEFAULT 4, default_role TEXT NOT NULL DEFAULT 'editor',
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_members_user ON novel_members(member_user_id, novel_id);
+    CREATE INDEX IF NOT EXISTS idx_invites_expiry ON share_invites(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_presence_novel ON share_presence(novel_id, last_seen_at);
+  `)
+  ensureColumn('share_presence', 'status', "status TEXT NOT NULL DEFAULT 'online'")
+  ensureColumn('share_presence', 'activity', "activity TEXT NOT NULL DEFAULT 'viewing'")
+  ensureColumn('share_presence', 'workspace', "workspace TEXT NOT NULL DEFAULT 'manuscript'")
+  ensureColumn('share_presence', 'tab_name', "tab_name TEXT NOT NULL DEFAULT ''")
+  ensureColumn('share_presence', 'line_number', 'line_number INTEGER')
+  ensureColumn('share_presence', 'cursor_offset', 'cursor_offset INTEGER')
+  ensureColumn('novel_members', 'expires_at', 'expires_at INTEGER')
+  ensureColumn('share_invites', 'access_expires_at', 'access_expires_at INTEGER')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_users_discord ON users(discord_id)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_users_google ON users(google_id)')
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL')
+
+  // Older databases keyed records globally by (store,id). That allowed a
+  // colliding client-generated id from another account to take ownership of a
+  // row. Rebuild once with the account as part of the primary key.
+  const recordPk = db.prepare('PRAGMA table_info(records)').all().filter((column) => column.pk).sort((a, b) => a.pk - b.pk).map((column) => column.name)
+  if (recordPk.join(',') !== 'user_id,store,id') {
+    db.exec(`
+      BEGIN;
+      CREATE TABLE records_scoped (
+        user_id TEXT NOT NULL DEFAULT '', store TEXT NOT NULL, id TEXT NOT NULL,
+        novel_id TEXT, payload TEXT, updated_at INTEGER NOT NULL,
+        deleted INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (user_id, store, id)
+      );
+      INSERT OR REPLACE INTO records_scoped (user_id, store, id, novel_id, payload, updated_at, deleted)
+        SELECT COALESCE(user_id, ''), store, id, novel_id, payload, updated_at, deleted FROM records;
+      DROP TABLE records;
+      ALTER TABLE records_scoped RENAME TO records;
+      COMMIT;
+    `)
+  }
+  db.exec('CREATE INDEX IF NOT EXISTS idx_records_since ON records(updated_at)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_records_user_since ON records(user_id, updated_at)')
+
+  // Sweep expired tokens on startup.
+  db.prepare('DELETE FROM tokens WHERE expires_at IS NOT NULL AND expires_at < ?').run(Date.now())
+  db.prepare('DELETE FROM share_invites WHERE expires_at < ?').run(Date.now())
+  db.prepare('DELETE FROM novel_members WHERE expires_at IS NOT NULL AND expires_at < ?').run(Date.now())
+  db.prepare('DELETE FROM share_presence WHERE last_seen_at < ?').run(Date.now() - 24 * 60 * 60 * 1000)
+}
+
+// ---- rate limiting (per-IP sliding window) ----
+function createRateLimiter({ max = 10, windowMs = 15 * 60 * 1000 } = {}) {
+  const hits = new Map()
+  const limited = (key, now) => {
+    const arr = (hits.get(key) || []).filter((t) => now - t < windowMs)
+    if (arr.length >= max) {
+      hits.set(key, arr)
+      return Math.max(0, windowMs - (now - arr[0]))
+    }
+    arr.push(now)
+    hits.set(key, arr)
+    return 0
+  }
+  const timer = setInterval(() => {
+    const now = Date.now()
+    for (const [key, arr] of hits) {
+      const live = arr.filter((t) => now - t < windowMs)
+      if (!live.length) hits.delete(key)
+      else hits.set(key, live)
+    }
+  }, windowMs)
+  timer.unref?.()
+  return {
+    limited,
+    reset: () => hits.clear(),
+    dispose: () => clearInterval(timer)
+  }
+}
+
+// ---- http plumbing ----
+async function readBody(req, maxBytes = 12 * 1024 * 1024) {
   let data = ''
   for await (const chunk of req) {
     data += chunk
-    if (data.length > 50 * 1024 * 1024) throw new Error('payload too large')
+    if (data.length > maxBytes) throw new Error('payload too large')
   }
   return data ? JSON.parse(data) : {}
 }
 
 function json(res, status, body) {
   const text = JSON.stringify(body)
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer'
+  })
   res.end(text)
 }
 
-function serveStatic(req, res, url) {
+function securityHeaders() {
+  return {
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://cdn.discordapp.com https://lh3.googleusercontent.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://discord.com https://discordapp.com https://accounts.google.com https://oauth2.googleapis.com https://openidconnect.googleapis.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+  }
+}
+
+function serveStatic(req, res, url, dist) {
   const pathname = decodeURIComponent(url.pathname || '/')
   const safe = normalize(pathname).replace(/^(\.\.[/\\])+/, '')
-  let file = join(DIST, safe)
-  if (!file.startsWith(DIST)) file = join(DIST, 'index.html')
+  let file = join(dist, safe)
+  if (!file.startsWith(dist)) file = join(dist, 'index.html')
 
   try {
     if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html')
@@ -143,15 +353,15 @@ function serveStatic(req, res, url) {
 
   if (!existsSync(file)) {
     // SPA fallback for non-file routes.
-    file = join(DIST, 'index.html')
+    file = join(dist, 'index.html')
   }
 
   try {
     const body = readFileSync(file)
     const ext = extname(file).toLowerCase()
-    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream' }
+    const headers = { 'Content-Type': MIME[ext] || 'application/octet-stream', ...securityHeaders() }
     if (file.endsWith('index.html')) headers['Cache-Control'] = 'no-cache'
-    if (file.includes('/assets/')) headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    if (file.includes(`${join(dist, 'assets')}`)) headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     if (file.endsWith('sw.js')) headers['Cache-Control'] = 'no-cache'
     res.writeHead(200, headers)
     res.end(body)
@@ -161,125 +371,789 @@ function serveStatic(req, res, url) {
   }
 }
 
-// ---- API ----
-function handleApi(req, res, url, path) {
-  // CORS for the dev server (vite runs on :5173, api on :3001).
-  res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204)
-    res.end()
-    return
+// ---- the app ----
+export function createMoonscribeServer({ db, dataDir, rateLimit, distDir, corsOrigins } = {}) {
+  const dist = distDir || DIST
+  const dir = dataDir || process.env.DATA_DIR || join(ROOT, 'data')
+  const database = db || (() => {
+    if (dir === ':memory:') return new DatabaseSync(':memory:')
+    mkdirSync(dir, { recursive: true })
+    return new DatabaseSync(join(dir, 'moonscribe.db'))
+  })()
+  setupSchema(database)
+
+  const opts = rateLimit === false ? { max: Number.MAX_SAFE_INTEGER, windowMs: 1 } : { ...(rateLimit || {}) }
+  const limiter = createRateLimiter(opts)
+  const allowedOrigins = new Set((corsOrigins || [
+    APP_ORIGIN,
+    `http://localhost:${PORT}`,
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:4173',
+    'http://127.0.0.1:4173',
+    ...(process.env.CORS_ORIGINS || '').split(',')
+  ]).map((origin) => String(origin).trim().replace(/\/+$/, '')).filter(Boolean))
+
+  const isAllowedOrigin = (origin) => {
+    try {
+      const parsed = new URL(origin)
+      return allowedOrigins.has(parsed.origin) || (ALLOW_DEV_TUNNELS && parsed.protocol === 'https:' && DEV_TUNNEL_HOST.test(parsed.hostname))
+    } catch { return false }
   }
 
-  // ---- accounts ----
-  if (path === '/api/auth/register' && req.method === 'POST') {
-    readBody(req)
-      .then(({ username, password }) => {
-        const name = String(username || '').trim().toLowerCase()
-        if (name.length < 2) throw new Error('A username needs at least 2 characters.')
-        if (name.length > 40) throw new Error('That username is too long.')
-        if (String(password || '').length < 6) throw new Error('Your password needs at least 6 characters.')
-        const existing = DB.prepare('SELECT 1 FROM users WHERE username = ?').get(name)
-        if (existing) throw new Error('That username is taken — try signing in instead.')
-        const userId = randomBytes(12).toString('hex')
-        const userCount = DB.prepare('SELECT COUNT(*) AS n FROM users').get().n
-        DB.prepare('INSERT INTO users (id, username, password_hash, created_at) VALUES (?, ?, ?, ?)').run(
-          userId, name, hashPassword(password), Date.now()
-        )
-        if (userCount === 0) claimLegacyRecords(userId)
-        json(res, 200, { token: issueToken(userId), username: name })
-      })
-      .catch((err) => json(res, 400, { error: err.message }))
-    return
+  // Resolve the browser-visible application origin. OAuth callbacks and the
+  // sync client must use this public URL, never the backend's localhost bind
+  // address. Explicit configured origins remain authoritative in production;
+  // recognized HTTPS tunnel hosts are accepted only in development.
+  const publicOrigin = (req, requested = null) => {
+    if (requested && isAllowedOrigin(requested)) return new URL(requested).origin
+    const requestOrigin = req.headers.origin
+    if (requestOrigin && isAllowedOrigin(requestOrigin)) return new URL(requestOrigin).origin
+    if (process.env.TRUST_PROXY === 'true') {
+      const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim()
+      const forwardedProto = String(req.headers['x-forwarded-proto'] || 'https').split(',')[0].trim()
+      if (forwardedHost) {
+        const forwarded = `${forwardedProto}://${forwardedHost}`
+        if (isAllowedOrigin(forwarded)) return new URL(forwarded).origin
+      }
+    }
+    return APP_ORIGIN
   }
 
-  if (path === '/api/auth/login' && req.method === 'POST') {
-    readBody(req)
-      .then(({ username, password }) => {
-        const name = String(username || '').trim().toLowerCase()
-        const user = DB.prepare('SELECT * FROM users WHERE username = ?').get(name)
-        if (!user || !verifyPassword(password, user.password_hash)) {
-          return json(res, 401, { error: 'That username or password didn’t match.' })
+  const clientAddress = (req) => {
+    if (process.env.TRUST_PROXY === 'true') return String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown'
+    return String(req.socket.remoteAddress || 'unknown')
+  }
+  const device = (req) => ({
+    deviceId: String(req.headers['x-device-id'] || '').trim().slice(0, 120) || null,
+    deviceName: String(req.headers['x-device-name'] || req.headers['user-agent'] || 'Unknown device').trim()
+  })
+
+  function handleApi(req, res, url, path) {
+    // Only configured browser origins may call the API cross-origin.
+    const origin = req.headers.origin
+    if (origin && isAllowedOrigin(origin)) res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    if (req.method === 'OPTIONS') {
+      res.writeHead(origin && !isAllowedOrigin(origin) ? 403 : 204)
+      res.end()
+      return
+    }
+
+    // ---- Discord OAuth ----
+    if (path === '/auth/discord' && req.method === 'GET') {
+      if (!DISCORD_CLIENT_SECRET) {
+        json(res, 503, { error: 'Discord sign-in is not configured on this server.' })
+        return
+      }
+      const requestedRedirect = url.searchParams.get('redirect_to')
+      const redirectTo = publicOrigin(req, requestedRedirect)
+      const state = oauthState({ redirectTo, provider: 'discord' })
+      const callbackUrl = `${redirectTo}/auth/discord/callback`
+      const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=${DISCORD_SCOPES}&state=${state}`
+      res.writeHead(302, { Location: authUrl, 'Cache-Control': 'no-store' })
+      res.end()
+      return
+    }
+
+    if (path === '/auth/discord/callback' && req.method === 'GET') {
+      const code = url.searchParams.get('code')
+      const state = url.searchParams.get('state')
+      const stateData = readOauthState(state, 'discord')
+      if (!code || !stateData) {
+        res.writeHead(302, { Location: `${publicOrigin(req)}/?signin=1&discord_error=oauth_state_expired`, 'Cache-Control': 'no-store' })
+        res.end()
+        return
+      }
+      const callbackUrl = `${stateData.redirectTo}/auth/discord/callback`
+      ;(async () => {
+        // Exchange code for Discord access token
+        const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: DISCORD_CLIENT_ID,
+            client_secret: DISCORD_CLIENT_SECRET,
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: callbackUrl,
+          }).toString()
+        })
+        const tokenData = await tokenRes.json()
+        if (!tokenData.access_token) throw new Error(tokenData.error_description || 'Discord token exchange failed')
+
+        // Fetch Discord user info
+        const meRes = await fetch('https://discord.com/api/users/@me', {
+          headers: { Authorization: `Bearer ${tokenData.access_token}` }
+        })
+        const discordUser = await meRes.json()
+        if (!discordUser.id) throw new Error('Could not retrieve Discord user')
+
+        // Find or create local user linked to this Discord ID
+        let user = database.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordUser.id)
+        if (!user) {
+          const userId = randomBytes(12).toString('hex')
+          let base = (discordUser.username || 'user').toLowerCase().replace(/[^a-z0-9._-]/g, '_').slice(0, 28)
+          let uname = base
+          let n = 0
+          while (database.prepare('SELECT 1 FROM users WHERE username = ?').get(uname)) {
+            uname = `${base}_${++n}`
+          }
+          const userCount = database.prepare('SELECT COUNT(*) AS n FROM users').get().n
+          database.prepare(
+            'INSERT INTO users (id, username, password_hash, discord_id, discord_avatar, discord_username, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
+          ).run(userId, uname, '', discordUser.id, discordUser.avatar || '', discordUser.username || '', Date.now())
+          if (userCount === 0) claimLegacyRecords(database, userId)
+          user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+        } else {
+          // Refresh avatar/username
+          database.prepare('UPDATE users SET discord_avatar = ?, discord_username = ? WHERE discord_id = ?')
+            .run(discordUser.avatar || '', discordUser.username || '', discordUser.id)
         }
-        json(res, 200, { token: issueToken(user.id), username: user.username })
+
+        const avatarUrl = discordUser.avatar
+          ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
+          : `https://cdn.discordapp.com/embed/avatars/${(BigInt(discordUser.id) >> 22n) % 6n}.png`
+
+        // A short-lived, one-use code keeps the long-lived sync token out of
+        // redirect URLs, browser history, and referrer headers.
+        const exchange = randomBytes(24).toString('base64url')
+        oauthExchanges.set(exchange, { userId: user.id, username: user.username, avatar: avatarUrl, provider: 'discord', serverOrigin: stateData.redirectTo, ts: Date.now() })
+        const params = new URLSearchParams({ discord_exchange: exchange })
+        res.writeHead(302, { Location: `${stateData.redirectTo}/dashboard?${params}`, 'Cache-Control': 'no-store' })
+        res.end()
+      })().catch((err) => {
+        console.error('[Discord OAuth]', err.message)
+        const errUrl = `${stateData.redirectTo}/dashboard?discord_error=sign_in_failed`
+        res.writeHead(302, { Location: errUrl, 'Cache-Control': 'no-store' })
+        res.end()
       })
-      .catch(() => json(res, 400, { error: 'Bad request.' }))
-    return
+      return
+    }
+
+    if (path === '/auth/google' && req.method === 'GET') {
+      if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) return json(res, 503, { error: 'Google sign-in is not configured on this server.' })
+      const requestedRedirect = url.searchParams.get('redirect_to')
+      const redirectTo = publicOrigin(req, requestedRedirect)
+      const state = oauthState({ redirectTo, provider: 'google' })
+      const callbackUrl = `${redirectTo}/auth/google/callback`
+      const params = new URLSearchParams({ client_id: GOOGLE_CLIENT_ID, redirect_uri: callbackUrl, response_type: 'code', scope: 'openid email profile', state, access_type: 'online', prompt: 'select_account' })
+      res.writeHead(302, { Location: `https://accounts.google.com/o/oauth2/v2/auth?${params}`, 'Cache-Control': 'no-store' })
+      res.end()
+      return
+    }
+
+    if (path === '/auth/google/callback' && req.method === 'GET') {
+      const code = url.searchParams.get('code')
+      const state = url.searchParams.get('state')
+      const stateData = readOauthState(state, 'google')
+      if (!code || !stateData) {
+        res.writeHead(302, { Location: `${publicOrigin(req)}/?signin=1&oauth_error=oauth_state_expired`, 'Cache-Control': 'no-store' })
+        res.end()
+        return
+      }
+      const callbackUrl = `${stateData.redirectTo}/auth/google/callback`
+      ;(async () => {
+        const tokenRes = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ client_id: GOOGLE_CLIENT_ID, client_secret: GOOGLE_CLIENT_SECRET, code, grant_type: 'authorization_code', redirect_uri: callbackUrl }).toString() })
+        const tokenData = await tokenRes.json()
+        if (!tokenData.access_token) throw new Error(tokenData.error_description || 'Google token exchange failed')
+        const profileRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: `Bearer ${tokenData.access_token}` } })
+        const profile = await profileRes.json()
+        if (!profile.sub || !profile.email || profile.email_verified === false) throw new Error('Google did not return a verified email address.')
+        const email = String(profile.email).toLowerCase()
+        let user = database.prepare('SELECT * FROM users WHERE google_id = ? OR email = ?').get(profile.sub, email)
+        if (!user) {
+          const userId = randomBytes(12).toString('hex')
+          let base = email.split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '_').slice(0, 28) || 'writer'
+          let uname = base
+          let n = 0
+          while (database.prepare('SELECT 1 FROM users WHERE username = ?').get(uname)) uname = `${base}_${++n}`
+          database.prepare('INSERT INTO users (id, username, password_hash, google_id, google_avatar, email, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(userId, uname, '', profile.sub, profile.picture || '', email, Date.now())
+          user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+        } else {
+          database.prepare('UPDATE users SET google_id = ?, google_avatar = ?, email = ? WHERE id = ?').run(profile.sub, profile.picture || '', email, user.id)
+        }
+        const exchange = randomBytes(24).toString('base64url')
+        oauthExchanges.set(exchange, { userId: user.id, username: user.username, avatar: profile.picture || '', provider: 'google', serverOrigin: stateData.redirectTo, ts: Date.now() })
+        res.writeHead(302, { Location: `${stateData.redirectTo}/dashboard?${new URLSearchParams({ oauth_exchange: exchange, provider: 'google' })}`, 'Cache-Control': 'no-store' })
+        res.end()
+      })().catch((error) => {
+        console.error('[Google OAuth]', error.message)
+        res.writeHead(302, { Location: `${stateData.redirectTo}/dashboard?oauth_error=google_sign_in_failed`, 'Cache-Control': 'no-store' })
+        res.end()
+      })
+      return
+    }
+
+    if (path === '/api/auth/oauth/exchange' && req.method === 'POST') {
+      readBody(req, 8 * 1024).then(({ code }) => {
+        const exchange = oauthExchanges.get(String(code || ''))
+        if (!exchange || Date.now() - exchange.ts > 2 * 60 * 1000) throw new Error('This sign-in link has expired. Please try again.')
+        oauthExchanges.delete(String(code))
+        const { token } = issueToken(database, exchange.userId, device(req))
+        json(res, 200, { token, accountId: exchange.userId, username: exchange.username, avatar: exchange.avatar, provider: exchange.provider, server: exchange.serverOrigin || publicOrigin(req) })
+      }).catch((error) => json(res, 400, { error: error.message }))
+      return
+    }
+
+    if (path === '/api/auth/discord/exchange' && req.method === 'POST') {
+      readBody(req, 8 * 1024)
+        .then(({ code }) => {
+          const exchange = oauthExchanges.get(String(code || ''))
+          if (!exchange || Date.now() - exchange.ts > 2 * 60 * 1000) throw new Error('This sign-in link has expired. Please try again.')
+          oauthExchanges.delete(String(code))
+          const { token } = issueToken(database, exchange.userId, device(req))
+          json(res, 200, { token, accountId: exchange.userId, username: exchange.username, avatar: exchange.avatar, provider: exchange.provider || 'discord', server: exchange.serverOrigin || publicOrigin(req) })
+        })
+        .catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/auth/status' && req.method === 'GET') {
+      json(res, 200, { online: true, emailAuth: true, discordAuth: !!DISCORD_CLIENT_SECRET, googleAuth: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET), appOrigin: publicOrigin(req) })
+      return
+    }
+
+    // ---- accounts (rate-limited) ----
+    if (path === '/api/auth/register' && req.method === 'POST') {
+      const retryAfter = limiter.limited(clientAddress(req), Date.now())
+      if (retryAfter) {
+        json(res, 429, { error: 'Too many attempts — wait a bit, then try again.' })
+        return
+      }
+      readBody(req)
+        .then(({ username, password }) => {
+          const identity = String(username || '').trim().toLowerCase()
+          const email = identity.includes('@') ? identity : null
+          let name = email ? email.split('@')[0].replace(/[^a-z0-9._-]/g, '_').slice(0, 28) : identity
+          if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Enter a valid email address.')
+          if (email) { let candidate = name || 'writer'; let n = 0; while (database.prepare('SELECT 1 FROM users WHERE username = ?').get(candidate)) candidate = `${name || 'writer'}_${++n}`; name = candidate }
+          if (name.length < 2 || name.length > 40) throw new Error('A username needs between 2 and 40 characters.')
+          if (!/^[a-z0-9._-]+$/.test(name)) throw new Error('Usernames can only use letters, numbers, dots, dashes and underscores.')
+          const pass = String(password || '')
+          if (pass.length < 10) throw new Error('Your password needs at least 10 characters.')
+          if (pass.length > 200) throw new Error('That password is too long.')
+          const existing = database.prepare('SELECT 1 FROM users WHERE username = ?').get(name)
+          if (existing || (email && database.prepare('SELECT 1 FROM users WHERE email = ?').get(email))) throw new Error('That account already exists — try signing in instead.')
+          const userId = randomBytes(12).toString('hex')
+          const userCount = database.prepare('SELECT COUNT(*) AS n FROM users').get().n
+          database.prepare('INSERT INTO users (id, username, password_hash, email, created_at) VALUES (?, ?, ?, ?, ?)').run(
+            userId, name, hashPassword(password), email, Date.now()
+          )
+          if (userCount === 0) claimLegacyRecords(database, userId)
+          const { token } = issueToken(database, userId, device(req))
+          json(res, 200, { token, accountId: userId, username: name })
+        })
+        .catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/auth/login' && req.method === 'POST') {
+      const retryAfter = limiter.limited(clientAddress(req), Date.now())
+      if (retryAfter) {
+        json(res, 429, { error: 'Too many attempts — wait a bit, then try again.' })
+        return
+      }
+      readBody(req)
+        .then(({ username, password }) => {
+          const name = String(username || '').trim().toLowerCase()
+          const user = database.prepare('SELECT * FROM users WHERE username = ? OR email = ?').get(name, name)
+          if (!user || !verifyPassword(password, user.password_hash)) {
+            return json(res, 401, { error: 'That username or password didn’t match.' })
+          }
+          const { token } = issueToken(database, user.id, device(req))
+          json(res, 200, { token, accountId: user.id, username: user.username })
+        })
+        .catch(() => json(res, 400, { error: 'Bad request.' }))
+      return
+    }
+
+    if (path === '/api/auth/logout' && req.method === 'POST') {
+      const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
+      database.prepare('DELETE FROM tokens WHERE token_hash = ?').run(sha(token))
+      json(res, 200, { ok: true })
+      return
+    }
+
+    // ---- protected sync endpoints ----
+    const userId = userFromToken(database, (req.headers.authorization || '').replace(/^Bearer\s+/i, ''))
+    if (!userId) {
+      json(res, 401, { error: 'Not signed in. Create an account or sign in.' })
+      return
+    }
+
+    if (path === '/api/auth/me' && req.method === 'GET') {
+      const user = database.prepare('SELECT id, username, email, discord_id, discord_username, discord_avatar, google_id, google_avatar, created_at FROM users WHERE id = ?').get(userId)
+      if (!user) return json(res, 401, { error: 'Account no longer exists.' })
+      json(res, 200, { account: { id: user.id, username: user.username, email: user.email || null, provider: user.discord_id ? 'discord' : user.google_id ? 'google' : 'email', discordUsername: user.discord_username || null, discordAvatar: user.discord_avatar || user.google_avatar || null, createdAt: user.created_at } })
+      return
+    }
+
+    if (path === '/api/auth/sessions' && req.method === 'GET') {
+      const currentHash = sha((req.headers.authorization || '').replace(/^Bearer\s+/i, ''))
+      const sessions = database.prepare(
+        'SELECT token_hash, session_id, created_at, expires_at, device_name, last_seen_at FROM tokens WHERE user_id = ? ORDER BY last_seen_at DESC'
+      ).all(userId).map((row) => ({
+        current: row.token_hash === currentHash,
+        id: row.session_id,
+        createdAt: row.created_at,
+        expiresAt: row.expires_at,
+        deviceName: row.device_name || 'Unknown device',
+        lastSeenAt: row.last_seen_at || row.created_at
+      }))
+      json(res, 200, { sessions })
+      return
+    }
+
+    if (path === '/api/auth/sessions/revoke' && req.method === 'POST') {
+      readBody(req, 8 * 1024).then(({ sessionId }) => {
+        const currentHash = sha((req.headers.authorization || '').replace(/^Bearer\s+/i, ''))
+        const row = database.prepare('SELECT token_hash FROM tokens WHERE user_id = ? AND session_id = ?').get(userId, String(sessionId || ''))
+        if (!row) return json(res, 404, { error: 'Session not found.' })
+        if (row.token_hash === currentHash) return json(res, 400, { error: 'Use sign out to end this device session.' })
+        database.prepare('DELETE FROM tokens WHERE user_id = ? AND session_id = ?').run(userId, String(sessionId))
+        json(res, 200, { ok: true })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/auth/logout-others' && req.method === 'POST') {
+      const currentHash = sha((req.headers.authorization || '').replace(/^Bearer\s+/i, ''))
+      const removed = database.prepare('DELETE FROM tokens WHERE user_id = ? AND token_hash != ?').run(userId, currentHash).changes
+      json(res, 200, { ok: true, removed })
+      return
+    }
+
+    const accessFor = (novelId) => {
+      const id = String(novelId || '')
+      if (!id) return null
+      const owned = database.prepare("SELECT 1 FROM records WHERE user_id = ? AND store = 'novels' AND id = ? AND deleted = 0").get(userId, id)
+      if (owned) return { ownerUserId: userId, role: 'owner' }
+      const member = database.prepare('SELECT owner_user_id, role, expires_at FROM novel_members WHERE novel_id = ? AND member_user_id = ? AND (expires_at IS NULL OR expires_at > ?)').get(id, userId, Date.now())
+      return member ? { ownerUserId: member.owner_user_id, role: member.role } : null
+    }
+
+    const HOST_LIVE_WINDOW_MS = 45_000
+    const hostIsLive = (novelId, ownerUserId) => Boolean(database.prepare(
+      'SELECT 1 FROM share_presence WHERE novel_id = ? AND user_id = ? AND last_seen_at > ?'
+    ).get(String(novelId || ''), String(ownerUserId || ''), Date.now() - HOST_LIVE_WINDOW_MS))
+    const liveAccessFor = (novelId) => {
+      const access = accessFor(novelId)
+      if (!access) return null
+      if (access.role === 'owner') return { ...access, hostLive: true }
+      return hostIsLive(novelId, access.ownerUserId) ? { ...access, hostLive: true } : { ...access, hostLive: false }
+    }
+    const requireLiveAccess = (res, novelId) => {
+      const access = liveAccessFor(novelId)
+      if (!access) {
+        json(res, 403, { error: 'You do not have access to this novel.' })
+        return null
+      }
+      if (!access.hostLive) {
+        json(res, 423, { error: 'The host is offline. This private writing room opens when the owner is live.' })
+        return null
+      }
+      return access
+    }
+    const roomFor = (novelId, ownerUserId) => {
+      const id = String(novelId || '')
+      let room = database.prepare('SELECT max_users, default_role FROM share_rooms WHERE novel_id = ?').get(id)
+      if (!room) {
+        database.prepare('INSERT OR IGNORE INTO share_rooms (novel_id, owner_user_id, max_users, default_role, updated_at) VALUES (?, ?, 4, ?, ?)')
+          .run(id, String(ownerUserId), 'editor', Date.now())
+        room = { max_users: 4, default_role: 'editor' }
+      }
+      return { maxUsers: room.max_users, defaultRole: room.default_role }
+    }
+    const presenceRowsFor = (novelId) => database.prepare(`SELECT u.id, u.username, u.discord_id, u.discord_avatar, u.google_avatar, p.chapter_id, p.last_seen_at, p.status, p.activity, p.workspace, p.tab_name, p.line_number, p.cursor_offset
+      FROM share_presence p JOIN users u ON u.id = p.user_id WHERE p.novel_id = ? AND p.last_seen_at > ? ORDER BY p.last_seen_at DESC`)
+      .all(String(novelId), Date.now() - 45_000)
+    const serializePresenceRows = (rows) => rows.map((p) => ({ id: p.id, username: p.username, avatar: publicAvatar(p), chapterId: p.chapter_id, lastSeenAt: p.last_seen_at, status: p.status, activity: p.activity, workspace: p.workspace, tabName: p.tab_name, lineNumber: p.line_number, cursorOffset: p.cursor_offset }))
+    const sharedManuscriptRecords = (novelId, ownerUserId, role, expiresAt = null) => {
+      const rows = database.prepare(
+        `SELECT user_id, store, id, novel_id, payload, updated_at, deleted FROM records
+         WHERE user_id = ? AND (novel_id = ? OR (store = 'novels' AND id = ?))
+         ORDER BY updated_at ASC`
+      ).all(ownerUserId, novelId, novelId)
+      return rows.map((r) => {
+        const payload = r.deleted ? null : safeJson(r.payload)
+        if (payload && r.store === 'novels' && role !== 'owner') {
+          payload.sharedRole = role || 'viewer'
+          payload.sharedExpiresAt = expiresAt || null
+          payload.sharedOwnerId = ownerUserId
+        }
+        return {
+          store: r.store,
+          id: r.id,
+          novelId: r.novel_id || novelId,
+          updatedAt: r.updated_at,
+          deleted: !!r.deleted,
+          payload
+        }
+      })
+    }
+
+    if (path === '/api/shares/invite' && req.method === 'POST') {
+      readBody(req, 16 * 1024).then(({ novelId, role, accessDurationMs }) => {
+        const access = accessFor(novelId)
+        if (!access || access.role !== 'owner') return json(res, 403, { error: 'Only the novel owner can invite collaborators.' })
+        const room = roomFor(novelId, userId)
+        const occupied = database.prepare('SELECT COUNT(*) AS count FROM novel_members WHERE novel_id = ? AND (expires_at IS NULL OR expires_at > ?)').get(String(novelId), Date.now()).count + 1
+        if (occupied >= room.maxUsers) return json(res, 409, { error: `This room is full (${room.maxUsers} users maximum).` })
+        const selectedRole = ['viewer', 'commenter', 'editor'].includes(role) ? role : room.defaultRole
+        const duration = Number(accessDurationMs)
+        const accessExpiresAt = Number.isFinite(duration) && duration > 0
+          ? Date.now() + Math.max(15 * 60 * 1000, Math.min(duration, 365 * 24 * 60 * 60 * 1000))
+          : null
+        const code = randomBytes(18).toString('base64url')
+        const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000
+        database.prepare('INSERT INTO share_invites (code, novel_id, owner_user_id, role, expires_at, access_expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .run(code, String(novelId), userId, selectedRole, expiresAt, accessExpiresAt, Date.now())
+        json(res, 200, { code, role: selectedRole, expiresAt, accessExpiresAt })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/shares/accept' && req.method === 'POST') {
+      readBody(req, 16 * 1024).then(({ code }) => {
+        const invite = database.prepare('SELECT * FROM share_invites WHERE code = ?').get(String(code || '').trim())
+        if (!invite || invite.expires_at < Date.now()) return json(res, 404, { error: 'That invitation is invalid or has expired.' })
+        if (invite.owner_user_id === userId) return json(res, 400, { error: 'You already own this novel.' })
+        if (!hostIsLive(invite.novel_id, invite.owner_user_id)) return json(res, 423, { error: 'The host is offline. Ask them to open this novel, then try the invitation again.' })
+        const room = roomFor(invite.novel_id, invite.owner_user_id)
+        const alreadyMember = database.prepare('SELECT 1 FROM novel_members WHERE novel_id = ? AND member_user_id = ?').get(invite.novel_id, userId)
+        const occupied = database.prepare('SELECT COUNT(*) AS count FROM novel_members WHERE novel_id = ? AND (expires_at IS NULL OR expires_at > ?)').get(invite.novel_id, Date.now()).count + 1
+        if (!alreadyMember && occupied >= room.maxUsers) return json(res, 409, { error: `This collaborative room has reached its ${room.maxUsers}-user limit.` })
+        const records = sharedManuscriptRecords(invite.novel_id, invite.owner_user_id, invite.role, invite.access_expires_at)
+        if (!records.some((record) => record.store === 'novels' && record.id === invite.novel_id && !record.deleted)) {
+          return json(res, 409, { error: 'The host has not synced this novel yet. Ask them to keep the novel open, save once, and retry.' })
+        }
+        database.prepare(`INSERT INTO novel_members (novel_id, owner_user_id, member_user_id, role, created_at, expires_at)
+          VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(novel_id, member_user_id) DO UPDATE SET role = excluded.role, owner_user_id = excluded.owner_user_id, expires_at = excluded.expires_at`)
+          .run(invite.novel_id, invite.owner_user_id, userId, invite.role, Date.now(), invite.access_expires_at)
+        json(res, 200, { novelId: invite.novel_id, role: invite.role, serverTime: Date.now(), records })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/shares/bootstrap' && req.method === 'GET') {
+      const novelId = String(url.searchParams.get('novelId') || '')
+      const access = requireLiveAccess(res, novelId)
+      if (!access) return
+
+      // Invite acceptance must not depend on the incremental sync cursor. Send
+      // the complete, exact manuscript owned by the inviter in one response.
+      const membership = access.role === 'owner'
+        ? null
+        : database.prepare('SELECT role, expires_at FROM novel_members WHERE novel_id = ? AND owner_user_id = ? AND member_user_id = ? AND (expires_at IS NULL OR expires_at > ?)')
+          .get(novelId, access.ownerUserId, userId, Date.now())
+      const records = sharedManuscriptRecords(novelId, access.ownerUserId, membership?.role || access.role, membership?.expires_at)
+      if (!records.some((record) => record.store === 'novels' && record.id === novelId && !record.deleted)) {
+        json(res, 409, { error: 'The host has not synced this novel yet. Ask them to keep the novel open, save once, and retry.' })
+        return
+      }
+      json(res, 200, { serverTime: Date.now(), novelId, records })
+      return
+    }
+
+    if (path === '/api/shares' && req.method === 'GET') {
+      const novelId = url.searchParams.get('novelId')
+      const access = requireLiveAccess(res, novelId)
+      if (!access) return
+      const owner = database.prepare(`SELECT u.id, u.username, u.discord_id, u.discord_avatar, u.google_avatar,
+        CASE WHEN p.last_seen_at > ? THEN p.status ELSE 'offline' END AS presence_status
+        FROM users u LEFT JOIN share_presence p ON p.user_id = u.id AND p.novel_id = ? WHERE u.id = ?`)
+        .get(Date.now() - HOST_LIVE_WINDOW_MS, String(novelId), access.ownerUserId)
+      const members = database.prepare(`SELECT u.id, u.username, u.discord_id, u.discord_avatar, u.google_avatar, m.role, m.created_at, m.expires_at,
+        CASE WHEN p.last_seen_at > ? THEN p.status ELSE 'offline' END AS presence_status
+        FROM novel_members m JOIN users u ON u.id = m.member_user_id
+        LEFT JOIN share_presence p ON p.user_id = u.id AND p.novel_id = m.novel_id
+        WHERE m.novel_id = ? AND (m.expires_at IS NULL OR m.expires_at > ?) ORDER BY m.created_at`).all(Date.now() - HOST_LIVE_WINDOW_MS, String(novelId), Date.now())
+      json(res, 200, {
+        role: access.role,
+        room: roomFor(novelId, access.ownerUserId),
+        owner: owner ? { id: owner.id, username: owner.username, avatar: publicAvatar(owner), role: 'owner', status: owner.presence_status } : null,
+        members: members.map((m) => ({ id: m.id, username: m.username, avatar: publicAvatar(m), role: m.role, status: m.presence_status, createdAt: m.created_at, expiresAt: m.expires_at }))
+      })
+      return
+    }
+
+    if (path === '/api/shares/room' && req.method === 'POST') {
+      readBody(req, 16 * 1024).then(({ novelId, maxUsers, defaultRole }) => {
+        const access = accessFor(novelId)
+        if (!access || access.role !== 'owner') return json(res, 403, { error: 'Only the owner can change room settings.' })
+        const capacity = Math.max(2, Math.min(12, Number(maxUsers) || 4))
+        const selectedRole = ['viewer', 'commenter', 'editor'].includes(defaultRole) ? defaultRole : 'editor'
+        const occupied = database.prepare('SELECT COUNT(*) AS count FROM novel_members WHERE novel_id = ? AND (expires_at IS NULL OR expires_at > ?)').get(String(novelId), Date.now()).count + 1
+        if (capacity < occupied) return json(res, 400, { error: `Remove collaborators before lowering the limit below ${occupied}.` })
+        database.prepare(`INSERT INTO share_rooms (novel_id, owner_user_id, max_users, default_role, updated_at) VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(novel_id) DO UPDATE SET max_users = excluded.max_users, default_role = excluded.default_role, updated_at = excluded.updated_at`)
+          .run(String(novelId), userId, capacity, selectedRole, Date.now())
+        json(res, 200, { maxUsers: capacity, defaultRole: selectedRole })
+      }).catch((error) => json(res, 400, { error: error.message }))
+      return
+    }
+
+    if (path === '/api/shares/revoke' && req.method === 'POST') {
+      readBody(req, 16 * 1024).then(({ novelId, memberId }) => {
+        const access = accessFor(novelId)
+        if (!access || access.role !== 'owner') return json(res, 403, { error: 'Only the novel owner can remove collaborators.' })
+        database.prepare('DELETE FROM novel_members WHERE novel_id = ? AND member_user_id = ? AND owner_user_id = ?').run(String(novelId), String(memberId), userId)
+        database.prepare('DELETE FROM share_presence WHERE novel_id = ? AND user_id = ?').run(String(novelId), String(memberId))
+        broadcastPresence?.(String(novelId))
+        json(res, 200, { ok: true })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/shares/presence' && req.method === 'POST') {
+      readBody(req, 16 * 1024).then(({ novelId, chapterId, status, activity, workspace, tabName, lineNumber, cursorOffset }) => {
+        const access = accessFor(novelId)
+        if (!access) return json(res, 403, { error: 'You do not have access to this novel.' })
+        const safeStatus = ['online', 'idle', 'dnd', 'offline'].includes(status) ? status : 'online'
+        if (safeStatus !== 'offline' && access.role !== 'owner' && !hostIsLive(novelId, access.ownerUserId)) return json(res, 423, { error: 'The host is offline. This private writing room is closed.' })
+        const safeActivity = ['viewing', 'writing'].includes(activity) ? activity : 'viewing'
+        if (safeStatus === 'offline') {
+          database.prepare('DELETE FROM share_presence WHERE novel_id = ? AND user_id = ?').run(String(novelId), userId)
+          broadcastPresence?.(String(novelId))
+          json(res, 200, { ok: true, offline: true })
+          return
+        }
+        database.prepare(`INSERT INTO share_presence (novel_id, user_id, chapter_id, last_seen_at, status, activity, workspace, tab_name, line_number, cursor_offset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(novel_id, user_id) DO UPDATE SET chapter_id = excluded.chapter_id, last_seen_at = excluded.last_seen_at, status = excluded.status, activity = excluded.activity, workspace = excluded.workspace, tab_name = excluded.tab_name, line_number = excluded.line_number, cursor_offset = excluded.cursor_offset`)
+          .run(String(novelId), userId, chapterId ? String(chapterId) : null, Date.now(), safeStatus, safeActivity, String(workspace || 'manuscript').slice(0, 60), String(tabName || '').slice(0, 120), Number.isFinite(Number(lineNumber)) ? Number(lineNumber) : null, Number.isFinite(Number(cursorOffset)) ? Number(cursorOffset) : null)
+        broadcastPresence?.(String(novelId))
+        json(res, 200, { ok: true })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/shares/presence' && req.method === 'GET') {
+      const novelId = url.searchParams.get('novelId')
+      if (!requireLiveAccess(res, novelId)) return
+      json(res, 200, { people: serializePresenceRows(presenceRowsFor(novelId)) })
+      return
+    }
+
+    if (path === '/api/sync/push' && req.method === 'POST') {
+      readBody(req)
+        .then(async ({ records }) => {
+          if (!Array.isArray(records)) throw new Error('records array expected')
+          const upsert = database.prepare(
+            `INSERT INTO records (store, id, novel_id, user_id, payload, updated_at, deleted)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(user_id, store, id) DO UPDATE SET
+               payload = CASE WHEN excluded.updated_at >= records.updated_at THEN excluded.payload ELSE records.payload END,
+               updated_at = CASE WHEN excluded.updated_at >= records.updated_at THEN excluded.updated_at ELSE records.updated_at END,
+               deleted = CASE WHEN excluded.updated_at >= records.updated_at THEN excluded.deleted ELSE records.deleted END,
+               novel_id = excluded.novel_id`
+          )
+          database.exec('BEGIN')
+          try {
+            if (records.length > 2000) throw new Error('Too many records in one sync batch.')
+            const serverNow = Date.now()
+            const accepted = []
+            const rejected = []
+            for (const r of records) {
+              const key = r?.store && r?.id ? `${r.store}:${r.id}` : null
+              if (!r || !STORES.has(r.store) || !r.id || typeof r.updatedAt !== 'number') {
+                if (key) rejected.push({ key, reason: 'Unsupported or malformed sync record.' })
+                continue
+              }
+              const payload = r.deleted ? null : JSON.stringify(r.payload ?? null)
+              if (payload !== null && payload.length > MAX_RECORD_BYTES) {
+                rejected.push({ key, reason: 'Record is too large to sync.' })
+                continue
+              }
+              const access = r.novelId ? accessFor(r.novelId) : null
+              const targetUserId = access && access.role !== 'owner' ? access.ownerUserId : userId
+              if (access && access.role !== 'owner' && !hostIsLive(r.novelId, access.ownerUserId)) {
+                rejected.push({ key, reason: 'The host is offline. Shared edits remain safely on this device.' })
+                continue
+              }
+              if ((access?.role === 'viewer' || access?.role === 'commenter') && r.store !== 'annotations') {
+                rejected.push({ key, reason: 'This shared novel is in proofread mode.' })
+                continue
+              }
+              upsert.run(
+                r.store,
+                String(r.id),
+                r.novelId ? String(r.novelId) : null,
+                targetUserId,
+                payload,
+                Math.max(0, Math.min(r.updatedAt, serverNow + 5 * 60 * 1000)),
+                r.deleted ? 1 : 0
+              )
+              accepted.push(key)
+            }
+            database.exec('COMMIT')
+            json(res, 200, { ok: true, serverTime: Date.now(), accepted, rejected })
+          } catch (err) {
+            database.exec('ROLLBACK')
+            throw err
+          }
+        })
+        .catch((err) => json(res, 400, { error: err.message, at: '/api/sync/push' }))
+      return
+    }
+
+    if (path === '/api/sync/pull' && req.method === 'GET') {
+      const since = Number(url.searchParams.get('since')) || 0
+      const rows = database.prepare(
+        `SELECT user_id, store, id, novel_id, payload, updated_at, deleted FROM records r
+         WHERE updated_at > ? AND (user_id = ? OR (novel_id IS NOT NULL AND EXISTS (
+           SELECT 1 FROM novel_members m
+           WHERE m.novel_id = r.novel_id AND m.member_user_id = ? AND m.owner_user_id = r.user_id
+             AND (m.expires_at IS NULL OR m.expires_at > ?)
+             AND EXISTS (
+               SELECT 1 FROM share_presence p
+               WHERE p.novel_id = r.novel_id AND p.user_id = m.owner_user_id AND p.last_seen_at > ?
+             )
+         ))) ORDER BY updated_at ASC`
+      ).all(since, userId, userId, Date.now(), Date.now() - HOST_LIVE_WINDOW_MS)
+      const membershipFor = database.prepare('SELECT role, expires_at FROM novel_members WHERE novel_id = ? AND owner_user_id = ? AND member_user_id = ? AND (expires_at IS NULL OR expires_at > ?)')
+      const records = rows.map((r) => {
+        const payload = r.deleted ? null : safeJson(r.payload)
+        if (payload && r.store === 'novels' && r.user_id !== userId) {
+          const membership = membershipFor.get(r.novel_id, r.user_id, userId, Date.now())
+          payload.sharedRole = membership?.role || 'viewer'
+          payload.sharedExpiresAt = membership?.expires_at || null
+          payload.sharedOwnerId = r.user_id
+        }
+        return {
+          store: r.store,
+          id: r.id,
+          novelId: r.novel_id,
+          updatedAt: r.updated_at,
+          deleted: !!r.deleted,
+          payload
+        }
+      })
+      json(res, 200, { serverTime: Date.now(), records })
+      return
+    }
+
+    json(res, 404, { error: 'Not found.' })
   }
 
-  if (path === '/api/auth/logout' && req.method === 'POST') {
-    const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
-    DB.prepare('DELETE FROM tokens WHERE token_hash = ?').run(sha(token))
-    json(res, 200, { ok: true })
-    return
+  const server = createServer((req, res) => {
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
+    if (url.pathname.startsWith('/api') || url.pathname.startsWith('/auth/')) {
+      handleApi(req, res, url, url.pathname)
+      return
+    }
+    if (existsSync(dist)) {
+      if (serveStatic(req, res, url, dist)) return
+    }
+    json(res, 404, { error: 'No build found. Run `npm run build` first, or serve during development with `npm run dev`.' })
+  })
+
+  const livePresenceRooms = new Map()
+  const trackPresenceSocket = (novelId, socket) => {
+    const key = String(novelId)
+    const room = livePresenceRooms.get(key) || new Set()
+    room.add(socket)
+    livePresenceRooms.set(key, room)
+    return () => {
+      room.delete(socket)
+      if (!room.size) livePresenceRooms.delete(key)
+    }
+  }
+  var broadcastPresence = (novelId) => {
+    const room = livePresenceRooms.get(String(novelId))
+    if (!room?.size) return
+    const payload = JSON.stringify({ type: 'presence', novelId: String(novelId), people: serializePresenceRows(presenceRowsFor(novelId)) })
+    for (const socket of room) {
+      // `OPEN` is a static WebSocket constant in ws; the numeric state keeps
+      // this compatible with every ws release we support.
+      if (socket.readyState === 1) socket.send(payload)
+    }
+  }
+  const broadcastRecord = (novelId, record, sender) => {
+    const room = livePresenceRooms.get(String(novelId))
+    if (!room?.size) return
+    for (const socket of room) {
+      if (socket === sender || socket.readyState !== 1) continue
+      let outgoing = record
+      if (record.store === 'novels' && socket.role !== 'owner' && record.payload) {
+        outgoing = { ...record, payload: { ...record.payload, sharedRole: socket.role, sharedOwnerId: socket.ownerUserId } }
+      }
+      socket.send(JSON.stringify({ type: 'record:update', novelId: String(novelId), record: outgoing }))
+    }
   }
 
-  // ---- protected sync endpoints ----
-  const userId = userFromToken((req.headers.authorization || '').replace(/^Bearer\s+/i, ''))
-  if (!userId) {
-    json(res, 401, { error: 'Not signed in. Create an account or sign in.' })
-    return
-  }
+  const wss = new WebSocketServer({ noServer: true })
+  const websocketHostIsLive = (novelId, ownerUserId) => Boolean(database.prepare(
+    'SELECT 1 FROM share_presence WHERE novel_id = ? AND user_id = ? AND last_seen_at > ?'
+  ).get(String(novelId || ''), String(ownerUserId || ''), Date.now() - 45_000))
+  server.on('upgrade', (req, socket, head) => {
+    try {
+      const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
+      if (url.pathname !== '/ws/presence') return socket.destroy()
+      const token = url.searchParams.get('token')
+      const novelId = url.searchParams.get('novelId')
+      const wsUserId = userFromToken(database, token)
+      if (!wsUserId || !novelId) return socket.destroy()
+      const owned = database.prepare("SELECT 1 FROM records WHERE user_id = ? AND store = 'novels' AND id = ? AND deleted = 0").get(wsUserId, String(novelId))
+      const member = database.prepare('SELECT owner_user_id, role, expires_at FROM novel_members WHERE novel_id = ? AND member_user_id = ? AND (expires_at IS NULL OR expires_at > ?)').get(String(novelId), wsUserId, Date.now())
+      const access = owned ? { ownerUserId: wsUserId, role: 'owner' } : (member ? { ownerUserId: member.owner_user_id, role: member.role } : null)
+      if (!access) return socket.destroy()
+      if (access.role !== 'owner' && !database.prepare('SELECT 1 FROM share_presence WHERE novel_id = ? AND user_id = ? AND last_seen_at > ?').get(String(novelId), String(access.ownerUserId || ''), Date.now() - 45_000)) {
+        return socket.destroy()
+      }
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        ws.novelId = String(novelId)
+        ws.userId = wsUserId
+        ws.ownerUserId = String(access.ownerUserId)
+        ws.role = access.role
+        wss.emit('connection', ws, req)
+      })
+    } catch {
+      socket.destroy()
+    }
+  })
 
-  if (path === '/api/sync/push' && req.method === 'POST') {
-    readBody(req)
-      .then(async ({ records }) => {
-        if (!Array.isArray(records)) throw new Error('records array expected')
-        const upsert = DB.prepare(
+  wss.on('connection', (ws) => {
+    const untrack = trackPresenceSocket(ws.novelId, ws)
+    ws.send(JSON.stringify({ type: 'presence', novelId: ws.novelId, people: serializePresenceRows(presenceRowsFor(ws.novelId)) }))
+    ws.on('message', (raw) => {
+      try {
+        const message = safeJson(String(raw))
+        const record = message?.type === 'record:update' ? message.record : null
+        if (!record || String(record.novelId || '') !== ws.novelId || !STORES.has(record.store) || !record.id || typeof record.updatedAt !== 'number') return
+        if (ws.role !== 'owner' && !websocketHostIsLive(ws.novelId, ws.ownerUserId)) {
+          ws.send(JSON.stringify({ type: 'record:error', error: 'The owner is offline. Live editing is paused.' }))
+          return
+        }
+        if ((ws.role === 'viewer' || ws.role === 'commenter') && record.store !== 'annotations') {
+          ws.send(JSON.stringify({ type: 'record:error', error: 'This permission only allows proofread comments.' }))
+          return
+        }
+        const payloadJson = record.deleted ? null : JSON.stringify(record.payload ?? null)
+        if (payloadJson !== null && payloadJson.length > MAX_RECORD_BYTES) return
+        const targetUserId = ws.role === 'owner' ? ws.userId : ws.ownerUserId
+        const updatedAt = Math.max(0, Math.min(record.updatedAt, Date.now() + 5 * 60 * 1000))
+        database.prepare(
           `INSERT INTO records (store, id, novel_id, user_id, payload, updated_at, deleted)
            VALUES (?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(store, id) DO UPDATE SET
+           ON CONFLICT(user_id, store, id) DO UPDATE SET
              payload = CASE WHEN excluded.updated_at >= records.updated_at THEN excluded.payload ELSE records.payload END,
              updated_at = CASE WHEN excluded.updated_at >= records.updated_at THEN excluded.updated_at ELSE records.updated_at END,
              deleted = CASE WHEN excluded.updated_at >= records.updated_at THEN excluded.deleted ELSE records.deleted END,
-             novel_id = excluded.novel_id,
-             user_id = excluded.user_id`
-        )
-        DB.exec('BEGIN')
-        try {
-          for (const r of records) {
-            if (!r || !STORES.has(r.store) || !r.id || typeof r.updatedAt !== 'number') continue
-            upsert.run(
-              r.store,
-              String(r.id),
-              r.novelId ? String(r.novelId) : null,
-              userId,
-              r.deleted ? null : JSON.stringify(r.payload ?? null),
-              r.updatedAt,
-              r.deleted ? 1 : 0
-            )
-          }
-          DB.exec('COMMIT')
-        } catch (err) {
-          DB.exec('ROLLBACK')
-          throw err
-        }
-        json(res, 200, { ok: true, serverTime: Date.now() })
-      })
-      .catch((err) => json(res, 400, { error: err.message }))
-    return
-  }
+             novel_id = excluded.novel_id`
+        ).run(record.store, String(record.id), ws.novelId, targetUserId, payloadJson, updatedAt, record.deleted ? 1 : 0)
+        broadcastRecord(ws.novelId, { ...record, updatedAt }, ws)
+      } catch (error) {
+        console.error('[collaboration] record update failed', { novelId: ws.novelId, userId: ws.userId, error: String(error) })
+        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'record:error', error: 'The live update could not be saved.' }))
+      }
+    })
+    ws.on('close', () => untrack())
+  })
 
-  if (path === '/api/sync/pull' && req.method === 'GET') {
-    const since = Number(url.searchParams.get('since')) || 0
-    const rows = DB.prepare(
-      'SELECT store, id, novel_id, payload, updated_at, deleted FROM records WHERE user_id = ? AND updated_at > ? ORDER BY updated_at ASC'
-    ).all(userId, since)
-    const records = rows.map((r) => ({
-      store: r.store,
-      id: r.id,
-      novelId: r.novel_id,
-      updatedAt: r.updated_at,
-      deleted: !!r.deleted,
-      payload: r.deleted ? null : safeJson(r.payload)
-    }))
-    json(res, 200, { serverTime: Date.now(), records })
-    return
-  }
-
-  json(res, 404, { error: 'Not found.' })
+  return { server, db: database, limiter }
 }
 
 function safeJson(raw) {
@@ -291,22 +1165,21 @@ function safeJson(raw) {
   }
 }
 
-const server = createServer((req, res) => {
-  const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`)
-  if (url.pathname.startsWith('/api')) {
-    handleApi(req, res, url, url.pathname)
-    return
+// ---- entrypoint: `node server/index.js` ----
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+if (isMain) {
+  const { server, limiter } = createMoonscribeServer()
+  server.listen(PORT, () => {
+    console.log(`🌙 Moonscribe server listening on http://localhost:${PORT}`)
+    console.log('   Accounts: sign in or create one in the app (Settings → Sign in).')
+    if (!existsSync(DIST)) {
+      console.log('   (no dist/ yet — run `npm run build` to serve the app here)')
+    }
+  })
+  const shutdown = () => {
+    limiter.dispose()
+    server.close(() => process.exit(0))
   }
-  if (existsSync(DIST)) {
-    if (serveStatic(req, res, url)) return
-  }
-  json(res, 404, { error: 'No build found. Run `npm run build` first, or serve during development with `npm run dev`.' })
-})
-
-server.listen(PORT, () => {
-  console.log(`🌙 Moonscribe server listening on http://localhost:${PORT}`)
-  console.log('   Accounts: sign in or create one in the app (Settings → Sign in).')
-  if (!existsSync(DIST)) {
-    console.log('   (no dist/ yet — run `npm run build` to serve the app here)')
-  }
-})
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
+}

@@ -1,322 +1,176 @@
-// 3D book mockup — a little shelf display of your cover, styled to sit
-// inside the app's own paper (theme tokens, not hardcoded colours).
-// Lazy-loaded so `three` only ships when this preview is opened.
-// The cover texture redraws whenever the design changes, so edits to the
-// title, colours, ornament, or picture show up on the book in real time.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 
-function drawText(ctx, W, H, { title, byline, ornament, titleColor }) {
-  ctx.textAlign = 'center'
-  ctx.fillStyle = titleColor || '#ffffff'
-  ctx.shadowColor = 'rgba(0,0,0,0.25)'
-  ctx.shadowBlur = 14
+const PALETTES = {
+  moonstone: ['#8fb2d4', '#5a80a8', '#30435f'], rose: ['#e0b9b9', '#c49090', '#633f48'],
+  sage: ['#b8d0b8', '#7eaa7e', '#324c39'], sand: ['#e3cfa9', '#c8a06a', '#654624'], twilight: ['#5f82a4', '#364f6b', '#171e36'],
+}
+const FONT_MAP = { cormorant: 'Cormorant Garamond, Georgia, serif', playfair: 'Playfair Display, Georgia, serif', cinzel: 'Cinzel, Georgia, serif', lora: 'Lora, Georgia, serif', spectral: 'Spectral, Georgia, serif', garamond: 'EB Garamond, Georgia, serif', crimson: 'Crimson Pro, Georgia, serif', libre: 'Libre Baskerville, Georgia, serif' }
+const SIZE_MAP = { sm: 52, md: 68, lg: 88, xl: 108 }
 
-  ctx.font = `600 ${Math.min(W * 0.078, 64)}px 'Cormorant Garamond', Georgia, serif`
-  const words = String(title || 'Untitled').split(' ')
-  let line = ''
-  const lines = []
-  for (const w of words) {
-    if (ctx.measureText(line + ' ' + w).width > W * 0.82 && line) {
-      lines.push(line)
-      line = w
-    } else {
-      line = (line + ' ' + w).trim()
+function palette(style, gradient) {
+  const hex = gradient?.match(/#[0-9a-fA-F]{3,8}/g)
+  return hex?.length >= 2 ? [hex[0], hex[1], hex[1]] : (PALETTES[style] || PALETTES.moonstone)
+}
+function texture(draw, width = 1024, height = 1536) {
+  const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height
+  const map = new THREE.CanvasTexture(canvas); map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4
+  draw(canvas.getContext('2d'), width, height, map)
+  map.needsUpdate = true
+  return map
+}
+function drawCropped(ctx, image, w, h, crop = {}, alpha = 1) {
+  const zoom = Math.max(1, Number(crop.zoom) || 1)
+  const scale = Math.max(w / image.width, h / image.height) * zoom
+  const dw = image.width * scale
+  const dh = image.height * scale
+  const x = -(dw - w) * ((Number(crop.x) || 50) / 100)
+  const y = -(dh - h) * ((Number(crop.y) || 50) / 100)
+  ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(image, x, y, dw, dh); ctx.restore()
+}
+function loadTextureImage(src, map, draw) {
+  if (!src) { draw(null); return }
+  const image = new Image()
+  image.decoding = 'async'
+  if (/^https?:/i.test(src)) image.crossOrigin = 'anonymous'
+  image.onload = () => { draw(image); map.needsUpdate = true }
+  image.onerror = () => { draw(null); map.needsUpdate = true }
+  image.src = src
+  draw(null)
+}
+function frontTexture(settings) {
+  const colors = palette(settings.coverStyle, settings.gradient)
+  return texture((ctx, w, h, map) => {
+    const fill = ctx.createLinearGradient(0, 0, w, h); fill.addColorStop(0, colors[0]); fill.addColorStop(.56, colors[1]); fill.addColorStop(1, colors[2]); ctx.fillStyle = fill; ctx.fillRect(0, 0, w, h)
+    const draw = image => {
+      if (image) drawCropped(ctx, image, w, h, settings.frontCrop, .78)
+      const vignette = ctx.createRadialGradient(w / 2, h * .38, w * .1, w / 2, h * .48, h * .8); vignette.addColorStop(0, 'rgba(0,0,0,0)'); vignette.addColorStop(1, 'rgba(0,0,0,.43)'); ctx.fillStyle = vignette; ctx.fillRect(0, 0, w, h)
+      ctx.strokeStyle = `${settings.titleColor || '#fff'}55`; ctx.lineWidth = 2; ctx.strokeRect(54, 54, w - 108, h - 108); ctx.strokeStyle = `${settings.titleColor || '#fff'}22`; ctx.strokeRect(68, 68, w - 136, h - 136)
+      if (!settings.showText) return
+      let title = settings.title || 'Untitled'; if (settings.titleTransform === 'uppercase') title = title.toUpperCase(); if (settings.titleTransform === 'lowercase') title = title.toLowerCase(); if (settings.titleTransform === 'capitalize') title = title.replace(/\b\w/g, x => x.toUpperCase())
+      const typeface = settings.titleFontFamily || FONT_MAP[settings.titleFont] || FONT_MAP.cormorant
+      const size = SIZE_MAP[settings.titleSize] || 68; ctx.fillStyle = settings.titleColor || '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `italic ${settings.titleWeight || 600} ${size}px ${typeface}`; ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 18
+      const lines = []; let line = ''; title.split(/\s+/).forEach(word => { const next = `${line} ${word}`.trim(); if (ctx.measureText(next).width > w * .72 && line) { lines.push(line); line = word } else line = next }); if (line) lines.push(line)
+      const lineHeight = size * 1.2; const top = h * .48 - (lines.length - 1) * lineHeight / 2; lines.forEach((entry, index) => ctx.fillText(entry, w / 2, top + index * lineHeight)); ctx.shadowBlur = 0
+      if (settings.ornament) { ctx.globalAlpha = .68; ctx.font = `42px ${typeface}`; ctx.fillText(settings.ornament, w / 2, top + lines.length * lineHeight + 38); ctx.globalAlpha = 1 }
+      ctx.globalAlpha = .78; ctx.font = `italic 27px ${FONT_MAP.cormorant}`; ctx.fillText(settings.byline || 'for Storm', w / 2, h - 118); ctx.globalAlpha = 1
     }
-  }
-  if (line) lines.push(line)
-
-  let y = H * 0.38 - ((lines.length - 1) * Math.min(W * 0.055, 44)) / 2
-  for (const l of lines) {
-    ctx.fillText(l, W / 2, y)
-    y += Math.min(W * 0.055, 44)
-  }
-
-  ctx.shadowBlur = 0
-  ctx.font = `${W * 0.05}px 'Cormorant Garamond', Georgia, serif`
-  ctx.fillText(ornament || '❦', W / 2, y + Math.min(W * 0.05, 40))
-
-  ctx.font = `italic ${W * 0.036}px 'Cormorant Garamond', Georgia, serif`
-  ctx.fillText(byline || 'for Storm', W / 2, H * 0.78)
+    loadTextureImage(settings.coverImage, map, draw)
+  })
 }
-
-function drawCover(canvas, { title, byline, ornament, titleColor, coverStyle, image }, onDone) {
-  const ctx = canvas.getContext('2d')
-  const W = canvas.width
-  const H = canvas.height
-
-  // background — reuse the same gradients as the 2D cover styles
-  const bg = {
-    moonstone: ['#8fb2d4', '#7ba3c9', '#a6c2dd'],
-    rose: ['#e0b9b9', '#d4a5a5', '#e3c2c2'],
-    sage: ['#b8d0b8', '#a8c5a8', '#c3d8c3'],
-    sand: ['#e3cfa9', '#d8b48f', '#e8d7b8'],
-    twilight: ['#5f82a4', '#4a6b8a', '#6f90ae']
-  }[coverStyle] || ['#8fb2d4', '#7ba3c9', '#a6c2dd']
-
-  const g = ctx.createLinearGradient(0, 0, W * 0.9, H)
-  g.addColorStop(0, bg[0])
-  g.addColorStop(0.55, bg[1])
-  g.addColorStop(1, bg[2])
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, W, H)
-
-  // vignette
-  const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, H * 0.9)
-  v.addColorStop(0, 'rgba(0,0,0,0)')
-  v.addColorStop(1, 'rgba(30,40,55,0.28)')
-  ctx.fillStyle = v
-  ctx.fillRect(0, 0, W, H)
-
-  const drawImage = (img) => {
-    ctx.globalAlpha = 0.55
-    const scale = Math.max(W / img.width, H / img.height)
-    const dw = img.width * scale
-    const dh = img.height * scale
-    ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh)
-    ctx.globalAlpha = 1
-  }
-
-  if (image) {
-    const img = new Image()
-    img.onload = () => {
-      drawImage(img)
-      drawText(ctx, W, H, { title, byline, ornament, titleColor })
-      onDone?.()
+function spineTexture(settings, aspect = .08) {
+  const colors = palette(settings.coverStyle, settings.gradient)
+  const height = 1536
+  // Preserve the physical spine-to-height ratio. A large minimum width made
+  // narrow spines look wider than the mesh and caused uploaded wraps/text to
+  // appear to spill onto the cover boards.
+  const width = Math.max(32, Math.round(height * Math.max(.012, Math.min(.22, aspect))))
+  return texture((ctx, w, h, map) => {
+    const draw = image => {
+      const fill = ctx.createLinearGradient(0, 0, w, h); fill.addColorStop(0, colors[2]); fill.addColorStop(1, colors[1]); ctx.fillStyle = fill; ctx.fillRect(0, 0, w, h)
+      if (image) drawCropped(ctx, image, w, h, settings.spineCrop, 1)
+      const inset = Math.max(4, Math.min(18, w * .12)); ctx.strokeStyle = `${settings.titleColor || '#fff'}50`; ctx.strokeRect(inset, 55, Math.max(1, w - inset * 2), h - 110)
+      if (settings.showSpineText === false) return
+      const fontSize = Math.max(18, Math.min(70, w * .58))
+      const typeface = settings.titleFontFamily || FONT_MAP[settings.titleFont] || FONT_MAP.cormorant
+      ctx.save(); ctx.translate(w / 2, h / 2); ctx.rotate(-Math.PI / 2); ctx.fillStyle = settings.titleColor || '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `italic ${settings.titleWeight || 600} ${fontSize}px ${typeface}`; ctx.fillText(settings.title || 'Untitled', 0, 0, h * .82); ctx.restore()
     }
-    img.onerror = () => {
-      drawText(ctx, W, H, { title, byline, ornament, titleColor })
-      onDone?.()
+    loadTextureImage(settings.spineImage, map, draw)
+  }, width, height)
+}
+function backTexture(settings) {
+  const colors = palette(settings.coverStyle, settings.gradient)
+  return texture((ctx, w, h, map) => {
+    const draw = image => {
+      const fill = ctx.createLinearGradient(0, 0, w, h); fill.addColorStop(0, colors[2]); fill.addColorStop(1, colors[1]); ctx.fillStyle = fill; ctx.fillRect(0, 0, w, h)
+      if (image) drawCropped(ctx, image, w, h, settings.backCrop, 1)
+      const shade = ctx.createLinearGradient(0, 0, 0, h); shade.addColorStop(0, 'rgba(0,0,0,.12)'); shade.addColorStop(1, 'rgba(0,0,0,.35)'); ctx.fillStyle = shade; ctx.fillRect(0, 0, w, h)
+      ctx.strokeStyle = `${settings.titleColor || '#fff'}48`; ctx.lineWidth = 2; ctx.strokeRect(54, 54, w - 108, h - 108)
+      if (settings.showBackText === false) return
+      ctx.fillStyle = `${settings.titleColor || '#fff'}cc`; ctx.textAlign = 'center'; ctx.font = `italic 34px ${FONT_MAP.cormorant}`; ctx.fillText(settings.title || 'Untitled', w / 2, 150)
+      const words = (settings.backCopy || 'A MoonScribe edition.').split(/\s+/); const lines = []; let line = ''; ctx.font = `28px ${FONT_MAP.lora}`
+      words.forEach(word => { const next = `${line} ${word}`.trim(); if (ctx.measureText(next).width > w * .68 && line) { lines.push(line); line = word } else line = next }); if (line) lines.push(line)
+      ctx.fillStyle = `${settings.titleColor || '#fff'}b8`; lines.slice(0, 12).forEach((entry, index) => ctx.fillText(entry, w / 2, h * .35 + index * 46)); ctx.globalAlpha = .62; ctx.font = `26px ${FONT_MAP.cormorant}`; ctx.fillText(settings.byline || '', w / 2, h - 120); ctx.globalAlpha = 1
     }
-    img.src = image
-  } else {
-    drawText(ctx, W, H, { title, byline, ornament, titleColor })
-    onDone?.()
-  }
+    loadTextureImage(settings.backImage, map, draw)
+  })
 }
+function pageTexture() { return texture((ctx, w, h) => { ctx.fillStyle = '#eee8da'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = 'rgba(119,91,54,.16)'; ctx.lineWidth = 2; for (let y = 12; y < h; y += 18) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke() } }) }
+function boardTexture() { return texture((ctx, w, h) => { const gradient = ctx.createLinearGradient(0, 0, w, h); gradient.addColorStop(0, '#202735'); gradient.addColorStop(1, '#0c1119'); ctx.fillStyle = gradient; ctx.fillRect(0, 0, w, h) }) }
 
-// Read the app's design tokens so the mock always matches the writing page.
-function readTokens() {
-  const cs = getComputedStyle(document.documentElement)
-  const get = (name, fallback) => {
-    const v = cs.getPropertyValue(name).trim()
-    return v || fallback
-  }
-  return {
-    ivory: get('--ivory', '#fffcf9'),
-    charcoal: get('--charcoal', '#3d3a36'),
-    moon: get('--moon', '#7ba3c9'),
-    rose: get('--rose', '#d4a5a5'),
-    accentSoft: get('--accent-soft', '#eef3f8'),
-    overlay: get('--overlay', 'rgba(61, 58, 54, 0.35)')
-  }
-}
-
-function parseCssColor(str) {
-  if (!str) return null
-  if (str.startsWith('#')) {
-    const c = new THREE.Color(str)
-    return { r: c.r, g: c.g, b: c.b, a: 1 }
-  }
-  const m = str.match(/rgba?\(([^)]+)\)/)
-  if (!m) return null
-  const parts = m[1].split(',').map((s) => parseFloat(s.trim()))
-  return { r: parts[0] / 255, g: parts[1] / 255, b: parts[2] / 255, a: parts.length > 3 ? parts[3] : 1 }
-}
-
-// Repaint every material and light from the current theme tokens. Called on
-// mount and whenever `data-theme` changes, so Daylight/Moonlight/Amoled all
-// restyle the book in place.
-function applyTheme(s) {
-  const t = readTokens()
-  s.pagesMat.color.set(t.ivory)
-  s.boardMat.color.set(t.charcoal)
-  s.spineMat.color.set(t.charcoal).multiplyScalar(0.82)
-  s.roseMat.color.set(t.rose)
-  s.ambient.color.set(t.accentSoft)
-  s.rim.color.set(t.moon)
-  const ov = parseCssColor(t.overlay) || { r: 0.24, g: 0.23, b: 0.21, a: 0.35 }
-  s.ground.material.color.setRGB(ov.r, ov.g, ov.b)
-  s.ground.material.opacity = Math.min(0.28, Math.max(0.05, ov.a * 0.55))
-}
-
-export default function CoverMockup3D({ title, byline, coverStyle, coverImage, ornament, titleColor }) {
-  const mountRef = useRef(null)
-  const stateRef = useRef(null)
-  const [unsupported, setUnsupported] = useState(false)
-
+export default function CoverMockup3D(props) {
+  const mountRef = useRef(null); const sceneRef = useRef(null); const propsRef = useRef(props); propsRef.current = props
   useEffect(() => {
-    const mount = mountRef.current
-    if (!mount) return
-
+    const mount = mountRef.current; if (!mount) return undefined
+    const scene = new THREE.Scene(); const camera = new THREE.PerspectiveCamera(30, 1, .1, 100); camera.position.set(0, .05, 8.9)
     let renderer
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-    } catch (err) {
-      setUnsupported(true)
-      return
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
+    } catch {
+      mount.dataset.webglUnavailable = 'true'
+      return undefined
     }
-
-    const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(40, mount.clientWidth / mount.clientHeight, 0.1, 100)
-    camera.position.set(0, 0.6, 6.4)
-
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.setSize(mount.clientWidth, mount.clientHeight)
-    renderer.setClearColor(0x000000, 0)
-    mount.appendChild(renderer.domElement)
-
-    // moonstone lighting — the app's quiet blue, not a harsh studio rig
-    const ambient = new THREE.AmbientLight(0xffffff, 0.75)
-    scene.add(ambient)
-    const key = new THREE.DirectionalLight(0xfff3e6, 1.05)
-    key.position.set(3, 5, 4)
-    scene.add(key)
-    const rim = new THREE.DirectionalLight(0x88aaff, 0.6)
-    rim.position.set(-4, -2, -3)
-    scene.add(rim)
-
-    const group = new THREE.Group()
-    scene.add(group)
-
-    // the book — pages follow --ivory, boards follow --charcoal
-    const W = 2.0
-    const H = 3.0
-    const THICK = 0.34
-    const pagesMat = new THREE.MeshStandardMaterial({ color: 0xfbf6ee, roughness: 0.9 })
-    const pages = new THREE.Mesh(new THREE.BoxGeometry(W, H, THICK), pagesMat)
-    group.add(pages)
-
-    const boardMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, roughness: 0.7, metalness: 0.05 })
-    const front = new THREE.Mesh(new THREE.BoxGeometry(W + 0.04, H + 0.04, 0.035), boardMat)
-    front.position.z = THICK / 2 + 0.018
-    group.add(front)
-    const back = new THREE.Mesh(new THREE.BoxGeometry(W + 0.04, H + 0.04, 0.035), boardMat)
-    back.position.z = -THICK / 2 - 0.018
-    group.add(back)
-
-    const spineMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.6 })
-    const spine = new THREE.Mesh(new THREE.BoxGeometry(0.09, H + 0.04, THICK + 0.07), spineMat)
-    spine.position.x = -(W / 2) - 0.01
-    group.add(spine)
-
-    // a thin rose ribbon along the fore-edge, like the scene-break marks
-    const roseMat = new THREE.MeshStandardMaterial({ color: 0xd4a5a5, roughness: 0.6 })
-    const fore = new THREE.Mesh(new THREE.BoxGeometry(0.05, H, THICK), roseMat)
-    fore.position.x = W / 2 + 0.02
-    group.add(fore)
-
-    // front cover texture — redrawn live whenever the design changes
-    const canvas = document.createElement('canvas')
-    canvas.width = 512
-    canvas.height = 768
-    const tex = new THREE.CanvasTexture(canvas)
-    tex.colorSpace = THREE.SRGBColorSpace
-    const cover = new THREE.Mesh(
-      new THREE.PlaneGeometry(W + 0.04, H + 0.04),
-      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 })
-    )
-    cover.position.z = THICK / 2 + 0.02
-    group.add(cover)
-
-    // soft ground shadow
-    const ground = new THREE.Mesh(
-      new THREE.CircleGeometry(2.6, 48),
-      new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.12 })
-    )
-    ground.rotation.x = -Math.PI / 2
-    ground.position.y = -H / 2 - 0.25
-    group.add(ground)
-
-    const state = { ambient, key, rim, pagesMat, boardMat, spineMat, roseMat, ground, renderer, group, canvas, tex }
-    stateRef.current = state
-    applyTheme(state)
-
-    // slow auto-rotate, drag to spin
-    let dragging = false
-    let lastX = 0
-    let rotY = -0.5
-    let rotX = 0.12
-    let raf = 0
-    let last = performance.now()
-
-    const onDown = (e) => {
-      dragging = true
-      lastX = e.clientX
-      mount.style.cursor = 'grabbing'
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; mount.appendChild(renderer.domElement)
+    const book = new THREE.Group(); scene.add(book); const width = 2.7, height = width * ((Number(propsRef.current.trimHeightMm) || 228.6) / (Number(propsRef.current.trimWidthMm) || 152.4)); const physicalSpineMm = Number(propsRef.current.spineMm) || 2; const previewSpineMm = Math.max(8, physicalSpineMm); const depth = Math.max(.22, width * (previewSpineMm / (Number(propsRef.current.trimWidthMm) || 152.4))); const pages = pageTexture(); const board = boardTexture(); const material = (map, roughness = .7) => new THREE.MeshStandardMaterial({ map, roughness, metalness: .03 })
+    const block = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), Array.from({ length: 6 }, () => material(pages))); block.castShadow = true; block.receiveShadow = true; book.add(block)
+    const boardGeometry = new THREE.BoxGeometry(width + .045, height + .09, .075)
+    // BoxGeometry order: +x, -x, +y, -y, +z, -z. Keep artwork on the
+    // outward +z face only; edge faces use a neutral board material so cover
+    // art and text cannot wrap around the hinge or fore-edge.
+    const frontMaterials = Array.from({ length: 6 }, () => material(board, .58)); frontMaterials[4] = material(board, .52)
+    const backMaterials = Array.from({ length: 6 }, () => material(board, .58)); backMaterials[4] = material(board, .52)
+    const front = new THREE.Mesh(boardGeometry, frontMaterials); front.userData.surface = 'front'; front.position.set(.0225, 0, depth / 2 + .042); front.castShadow = true; book.add(front)
+    const back = new THREE.Mesh(boardGeometry, backMaterials); back.userData.surface = 'back'; back.position.set(.0225, 0, -depth / 2 - .042); back.rotation.y = Math.PI; back.castShadow = true; book.add(back)
+    const spineBase = material(board, .58)
+    const spineFace = material(board, .58)
+    // BoxGeometry material order is +x, -x, +y, -y, +z, -z. Only the
+    // outward (-x) face receives spine artwork so it cannot wrap onto either
+    // cover board when the book is viewed obliquely.
+    const spineMaterials = [spineBase, spineFace, spineBase, spineBase, spineBase, spineBase]
+    const spine = new THREE.Mesh(new THREE.BoxGeometry(.055, height + .09, depth + .04), spineMaterials); spine.userData.surface = 'spine'; spine.position.x = -width / 2 - .045; spine.castShadow = true; book.add(spine)
+    const bandMaterial = new THREE.MeshStandardMaterial({ color: '#9a7a43', roughness: .45 }); const headband = new THREE.Mesh(new THREE.BoxGeometry(.075, .035, depth), bandMaterial); headband.position.set(-width / 2 + .03, height / 2 + .012, 0); book.add(headband); const tailband = headband.clone(); tailband.position.y = -height / 2 - .012; book.add(tailband)
+    const key = new THREE.DirectionalLight('#fff0dc', 3.1); key.position.set(-3, 5, 6); key.castShadow = true; scene.add(key); const rim = new THREE.DirectionalLight('#9fb5ff', 1.8); rim.position.set(4, 1, -4); scene.add(rim); const ambient = new THREE.AmbientLight('#90a0c5', 1.35); scene.add(ambient); const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 20), new THREE.ShadowMaterial({ opacity: .32 })); floor.rotation.x = -Math.PI / 2; floor.position.y = -2.45; floor.receiveShadow = true; scene.add(floor)
+    const refresh = () => { const settings = propsRef.current; const swap = (mesh, map, materialIndex = null) => { const target = materialIndex === null ? mesh.material : mesh.material[materialIndex]; const old = target.map; target.map = map; target.needsUpdate = true; if (old !== pages) old?.dispose() }; swap(front, frontTexture(settings), 4); swap(back, backTexture(settings), 4); swap(spine, spineTexture(settings, (depth + .04) / (height + .09)), 1) }
+    let down = false, lastX = 0, lastY = 0, yaw = -.46, pitch = .08, frame, previous = performance.now()
+    const focusSurface = surface => { yaw = surface === 'back' ? Math.PI : surface === 'spine' ? Math.PI / 2 : -.08; pitch = .04 }
+    const applyEnvironment = () => {
+      const environment = propsRef.current.environment || 'studio'
+      const lighting = {
+        studio: ['#fff0dc', '#9fb5ff', '#90a0c5', 3.1, 1.8, 1.35, .32],
+        library: ['#ffd29b', '#6f4a34', '#9b6b43', 2.8, 1.1, .9, .46],
+        window: ['#fff7e7', '#b9d7ff', '#dce9ff', 4.2, 1.5, 1.45, .24],
+        forest: ['#b7d89e', '#4d7891', '#58715d', 2.4, 1.55, 1.05, .38],
+        night: ['#8ca8ff', '#c28cff', '#303c68', 1.7, 1.6, .72, .52],
+      }[environment] || null
+      key.color.set(lighting[0]); rim.color.set(lighting[1]); ambient.color.set(lighting[2])
+      key.intensity = lighting[3]; rim.intensity = lighting[4]; ambient.intensity = lighting[5]; floor.material.opacity = lighting[6]
     }
-    const onMove = (e) => {
-      if (!dragging) return
-      rotY += (e.clientX - lastX) * 0.008
-      lastX = e.clientX
-    }
-    const onUp = () => {
-      dragging = false
-      mount.style.cursor = 'grab'
-    }
-
-    mount.addEventListener('pointerdown', onDown)
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-
-    const loop = (now) => {
-      if (!dragging) rotY += (now - last) * 0.00012
-      last = now
-      group.rotation.y = rotY
-      group.rotation.x = rotX
-      renderer.render(scene, camera)
-      raf = requestAnimationFrame(loop)
-    }
-    raf = requestAnimationFrame(loop)
-
-    const onResize = () => {
-      if (!mount.clientWidth) return
-      camera.aspect = mount.clientWidth / mount.clientHeight
+    refresh(); focusSurface(propsRef.current.activeSurface); applyEnvironment(); sceneRef.current = { refresh, focusSurface, applyEnvironment }
+    const resize = () => {
+      const rect = mount.getBoundingClientRect()
+      const aspect = Math.max(.2, rect.width / Math.max(1, rect.height))
+      renderer.setSize(Math.max(1, rect.width), Math.max(1, rect.height), false)
+      camera.aspect = aspect
+      const verticalFov = THREE.MathUtils.degToRad(camera.fov)
+      const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect)
+      const fitHeight = (height + .45) / (2 * Math.tan(verticalFov / 2))
+      const fitWidth = (width + depth + .7) / (2 * Math.tan(horizontalFov / 2))
+      camera.position.z = Math.max(fitHeight, fitWidth) * 1.12
       camera.updateProjectionMatrix()
-      renderer.setSize(mount.clientWidth, mount.clientHeight)
-    }
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(onResize) : null
-    if (ro) ro.observe(mount)
-
-    // restyle in place when the app theme changes
-    const observer = new MutationObserver(() => {
-      if (stateRef.current) applyTheme(stateRef.current)
-    })
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
-
-    return () => {
-      cancelAnimationFrame(raf)
-      if (ro) ro.disconnect()
-      observer.disconnect()
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-      mount.removeEventListener('pointerdown', onDown)
-      mount.removeChild(renderer.domElement)
-      renderer.dispose()
-      stateRef.current = null
-    }
+    }; const observer = new ResizeObserver(resize); observer.observe(mount); resize()
+    const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); let travel = 0
+    const surfaceAt = event => { const rect = renderer.domElement.getBoundingClientRect(); pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(pointer, camera); return raycaster.intersectObjects([front, spine, back], false)[0]?.object?.userData?.surface }
+    const onDown = event => { down = true; travel = 0; lastX = event.clientX; lastY = event.clientY; mount.setPointerCapture?.(event.pointerId); mount.style.cursor = 'grabbing' }
+    const onMove = event => { if (!down) return; const dx = event.clientX - lastX; const dy = event.clientY - lastY; travel += Math.abs(dx) + Math.abs(dy); yaw += dx * .009; pitch = Math.max(-.45, Math.min(.45, pitch - dy * .006)); lastX = event.clientX; lastY = event.clientY }
+    const onUp = event => { if (down && travel < 7) { const surface = surfaceAt(event); if (surface) propsRef.current.onSurfaceSelect?.(surface) } down = false; mount.style.cursor = 'grab' }
+    const onDouble = () => { yaw = -.46; pitch = .08 }
+    const onContext = event => { const surface = surfaceAt(event); if (!surface) return; event.preventDefault(); propsRef.current.onSurfaceContext?.(event, surface) }
+    mount.addEventListener('pointerdown', onDown); mount.addEventListener('pointermove', onMove); mount.addEventListener('pointerup', onUp); mount.addEventListener('pointercancel', onUp); mount.addEventListener('dblclick', onDouble); mount.addEventListener('contextmenu', onContext)
+    const draw = now => { const elapsed = now - previous; previous = now; if (!down && propsRef.current.autoSpin) yaw += elapsed * .00032; book.rotation.set(pitch, yaw, 0); renderer.render(scene, camera); frame = requestAnimationFrame(draw) }; frame = requestAnimationFrame(draw)
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); mount.removeEventListener('pointerdown', onDown); mount.removeEventListener('pointermove', onMove); mount.removeEventListener('pointerup', onUp); mount.removeEventListener('pointercancel', onUp); mount.removeEventListener('dblclick', onDouble); mount.removeEventListener('contextmenu', onContext); mount.replaceChildren(); renderer.dispose(); pages.dispose(); board.dispose(); block.geometry.dispose(); boardGeometry.dispose(); frontMaterials.forEach((entry) => entry.dispose()); backMaterials.forEach((entry) => entry.dispose()); spine.geometry.dispose(); spineMaterials.forEach((entry) => entry.dispose()); headband.geometry.dispose(); floor.geometry.dispose() }
   }, [])
-
-  // Redraw the cover texture the moment any design choice changes.
-  useEffect(() => {
-    const s = stateRef.current
-    if (!s) return
-    drawCover(s.canvas, { title, byline, ornament, titleColor, coverStyle, image: coverImage }, () => {
-      if (stateRef.current) stateRef.current.tex.needsUpdate = true
-    })
-  }, [title, byline, ornament, titleColor, coverStyle, coverImage])
-
-  if (unsupported) {
-    return (
-      <div className="cover-mockup-3d" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'var(--space-5)', textAlign: 'center', color: 'var(--grey)', fontStyle: 'italic' }}>
-        3D preview needs WebGL — try the flat cover.
-      </div>
-    )
-  }
-
-  return (
-    <div className="cover-mockup-3d" ref={mountRef} style={{ cursor: 'grab' }}>
-      <span className="cover-mockup-3d-hint">drag to spin</span>
-    </div>
-  )
+  useEffect(() => { sceneRef.current?.refresh() }, [props.title, props.byline, props.coverStyle, props.gradient, props.coverImage, props.frontCrop, props.backImage, props.backCrop, props.spineImage, props.spineCrop, props.ornament, props.titleColor, props.titleFont, props.titleSize, props.titleWeight, props.titleSpacing, props.titleTransform, props.showText, props.showBackText, props.showSpineText])
+  useEffect(() => { sceneRef.current?.focusSurface(props.activeSurface) }, [props.activeSurface])
+  useEffect(() => { sceneRef.current?.applyEnvironment() }, [props.environment])
+  return <div ref={mountRef} className={`cover-mockup-3d cover-mockup-webgl environment-${props.environment || 'studio'}`} style={{ cursor: 'grab' }}><span className="cover-mockup-3d-hint">drag to inspect · double-click to reset</span></div>
 }

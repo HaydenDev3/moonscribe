@@ -6,7 +6,7 @@ import { getDB } from '../src/db/db'
 import { createNovel, updateNovel } from '../src/db/novels'
 import { createChapter, updateChapter, deleteChapter } from '../src/db/chapters'
 import { blobToDataUrl, dataUrlToBlob, toWire, fromWire } from '../src/sync/serialize'
-import { collectPending, applyIncoming, push, pull, setConfig, getConfig } from '../src/sync/engine'
+import { collectPending, applyIncoming, push, pull, setConfig, getConfig, listConflicts, resolveConflict, recordsDiffer } from '../src/sync/engine'
 
 beforeEach(async () => {
   const db = await getDB()
@@ -16,6 +16,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe('serialize', () => {
@@ -104,10 +105,10 @@ describe('applyIncoming (LWW)', () => {
 describe('push / pull against a mock server', () => {
   it('pushes pending records and clears them', async () => {
     await createNovel({ title: 'To The Cloud' })
-    global.fetch = vi.fn().mockResolvedValue({
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ ok: true, serverTime: Date.now() })
-    })
+    }))
 
     const pushed = await push()
     expect(pushed).toBe(1)
@@ -121,7 +122,7 @@ describe('push / pull against a mock server', () => {
   })
 
   it('pulls and merges remote records', async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         serverTime: 500,
@@ -129,7 +130,7 @@ describe('push / pull against a mock server', () => {
           { store: 'novels', id: 'remote-1', novelId: 'remote-1', updatedAt: 300, deleted: false, payload: { id: 'remote-1', title: 'From the server', updatedAt: 300 } }
         ]
       })
-    })
+    }))
 
     const pulled = await pull()
     expect(pulled).toBe(1)
@@ -137,5 +138,53 @@ describe('push / pull against a mock server', () => {
     expect((await db.get('novels', 'remote-1')).title).toBe('From the server')
     const cfg = await getConfig()
     expect(cfg.state.lastPull).toBe(500)
+  })
+})
+
+describe('conflict handling', () => {
+  const incomingFor = (ch, patch, when) => [{
+    store: 'chapters', id: ch.id, novelId: ch.novelId,
+    updatedAt: when ?? Date.now() + 1000, deleted: false,
+    payload: { ...ch, ...patch, pendingSync: false }
+  }]
+
+  it('recordsDiffer ignores volatile fields but sees real changes', () => {
+    expect(recordsDiffer({ id: 1, title: 'a', updatedAt: 1, rev: 1 }, { id: 1, title: 'a', updatedAt: 2, rev: 9 })).toBe(false)
+    expect(recordsDiffer({ id: 1, title: 'a' }, { id: 1, title: 'b' })).toBe(true)
+  })
+
+  it('captures a conflict instead of overwriting a locally-edited record', async () => {
+    const novel = await createNovel({ title: 'N' })
+    const ch = await createChapter(novel.id, { title: 'Mine', content: '<p>mine</p>' })
+    await applyIncoming(incomingFor(ch, { title: 'Theirs', content: '<p>theirs</p>' }))
+    const conflicts = await listConflicts()
+    expect(conflicts).toHaveLength(1)
+    const db = await getDB()
+    expect((await db.get('chapters', ch.id)).title).toBe('Mine') // not silently overwritten
+  })
+
+  it('keep theirs adopts the remote version and clears the conflict', async () => {
+    const novel = await createNovel({ title: 'N' })
+    const ch = await createChapter(novel.id, { title: 'Mine', content: '<p>mine</p>' })
+    await applyIncoming(incomingFor(ch, { title: 'Theirs', content: '<p>theirs</p>' }))
+    const { cid } = (await listConflicts())[0]
+    await resolveConflict(cid, 'theirs')
+    const db = await getDB()
+    expect((await db.get('chapters', ch.id)).title).toBe('Theirs')
+    expect(await listConflicts()).toHaveLength(0)
+  })
+
+  it('keep both forks the other version into a new chapter', async () => {
+    const novel = await createNovel({ title: 'N' })
+    const ch = await createChapter(novel.id, { title: 'Mine', content: '<p>mine</p>' })
+    await applyIncoming(incomingFor(ch, { title: 'Theirs', content: '<p>theirs</p>' }))
+    const { cid } = (await listConflicts())[0]
+    await resolveConflict(cid, 'both')
+    const db = await getDB()
+    const all = await db.getAllFromIndex('chapters', 'by-novel', novel.id)
+    expect(all).toHaveLength(2)
+    expect(all.some((c) => c.title === 'Mine')).toBe(true)
+    expect(all.some((c) => /their version/.test(c.title))).toBe(true)
+    expect(await listConflicts()).toHaveLength(0)
   })
 })

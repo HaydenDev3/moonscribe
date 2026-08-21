@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tidyHtml, sanitizePaste, composeMergedContent } from '../src/utils/formatHtml'
+import { tidyHtml, sanitizePaste, sanitizeStoredHtml, composeMergedContent } from '../src/utils/formatHtml'
 
 describe('tidyHtml', () => {
   it('collapses blank paragraph runs down to a single break', () => {
@@ -61,6 +61,26 @@ describe('sanitizePaste', () => {
     const out = sanitizePaste('First line\nsame para\n\nSecond paragraph')
     expect(out).toContain('<p>First line<br>same para</p>')
     expect(out).toContain('<p>Second paragraph</p>')
+  })
+})
+
+describe('sanitizeStoredHtml', () => {
+  it('removes executable markup but preserves safe prose and annotation hooks', () => {
+    const out = sanitizeStoredHtml('<p onclick="alert(1)">Safe <a href="javascript:alert(1)">link</a></p><img src="javascript:alert(1)"><script>alert(1)</script><span class="hl-name" data-char-id="c1">Mira</span>')
+    expect(out).toContain('Safe')
+    expect(out).toContain('class="hl-name"')
+    expect(out).toContain('data-char-id="c1"')
+    expect(out).not.toContain('onclick')
+    expect(out).not.toContain('javascript:')
+    expect(out).not.toContain('script')
+  })
+
+  it('keeps the editor’s vetted text formatting while stripping arbitrary CSS', () => {
+    const out = sanitizeStoredHtml('<p><span style="font-style:italic;background-color:#fff7a8;color:rgb(20, 30, 40);position:fixed">Moonlit</span></p>')
+    expect(out).toContain('font-style: italic')
+    expect(out).toContain('background-color: #fff7a8')
+    expect(out).toContain('color: rgb(20, 30, 40)')
+    expect(out).not.toContain('position')
   })
 })
 

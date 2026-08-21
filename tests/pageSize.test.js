@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PAGE_PRESETS, mmToTwips, pageSizeMm, pageSizeTwips, pageMarginMm } from '../src/utils/pageSize'
+import { PAGE_MARGIN_PRESETS, PAGE_PRESETS, editorPageGeometry, mmToTwips, pageSizeMm, pageSizeTwips, pageMarginMm } from '../src/utils/pageSize'
 
 describe('pageSize', () => {
   it('exposes preset trim sizes', () => {
@@ -33,5 +33,29 @@ describe('pageSize', () => {
     expect(pageMarginMm(undefined)).toBe(20)
     expect(pageMarginMm('nope')).toBe(20)
     expect(pageMarginMm(0)).toBe(20)
+  })
+
+  it('uses the same physical geometry for editor pages and export pages', () => {
+    const page = editorPageGeometry('a4', 20)
+    expect(page.widthMm).toBe(210)
+    expect(page.heightMm).toBe(297)
+    expect(page.marginMm).toBe(20)
+    expect(page.marginTopPx).toBe(page.marginPx)
+    expect(page.marginRightPx).toBe(page.marginPx)
+    expect(page.marginBottomPx).toBe(page.marginPx)
+    expect(page.marginLeftPx).toBe(page.marginPx)
+    expect(page.bodyWidthPx).toBe(Math.round(170 * 96 / 25.4))
+    expect(page.bodyHeightPx).toBe(Math.round(257 * 96 / 25.4))
+    expect(page.heightPx - page.bodyHeightPx).toBe(page.marginPx * 2)
+  })
+
+  it('provides familiar document margin presets', () => {
+    expect(PAGE_MARGIN_PRESETS.map((preset) => preset.value)).toEqual([12, 16, 20, 25, 32])
+  })
+
+  it('keeps an editable text area when legacy margins are too large', () => {
+    const page = editorPageGeometry('pocket', 500)
+    expect(page.bodyWidthPx).toBeGreaterThanOrEqual(Math.round(20 * 96 / 25.4))
+    expect(page.bodyHeightPx).toBeGreaterThanOrEqual(Math.round(20 * 96 / 25.4))
   })
 })

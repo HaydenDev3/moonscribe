@@ -4,11 +4,11 @@ import { getNovel } from '../db/novels'
 import { listMoodboard, createTile, updateTile, deleteTile, fileToDataUrl } from '../db/moodboard'
 import { useApp } from '../context/AppContext'
 import SubPageTopbar from '../components/SubPageTopbar'
-import EmptyState from '../components/EmptyState'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Modal from '../components/Modal'
 import { useContextMenu } from '../components/ContextMenu'
 import Icon from '../components/Icon'
+import * as THREE from 'three'
 
 const NOTE_COLORS = ['#FFF9E8', '#FBE3E3', '#E3EDF7', '#E8F1E8', '#F5EBFA', '#FDF0DB']
 const NOTE_TEXT = '#3d3a36'
@@ -24,7 +24,10 @@ export default function Moodboard({ novelId, embedded }) {
   const [dragging, setDragging] = useState(null)
   const [linkDraft, setLinkDraft] = useState(null) // { url, text } or editing tile
   const [paletteDraft, setPaletteDraft] = useState(null) // { label, palette } or editing tile
+  const [zoom, setZoom] = useState(1)
+  const [connecting, setConnecting] = useState(null)
   const fileRef = useRef(null)
+  const boardRef = useRef(null)
   const dragState = useRef(null)
 
   const load = useCallback(async () => {
@@ -35,6 +38,41 @@ export default function Moodboard({ novelId, embedded }) {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    const paste = async (event) => {
+      const file = [...(event.clipboardData?.files || [])].find((item) => item.type.startsWith('image/'))
+      if (!file) return
+      event.preventDefault()
+      const image = await fileToDataUrl(file)
+      await createTile(nid, { kind: 'image', x: rand(), y: rand(), image })
+      setTiles(await listMoodboard(nid))
+      toast('Image pasted onto the board.')
+    }
+    window.addEventListener('paste', paste)
+    return () => window.removeEventListener('paste', paste)
+  }, [nid, toast])
+
+  const smartStack = async () => {
+    const groups = ['note', 'image', 'link', 'palette']
+    const next = tiles.map((tile) => {
+      const column = Math.max(0, groups.indexOf(tile.kind))
+      const row = tiles.filter((candidate) => candidate.kind === tile.kind).findIndex((candidate) => candidate.id === tile.id)
+      return { ...tile, x: 42 + column * 250, y: 46 + row * 188, stack: tile.kind }
+    })
+    setTiles(next)
+    await Promise.all(next.map((tile) => updateTile(tile.id, { x: tile.x, y: tile.y, stack: tile.stack })))
+    toast('Smart stacks arranged by type.')
+  }
+
+  const connectTile = async (target) => {
+    if (!connecting) { setConnecting(target.id); toast('Choose another tile to connect.'); return }
+    if (connecting === target.id) { setConnecting(null); return }
+    const source = tiles.find((tile) => tile.id === connecting)
+    await updateTile(source.id, { links: [...new Set([...(source.links || []), target.id])] })
+    setConnecting(null)
+    setTiles(await listMoodboard(nid))
+  }
 
   const addNote = async (color = NOTE_COLORS[0]) => {
     const tile = await createTile(nid, { kind: 'note', x: rand(), y: rand(), color, text: '' })
@@ -72,7 +110,10 @@ export default function Moodboard({ novelId, embedded }) {
     e.preventDefault()
     e.stopPropagation()
     setSelected(tile.id)
-    dragState.current = { id: tile.id, dx: e.clientX - (tile.x || 0), dy: e.clientY - (tile.y || 0), moved: false }
+    const rect = boardRef.current?.getBoundingClientRect()
+    const localX = rect ? (e.clientX - rect.left) / zoom : e.clientX
+    const localY = rect ? (e.clientY - rect.top) / zoom : e.clientY
+    dragState.current = { id: tile.id, dx: localX - (tile.x || 0), dy: localY - (tile.y || 0), moved: false }
     e.currentTarget.setPointerCapture(e.pointerId)
     setDragging(tile.id)
   }
@@ -100,6 +141,7 @@ export default function Moodboard({ novelId, embedded }) {
         setTiles(await listMoodboard(nid))
         toast('Taken down.')
       } }
+      ,{ label: connecting ? 'Connect here' : 'Start connection', icon: 'fa-solid fa-share-nodes', onClick: () => connectTile(t) }
     ])
   }
 
@@ -141,9 +183,12 @@ export default function Moodboard({ novelId, embedded }) {
   const onPointerMove = (e, tile) => {
     if (dragState.current?.id !== tile.id) return
     const { dx, dy } = dragState.current
+    const rect = boardRef.current?.getBoundingClientRect()
+    const localX = rect ? (e.clientX - rect.left) / zoom : e.clientX
+    const localY = rect ? (e.clientY - rect.top) / zoom : e.clientY
     dragState.current.moved = true
-    const x = Math.max(0, e.clientX - dx)
-    const y = Math.max(0, e.clientY - dy)
+    const x = Math.max(0, localX - dx)
+    const y = Math.max(0, localY - dy)
     setTiles((prev) => prev.map((t) => (t.id === tile.id ? { ...t, x, y } : t)))
   }
 
@@ -199,6 +244,12 @@ export default function Moodboard({ novelId, embedded }) {
             <button className="button button-ghost" onClick={() => setPaletteDraft({})}>
               <Icon icon="fa-solid fa-palette" style={{ marginRight: 6 }} /> Add palette
             </button>
+            <button className="button button-ghost" onClick={smartStack}><Icon icon="fa-solid fa-layer-group" style={{ marginRight: 6 }} /> Smart stack</button>
+            <div className="mb-zoom" aria-label="Moodboard zoom controls">
+              <button onClick={() => setZoom((value) => Math.max(.5, value - .1))} aria-label="Zoom out">−</button>
+              <span>{Math.round(zoom * 100)}%</span>
+              <button onClick={() => setZoom((value) => Math.min(1.8, value + .1))} aria-label="Zoom in">+</button>
+            </div>
             {selected && (
               <button className="button button-rose" onClick={removeSelected}>Remove selected</button>
             )}
@@ -208,18 +259,22 @@ export default function Moodboard({ novelId, embedded }) {
           </div>
         </div>
 
-        {tiles.length === 0 ? (
-          <EmptyState icon="fa-regular fa-images" title="A board for the feel of it" action={
-            <div className="actions-row" style={{ justifyContent: 'center' }}>
-              <button className="button button-primary" onClick={() => addNote()}><Icon icon="fa-solid fa-pen" style={{ marginRight: 6 }} /> Pin a note</button>
-              <button className="button button-primary" onClick={() => fileRef.current?.click()}><Icon icon="fa-regular fa-image" style={{ marginRight: 6 }} /> Pin an image</button>
-              <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={addImage} />
-            </div>
-          }>
-            Faces, places, palettes, fragments of reference — whatever makes the story feel real.
-          </EmptyState>
-        ) : (
-          <div className="moodboard" onClick={() => setSelected(null)}>
+          <div ref={boardRef} className="moodboard moodboard-spatial" onClick={() => setSelected(null)}>
+            <MoodboardScene3D />
+            {tiles.length === 0 && <div className="mb-empty-overlay">
+              <Icon icon="fa-regular fa-images" />
+              <h3>Build the world around your story</h3>
+              <p>Drop or paste an image, pin a thought, then drag everything into place.</p>
+              <div className="actions-row"><button className="button button-primary" onClick={(e) => { e.stopPropagation(); addNote() }}>Pin a note</button><button className="button button-ghost" onClick={(e) => { e.stopPropagation(); fileRef.current?.click() }}>Add an image</button></div>
+            </div>}
+            <div className="moodboard-world" style={{ transform: `scale(${zoom})` }}>
+            <svg className="mb-connections" aria-hidden="true">
+              {tiles.flatMap((source) => (source.links || []).map((targetId) => {
+                const target = tiles.find((tile) => tile.id === targetId)
+                if (!target) return null
+                return <line key={`${source.id}-${targetId}`} x1={(source.x || 0) + (source.w || 200) / 2} y1={(source.y || 0) + (source.h || 150) / 2} x2={(target.x || 0) + (target.w || 200) / 2} y2={(target.y || 0) + (target.h || 150) / 2} />
+              }))}
+            </svg>
             {tiles.map((t) => (
               <Tile
                 key={t.id}
@@ -234,8 +289,8 @@ export default function Moodboard({ novelId, embedded }) {
                 onContextMenu={(e) => tileMenu(e, t)}
               />
             ))}
+            </div>
           </div>
-        )}
       </div>
 
       <ConfirmDialog open={confirmClear} onClose={() => setConfirmClear(false)} onConfirm={clearBoard} title="Clear the whole board?">
@@ -245,6 +300,32 @@ export default function Moodboard({ novelId, embedded }) {
       <PaletteModal draft={paletteDraft} onChange={setPaletteDraft} onClose={() => setPaletteDraft(null)} onSave={savePalette} />
     </div>
   )
+}
+
+function MoodboardScene3D() {
+  const ref = useRef(null)
+  useEffect(() => {
+    const mount = ref.current
+    if (!mount) return
+    let renderer
+    try { renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true }) } catch { return }
+    const scene = new THREE.Scene()
+    const camera = new THREE.PerspectiveCamera(42, 1, .1, 100)
+    camera.position.set(0, 5.6, 8)
+    camera.lookAt(0, 0, 0)
+    const grid = new THREE.GridHelper(18, 36, 0x8ba7c4, 0x3d4858)
+    grid.material.transparent = true; grid.material.opacity = .22
+    scene.add(grid)
+    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5))
+    mount.appendChild(renderer.domElement)
+    const resize = () => { const rect = mount.getBoundingClientRect(); renderer.setSize(rect.width, rect.height, false); camera.aspect = rect.width / Math.max(1, rect.height); camera.updateProjectionMatrix() }
+    const observer = new ResizeObserver(resize); observer.observe(mount); resize()
+    let frame
+    const draw = () => { grid.rotation.y += .00035; renderer.render(scene, camera); frame = requestAnimationFrame(draw) }
+    draw()
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); renderer.dispose(); grid.geometry.dispose(); grid.material.dispose(); mount.replaceChildren() }
+  }, [])
+  return <div ref={ref} className="moodboard-three" aria-hidden="true" />
 }
 
 function LinkModal({ draft, onClose, onSave }) {
@@ -321,9 +402,28 @@ function Tile({ tile, selected, dragging, onPointerDown, onPointerMove, onPointe
   const [draft, setDraft] = useState(tile.text)
   useEffect(() => setDraft(tile.text), [tile.text])
 
+  const tileLabel =
+    tile.kind === 'image' ? 'Moodboard image'
+    : tile.kind === 'link' ? (tile.text ? `Link: ${tile.text}` : 'Link tile')
+    : tile.kind === 'palette' ? (tile.text ? `Palette: ${tile.text}` : 'Palette tile')
+    : (tile.text ? `Note: ${tile.text}` : 'Note tile')
+  const keyProps = {
+    tabIndex: 0,
+    role: 'button',
+    'aria-label': tileLabel,
+    onKeyDown: (e) => {
+      if (e.target !== e.currentTarget) return
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        onSelect()
+      }
+    }
+  }
+
   if (tile.kind === 'image') {
     return (
       <div
+        {...keyProps}
         className={`mb-tile mb-image ${selected ? 'selected' : ''} ${dragging ? 'dragging' : ''}`}
         style={{ left: tile.x, top: tile.y, width: tile.w, height: tile.h }}
         onPointerDown={(e) => onPointerDown(e, tile)}
@@ -341,6 +441,7 @@ function Tile({ tile, selected, dragging, onPointerDown, onPointerMove, onPointe
   if (tile.kind === 'link') {
     return (
       <div
+        {...keyProps}
         className={`mb-tile mb-link ${selected ? 'selected' : ''} ${dragging ? 'dragging' : ''}`}
         style={{ left: tile.x, top: tile.y, width: tile.w, height: tile.h }}
         onPointerDown={(e) => onPointerDown(e, tile)}
@@ -364,6 +465,7 @@ function Tile({ tile, selected, dragging, onPointerDown, onPointerMove, onPointe
   if (tile.kind === 'palette') {
     return (
       <div
+        {...keyProps}
         className={`mb-tile mb-palette ${selected ? 'selected' : ''} ${dragging ? 'dragging' : ''}`}
         style={{ left: tile.x, top: tile.y, width: tile.w, height: tile.h }}
         onPointerDown={(e) => onPointerDown(e, tile)}
@@ -385,6 +487,7 @@ function Tile({ tile, selected, dragging, onPointerDown, onPointerMove, onPointe
 
   return (
     <div
+      {...keyProps}
       className={`mb-tile mb-note ${selected ? 'selected' : ''} ${dragging ? 'dragging' : ''}`}
       style={{ left: tile.x, top: tile.y, width: tile.w, height: tile.h, background: tile.color, color: NOTE_TEXT }}
       onPointerDown={(e) => onPointerDown(e, tile)}

@@ -293,6 +293,82 @@ export function sanitizePaste(input) {
   return doc.body.innerHTML
 }
 
+// Stored manuscript content can arrive from an older backup or another sync
+// client, so it must be treated as untrusted just like pasted content. This
+// keeps the editor's semantic markup and annotation hooks, while removing
+// executable elements, event handlers, unsafe URLs, and arbitrary styling.
+export function sanitizeStoredHtml(input) {
+  const doc = parse(input)
+  const allowedTags = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'CODE', 'BR', 'HR', 'DIV', 'SPAN', 'A', 'IMG'])
+  const dropTags = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'SVG', 'MATH', 'VIDEO', 'AUDIO'])
+  const allowedClasses = new Set(['scene-break', 'page-break', 'pg-break', 'hl-name', 'hl-term', 'hl-entity', 'comment-anchor'])
+  const allowedData = new Set(['data-scene-break', 'data-page-break', 'data-char-id', 'data-term-id', 'data-entity-id', 'data-entity-kind', 'data-comment-id'])
+  const safeUrl = (value, image = false) => {
+    const url = String(value || '').trim()
+    if (!url) return ''
+    if (/^(https?:|mailto:|#|\/|\.\/|\.\.\/)/i.test(url)) return url
+    if (image && /^data:image\/(png|gif|jpe?g|webp);base64,/i.test(url)) return url
+    return ''
+  }
+  const clean = (parent) => {
+    for (const node of Array.from(parent.childNodes)) {
+      if (node.nodeType === Node.COMMENT_NODE) { node.remove(); continue }
+      if (node.nodeType !== Node.ELEMENT_NODE) continue
+      const tag = node.tagName
+      if (dropTags.has(tag)) { node.remove(); continue }
+      if (!allowedTags.has(tag)) {
+        node.replaceWith(...Array.from(node.childNodes))
+        clean(parent)
+        return
+      }
+      for (const attr of Array.from(node.attributes)) {
+        const name = attr.name.toLowerCase()
+        if (name.startsWith('on') || name === 'id' || name === 'contenteditable') {
+          node.removeAttribute(attr.name)
+        } else if (name === 'style') {
+          const styles = {
+            color: node.style.color,
+            backgroundColor: node.style.backgroundColor,
+            fontFamily: node.style.fontFamily,
+            fontSize: node.style.fontSize,
+            fontWeight: node.style.fontWeight,
+            fontStyle: node.style.fontStyle,
+            textDecoration: node.style.textDecoration
+          }
+          node.removeAttribute('style')
+          const isColor = (v) => /^(#[0-9a-f]{3,8}|rgba?\([\d\s,.%]+\)|hsla?\([\d\s,.%]+\)|[a-z]+)$/i.test(v || '')
+          if (isColor(styles.color)) node.style.color = styles.color
+          if (isColor(styles.backgroundColor)) node.style.backgroundColor = styles.backgroundColor
+          if (/^[\w\s,'"-]+$/.test(styles.fontFamily || '')) node.style.fontFamily = styles.fontFamily
+          if (/^\d+(?:\.\d+)?(?:px|pt|em|rem|%)$/.test(styles.fontSize || '')) node.style.fontSize = styles.fontSize
+          if (/^(normal|bold|[1-9]00)$/.test(styles.fontWeight || '')) node.style.fontWeight = styles.fontWeight
+          if (/^(normal|italic|oblique)$/.test(styles.fontStyle || '')) node.style.fontStyle = styles.fontStyle
+          if (/^(none|underline|line-through|underline line-through)$/.test(styles.textDecoration || '')) node.style.textDecoration = styles.textDecoration
+        } else if (name === 'class') {
+          const classes = attr.value.split(/\s+/).filter((c) => allowedClasses.has(c))
+          if (classes.length) node.setAttribute('class', classes.join(' '))
+          else node.removeAttribute('class')
+        } else if (name === 'href' && tag === 'A') {
+          const url = safeUrl(attr.value)
+          if (url) node.setAttribute('href', url)
+          else node.removeAttribute('href')
+        } else if (name === 'src' && tag === 'IMG') {
+          const url = safeUrl(attr.value, true)
+          if (url) node.setAttribute('src', url)
+          else node.remove()
+        } else if (name === 'alt' && tag === 'IMG') {
+          node.setAttribute('alt', attr.value.slice(0, 300))
+        } else if (!allowedData.has(name)) {
+          node.removeAttribute(attr.name)
+        }
+      }
+      clean(node)
+    }
+  }
+  clean(doc.body)
+  return doc.body.innerHTML
+}
+
 // ---- merge: join two chapters at a clean seam ----
 export function composeMergedContent(aHtml, bHtml, separator = 'scene-break') {
   const a = tidyHtml(aHtml, { detectHeadings: false })

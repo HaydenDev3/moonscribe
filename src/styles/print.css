@@ -12,6 +12,7 @@
   .sidebar,
   .toast-wrap { display: none !important; }
   .print-view { max-width: none; padding: 0; margin: 0; }
+  .device-preview { width: auto !important; height: auto !important; padding: 0; margin: 0; border: 0; box-shadow: none; overflow: visible; background: transparent; }
   .book-view {
     box-shadow: none;
     padding: 0 5%;
@@ -20,4 +21,5 @@
   }
   .chapter-block { break-before: page; }
   .chapter-block:first-of-type { break-before: auto; }
+  .page-break, .pg-break, [data-page-break='true'] { break-after: page; page-break-after: always; height: 0; overflow: hidden; }
 }

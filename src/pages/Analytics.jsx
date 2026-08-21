@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getNovel } from '../db/novels'
 import { listChapters } from '../db/chapters'
@@ -30,37 +30,40 @@ export default function Analytics({ embedded }) {
     load()
   }, [load])
 
-  if (!novel) {
-    return <div style={{ padding: 'var(--space-7)', textAlign: 'center', color: 'var(--grey)' }}>Counting your words…</div>
-  }
-
   const totalWords = chapters.reduce((s, c) => s + (c.wordCount || 0), 0)
   const today = history[history.length - 1]?.words || 0
 
-  const streaks = []
-  let cur = 0
-  for (const d of history) {
-    if (d.words > 0) cur += 1
-    else cur = 0
-    streaks.push(cur)
-  }
-  const streak = streaks[streaks.length - 1] || 0
-  const writingDays = history.filter((d) => d.words > 0).length
-  const best = history.reduce((m, d) => (d.words > m.words ? d : m), { words: 0, date: '' })
-  const last7 = history.slice(-7).reduce((s, d) => s + d.words, 0)
-  const avg = writingDays ? Math.round(history.reduce((s, d) => s + d.words, 0) / Math.max(1, writingDays)) : 0
-  const todayWpm = todaySessions.minutes > 0.5 ? wordsPerMinute(todaySessions.words, todaySessions.minutes * 60000) : null
+  const { streak, writingDays, best, last7, avg, todayWpm, stats } = useMemo(() => {
+    const streaks = []
+    let cur = 0
+    for (const d of history) {
+      if (d.words > 0) cur += 1
+      else cur = 0
+      streaks.push(cur)
+    }
+    const streak = streaks[streaks.length - 1] || 0
+    const writingDays = history.filter((d) => d.words > 0).length
+    const best = history.reduce((m, d) => (d.words > m.words ? d : m), { words: 0, date: '' })
+    const last7 = history.slice(-7).reduce((s, d) => s + d.words, 0)
+    const avg = writingDays ? Math.round(history.reduce((s, d) => s + d.words, 0) / Math.max(1, writingDays)) : 0
+    const todayWpm = todaySessions.minutes > 0.5 ? wordsPerMinute(todaySessions.words, todaySessions.minutes * 60000) : null
+    const stats = [
+      { label: 'Total words', value: formatWords(totalWords), sub: 'across every chapter' },
+      { label: 'Words today', value: formatWords(today), sub: 'this page counts this device' },
+      { label: 'This week', value: formatWords(last7), sub: 'last seven days' },
+      { label: 'Best day', value: formatWords(best.words), sub: best.date ? prettyDate(best.date) : 'no words yet' },
+      { label: 'Streak', value: streak, sub: streak === 1 ? 'day in a row' : `${streak} days in a row` },
+      { label: 'Average', value: formatWords(avg), sub: 'per writing day' },
+      { label: 'Today’s pace', value: todayWpm === null ? '—' : `${todayWpm} wpm`, sub: todaySessions.minutes > 0.5 ? `${Math.round(todaySessions.minutes)} min writing` : 'write a little to see it' }
+    ]
+    return { streak, writingDays, best, last7, avg, todayWpm, stats }
+  }, [history, todaySessions, totalWords])
 
-  const maxDay = Math.max(...history.map((d) => d.words), 1)
-  const stats = [
-    { label: 'Total words', value: formatWords(totalWords), sub: 'across every chapter' },
-    { label: 'Words today', value: formatWords(today), sub: 'this page counts this device' },
-    { label: 'This week', value: formatWords(last7), sub: 'last seven days' },
-    { label: 'Best day', value: formatWords(best.words), sub: best.date ? prettyDate(best.date) : 'no words yet' },
-    { label: 'Streak', value: streak, sub: streak === 1 ? 'day in a row' : `${streak} days in a row` },
-    { label: 'Average', value: formatWords(avg), sub: 'per writing day' },
-    { label: 'Today’s pace', value: todayWpm === null ? '—' : `${todayWpm} wpm`, sub: todaySessions.minutes > 0.5 ? `${Math.round(todaySessions.minutes)} min writing` : 'write a little to see it' }
-  ]
+  // Only show days from the novel's creation date onward — no phantom zeros before it existed
+  const novelCreatedDate = novel?.createdAt ? toISODate(new Date(novel.createdAt)) : null
+  const clippedHistory = novelCreatedDate ? history.filter((d) => d.date >= novelCreatedDate) : history
+
+  const maxDay = Math.max(...clippedHistory.map((d) => d.words), 1)
 
   const byStatus = { draft: 0, revised: 0, final: 0 }
   for (const c of chapters) byStatus[c.status] = (byStatus[c.status] || 0) + (c.wordCount || 0)
@@ -68,13 +71,21 @@ export default function Analytics({ embedded }) {
   const topChapters = [...chapters].sort((a, b) => (b.wordCount || 0) - (a.wordCount || 0)).slice(0, 8)
   const maxChapter = Math.max(...topChapters.map((c) => c.wordCount || 0), 1)
 
+  if (!novel) {
+    return <div style={{ padding: 'var(--space-7)', textAlign: 'center', color: 'var(--grey)' }}>Counting your words…</div>
+  }
+
   return (
     <div className={embedded ? undefined : 'app'}>
       {!embedded && <SubPageTopbar novel={novel} title="Analytics" />}
-      <div className="page page-wide">
-        <div style={{ marginBottom: 'var(--space-5)' }}>
-          <h2 style={{ margin: 0 }}>Analytics</h2>
-          <p className="muted small" style={{ margin: '4px 0 0' }}>A quiet look at the shape of your work. Numbers, never judgements.</p>
+      <div className="page page-wide analytics-page">
+        <div className="analytics-hero">
+          <div>
+            <span className="analytics-eyebrow">Writing rhythm</span>
+            <h2>Analytics</h2>
+            <p>A quiet, useful picture of your manuscript—not a scoreboard.</p>
+          </div>
+          <button className="button button-quiet analytics-refresh" onClick={() => { load(); toast('Refreshed.') }}>↻ Refresh</button>
         </div>
 
         {totalWords === 0 && history.every((d) => d.words === 0) ? (
@@ -83,7 +94,7 @@ export default function Analytics({ embedded }) {
           </EmptyState>
         ) : (
           <>
-            <div className="stat-grid">
+            <div className="stat-grid analytics-stat-grid">
               {stats.map((s) => (
                 <div className="card stat-card" key={s.label}>
                   <div className="stat-value">{s.value}</div>
@@ -93,10 +104,10 @@ export default function Analytics({ embedded }) {
               ))}
             </div>
 
-            <div className="card chart-card">
-              <h3>Words per day · last 30 days</h3>
+            <div className="card chart-card analytics-primary-chart">
+              <div className="analytics-card-head"><div><span className="analytics-eyebrow">Momentum</span><h3>Words per day</h3></div><span className="analytics-range">Last 30 days</span></div>
               <div className="chart-bars" style={{ '--max': maxDay }}>
-                {history.slice(-30).map((d) => (
+                {clippedHistory.slice(-30).map((d) => (
                   <div className="chart-col" key={d.date} title={`${prettyDate(d.date)} — ${formatWords(d.words)} words`}>
                     <div className="chart-bar" style={{ height: `${d.words ? Math.max(4, (d.words / maxDay) * 100) : 2}%` }}>
                       <span className="chart-tip">{d.words > 0 ? d.words : ''}</span>
@@ -105,11 +116,10 @@ export default function Analytics({ embedded }) {
                   </div>
                 ))}
               </div>
-              <button className="button button-quiet" style={{ marginTop: 12 }} onClick={() => { load(); toast('Refreshed.') }}>↻ Refresh</button>
             </div>
 
-            <div className="card chart-card">
-              <h3>Last 90 days</h3>
+            <div className="card chart-card analytics-heat-card">
+              <div className="analytics-card-head"><div><span className="analytics-eyebrow">Consistency</span><h3>Writing days</h3></div><span className="analytics-range">Last 90 days</span></div>
               <div className="heatmap">
                 {heatmapCells(history).map((week, wi) => (
                   <div className="heat-week" key={wi}>
@@ -118,10 +128,12 @@ export default function Analytics({ embedded }) {
                         <div
                           key={cell.date}
                           className={`heat-cell level-${cell.level}`}
+                          role="img"
+                          aria-label={`${prettyDate(cell.date)} — ${formatWords(cell.words)} words`}
                           title={`${prettyDate(cell.date)} — ${formatWords(cell.words)} words`}
                         />
                       ) : (
-                        <div key={`e${di}`} className="heat-cell empty" />
+                        <div key={`e${di}`} className="heat-cell empty" aria-hidden="true" />
                       )
                     )}
                   </div>
@@ -130,14 +142,14 @@ export default function Analytics({ embedded }) {
               <div className="heat-legend small muted">
                 less
                 {[0, 1, 2, 3, 4].map((l) => (
-                  <span key={l} className={`heat-cell level-${l}`} />
+                  <span key={l} className={`heat-cell level-${l}`} aria-hidden="true" />
                 ))}
                 more
               </div>
             </div>
 
             <div className="card chart-card">
-              <h3>Words per month · last 12 months</h3>
+              <div className="analytics-card-head"><div><span className="analytics-eyebrow">Long view</span><h3>Words per month</h3></div><span className="analytics-range">Last 12 months</span></div>
               <div className="chart-bars month-bars" style={{ '--max': Math.max(...monthly.map((m) => m.words), 1) }}>
                 {monthly.map((m) => (
                   <div className="chart-col" key={m.key} title={`${m.label} — ${formatWords(m.words)} words`}>
@@ -212,6 +224,12 @@ function dayLabel(iso) {
 
 function todayKey() {
   const d = new Date()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+function toISODate(d) {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${m}-${day}`

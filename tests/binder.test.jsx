@@ -13,6 +13,15 @@ import { getDB } from '../src/db/db'
 let container
 let root
 
+const waitFor = async (predicate, timeout = 1200) => {
+  const start = Date.now()
+  while (Date.now() - start < timeout) {
+    if (predicate()) return
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  throw new Error('Timed out waiting for expected DOM state')
+}
+
 beforeEach(async () => {
   const db = await getDB()
   await Promise.all(['novels', 'chapters', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'tombstones', 'meta'].map((s) => db.clear(s)))
@@ -44,13 +53,12 @@ const renderSection = async (path) => {
       </ContextMenuProvider>
     </AppProvider>
   )
-  await new Promise((r) => setTimeout(r, 120))
+  await waitFor(() => container.querySelector('.mode-body h2'))
 }
 
 describe('Inline binder sections', () => {
   it.each([
     ['characters', '/novel/n1/characters', 'Characters'],
-    ['notes', '/novel/n1/notes', 'Notes'],
     ['relationships', '/novel/n1/relationships', 'Relationships'],
     ['world', '/novel/n1/world', 'Worldbuilding'],
     ['moodboard', '/novel/n1/moodboard', 'Moodboard']

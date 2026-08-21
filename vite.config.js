@@ -1,9 +1,11 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
   plugins: [
+    tailwindcss(),
     react(),
     VitePWA({
       registerType: 'autoUpdate',
@@ -29,7 +31,17 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
+    allowedHosts: [
+      '.loca.lt',
+      '.ngrok-free.app',
+      '.ngrok-free.dev',
+      '.ngrok.io',
+    ],
     proxy: {
+      '/auth': {
+        target: 'http://localhost:3001',
+        changeOrigin: true
+      },
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true

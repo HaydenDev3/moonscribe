@@ -1,116 +1,192 @@
-# Moonscribe ✦
+# Moonscribe
 
-A quiet, private place to write — made for two.
+> *A quiet, private place to write.*
 
-A local-first novel-writing and book-design studio. No paywalls, no chapter or
-character caps, no export limits. Every word stays in your browser
-(IndexedDB), works offline, and can be installed on an iPad or phone as a
-Progressive Web App. When you want your novels in more than one place, sign in
-with your own account and they're mirrored to the server — each writer's
-library stays private to them.
+Moonscribe is a local-first, offline-capable writing app built for long-form fiction. It runs entirely in the browser as a Progressive Web App — your work lives in IndexedDB on your device, with optional sync to a self-hosted server. No accounts required to write.
 
-## The flow
+---
 
-1. **Open it and begin** — first launch is a soft welcome (made with love, for
-   Storm). One tap creates your first novel and a first chapter.
-2. **Write** — a clean, distraction-free editor with basic formatting
-   (bold / italic / headings / scene breaks), auto-save, live word count,
-   session words and a gentle daily-goal bar. Right-click anything — chapters,
-   cards, moodboard tiles — for a quick menu of actions.
-3. **Organise** — chapters in parts/volumes with draft/revised/final status,
-   character profiles with custom fields, free-form notes linked to chapters
-   or characters, and a relationship list with a 3D constellation map. All the
-   binder sections open in a panel that slides over the editor, so you never
-   lose your place in the manuscript.
-4. **Build your world** — a worldbuilding binder with cultures, places,
-   history, magic systems and artefacts, plus a moodboard with draggable
-   sticky notes and image tiles.
-5. **Design** — the Book Designer has a cover studio (subtitle, byline,
-   ornament, live 2D preview and an interactive 3D mock-up) plus body
-   typography and title-page controls. Sign the title page with your own
-   author signature, or drag a premade design pack onto the cover or the pages
-   to restyle everything in one move — the same packs drop onto the chapter
-   editor from its **Designs** palette. Then one click opens the print view:
-   browser "Save as PDF" gives you a formatted book. No printer required.
-6. **Export** — the full novel as Markdown, plain text, or a formatted `.docx`
-   (title page + chapters). All in-browser; nothing leaves the machine.
+## What's been built
 
-## Privacy
+### Core editor
 
-- Data lives in your browser's IndexedDB. Offline by default, private by design.
-- Back up anytime from **Settings → Download backup**, and restore on any
-  other device to move your words there.
+A rich-text chapter editor built on a native `contenteditable` element — no third-party editor framework.
 
-## Multi-device sync
+- **Formatting toolbar** — bold, italic, underline, strikethrough, superscript, subscript, text colour, highlight colour, headings (H1–H3), blockquote, lists (ordered/unordered), alignment, links, comments, undo/redo
+- **Font controls** — font family picker (Literata, Lora, Cormorant Garamond, Source Serif 4, Georgia, and more), font size, line spacing
+- **Scene breaks** — dedicated `* * *` separator element, styled by the active design theme
+- **Manual page breaks** — insertable `<hr>`-style page break that the pagination engine respects
+- **Typewriter mode** — dims all paragraphs except the one being written; JS keeps the focused line vertically centred
+- **Focus mode** — hides the sidebar and toolbar chrome so only the words remain
+- **Typewriter scroll** — the active line stays at a comfortable vertical position as you write
+- **Command palette** — `Ctrl+K` quick-access to app actions and navigation
+- **AI assist** — inline AI writing button in the toolbar (connected to a server-side AI endpoint)
+- **Word / character count** — live counts in the status bar with daily goal progress
+- **Session word count** — tracks words added in the current session
+- **Auto-save** — debounced save on every keystroke; saves to IndexedDB
+- **Draft recovery** — if a session ends unexpectedly, unsaved content is recovered on next open
 
-Moonscribe can sync between devices through the bundled sync server. It's a
-small dependency-free Node server using `node:sqlite` — no extra database to
-run. Each writer creates an account (username + password, hashed on the
-server), and each account owns its own library.
+### Pagination
 
-```bash
-npm run server    # starts the sync server on :3001
-```
+- **Page size selector** — None (continuous scroll), A4, A5, Letter, Legal
+- **Visual page mode** — canvas constrains to the selected page width with correct proportions
+- **Auto page-break engine** — measures rendered paragraph heights and inserts visual break indicators at overflow points; respects manual breaks and scene breaks; keeps headings with their following block
+- **Break bar UI** — shows page number labels at each break; styled as a gap between physical pages
+- **Persisted preference** — selected page size is remembered across sessions via `localStorage`
 
-On each device: **Settings → Sign in**, enter the server address and your
-username + password (or create an account right there). Your novels are then
-mirrored server-side, and **Sync now** (dashboard header) pushes local changes
-and pulls the other device's. Deletes sync as tombstones; covers and moodboard
-images travel as data-URLs. If two devices edit the same record, the newer
-`updatedAt` wins and the loser is re-pushed. A server can hold any number of
-writers, each in their own private library.
+### Manuscript structure
 
-## Run it
+- **Multiple novels** — each novel is isolated; the dashboard lists all novels with word count and chapter count
+- **Chapter management** — create, rename, reorder (drag-and-drop), delete, and restore chapters; chapters live in a sidebar list
+- **Chapter library** — slide-out panel showing all chapters with word counts for quick navigation
+- **Corkboard** — card-based chapter overview; cards show scene context (POV, where, time, tone, beat); drag to reorder
+- **Scene context bar** — per-chapter metadata (POV, where, time, tone, beat) editable at the top of the editor
+- **Read mode** — distraction-free full-screen reading view of a chapter
+- **Print view** — paginated print-ready layout of the full manuscript
+
+### World-building tools
+
+- **Characters** — character profiles with name, aliases, role, description, traits, relationships, notes, and avatar colour; linked to the editor via name highlighting
+- **Relationships** — visual constellation map (`Three.js`) showing character connections; relationship entries store type, description, and strength
+- **Worldbuilding** — free-form world entries organised by category (geography, culture, history, magic, technology, other)
+- **Glossary / Term tracker** — define terms, jargon, and proper nouns; the editor automatically underlines matching words and shows a hover card with the definition
+- **Continuity tracker** — log continuity notes (events, facts, timelines) per chapter; flag potential errors
+- **Moodboard notes** — freeform notes live with visual inspiration in the Moodboard, rather than in a separate sidebar section
+
+### Planning tools
+
+- **Corkboard** — drag-and-drop chapter cards with scene metadata at a glance
+- **Timeline** — chronological event log with date, description, and chapter association
+- **Milestones** — writing goal milestones with target word counts and deadline dates
+
+### Design system
+
+- **Design themes** — five premade visual "design packs" (Moonlight, Ember, Moss, Sand, Midnight) that restyle the editor canvas: font pairing, background colour, text colour, accent colour
+- **Dark / Amoled / Light themes** — app-level theme toggle; each design has a matching dark variant
+- **Drag-to-apply designs** — designs can be dragged from the palette directly onto the canvas or the book preview
+- **Book Designer** — a dedicated page with three tabs:
+  - *Cover* — pick a cover style, title colour, and ornament; see a live rendered book cover
+  - *3D mockup* — Three.js 3D book cover preview with lighting and shadows
+  - *Pages* — preview how the interior page will look with the active design applied
+- **Moodboard** — drag-and-drop image board for visual inspiration; images stored as base64 in IndexedDB
+
+### Export & import
+
+- **Export modal** — export a chapter or the full manuscript as:
+  - Markdown (`.md`)
+  - Plain text (`.txt`)
+  - HTML (`.html`)
+  - EPUB (`.epub`) — full EPUB 3 package with metadata, cover, and chapter files zipped together
+  - DOCX (`.docx`) — Microsoft Word format via the `docx` library
+  - PDF — browser print dialog with the print-view stylesheet applied
+- **Import** — import a Markdown file and split into chapters by heading level; import RTF files
+- **Backup / restore** — export the entire database as a JSON bundle; restore from a bundle; optional AES-GCM passphrase encryption on backups (PBKDF2-SHA-256, 600k iterations for new backups, Web Crypto API)
+- **Encrypted backups** — passphrase-protected; no key is stored, no recovery path
+- **Account recovery** — Discord sign-in can be completed again on a replacement device; password recovery is intentionally not offered without a verified email channel. Keep an encrypted local backup as the recovery path for writing data.
+
+### Sync
+
+- **Local-first sync engine** — all writes go to IndexedDB first, flagged as `pendingSync`; a background engine pushes pending records to a self-hosted Express server and pulls remote changes
+- **Last-writer-wins merge** — records are reconciled by `updatedAt` timestamp
+- **Tombstones** — deletes travel as tombstone records so they propagate across devices
+- **Conflict detection** — detects when the same record has been modified on two devices since the last sync; surfaces a conflict resolution modal
+- **Auth** — password accounts use scrypt hashes and expiring bearer tokens; Discord uses the server-side authorization-code flow and a short-lived one-use handoff
+- **Sessions** — each device receives its own rotating session token; account settings can sign out all other devices
+
+### Annotations
+
+- **Inline comments** — select text and add a private comment; the comment is anchored to the text via a `data-comment-id` span; shown in a slide-out annotations panel
+- **Comment status** — open / resolved; resolved comments are hidden but preserved
+
+### Version history
+
+- **Automatic snapshots** — a snapshot of the chapter HTML is saved on every significant edit (debounced); up to 50 snapshots per chapter retained
+- **History panel** — browse snapshots with word count and timestamp; restore any snapshot
+- **Session replay** — replay the writing session keystroke-by-keystroke at adjustable speed
+
+### Security & privacy
+
+- **App lock** — set a PIN or passphrase; the app locks after a configurable idle timeout; a lock screen covers all content until unlocked
+- **Per-novel lock** — individual novels can be locked independently of the global app lock
+- **Weekly backup nudge** — a reminder prompt appears weekly if no backup has been taken recently
+- **Encryption** — backup files can be AES-GCM encrypted with a user-supplied passphrase; all crypto runs in the browser via the Web Crypto API
+
+### Analytics
+
+- **Daily word count** — words written per day, tracked in IndexedDB
+- **Writing streaks** — current streak and longest streak calculated from daily logs
+- **Session statistics** — words per session, average session length
+- **Charts** — bar charts of daily word count over the past 30 days
+- **Readability metrics** — Flesch reading ease and estimated reading time for each chapter
+
+### Search
+
+- **Full-text search** — searches across all chapters, notes, and world entries for the active novel; results are highlighted and linked to the source page
+
+### Reference pane
+
+- **Slide-out reference panel** — opens alongside the editor showing character profiles, world entries, and glossary terms at a glance without leaving the writing view
+
+### Infrastructure
+
+- **PWA** — installable as a desktop/mobile app via `vite-plugin-pwa`; service worker caches the app shell for offline use
+- **IndexedDB** — all data (novels, chapters, characters, world, notes, annotations, snapshots, stats, glossary, continuity, milestones, timeline) is stored locally via the `idb` library
+- **Express server** — a lightweight `server/index.js` handles sync endpoints and an AI proxy; not required for local-only use
+- **Test suite** — Vitest unit and integration tests covering the database layer, sync engine, export utilities, encryption, and UI components
+
+---
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| UI framework | React 19 |
+| Routing | React Router 7 (HashRouter, no server config needed) |
+| Build tool | Vite 8 |
+| Storage | IndexedDB via `idb` |
+| 3D rendering | Three.js |
+| PWA | `vite-plugin-pwa` |
+| Fonts | Fontsource (Inter, Literata, Lora, Cormorant Garamond) |
+| Icons | Font Awesome 7 |
+| Export: DOCX | `docx` |
+| Crypto | Web Crypto API (PBKDF2 + AES-GCM) |
+| Tests | Vitest + happy-dom |
+| Server | Node.js + Express |
+
+---
+
+## Running locally
 
 ```bash
 npm install
-npm run dev        # develop at http://localhost:5173 (/api proxies to :3001)
-npm test           # unit tests (words, converters, db, sync engine)
-npm run build      # production build to dist/
-npm run preview    # serve the production build locally
-npm run server     # run the sync server (used by the app in production)
+npm run dev
 ```
 
-The production build (`dist/`) is fully static: the sync server also serves it,
-so one process covers both. The server stores its data (and its generated
-secret) under `./data`.
+Open `http://localhost:5173`. The app works entirely offline — the server is only needed for sync.
 
-### Self-host with Docker (optional)
+To run the sync server:
 
 ```bash
-docker build -t moonscribe .
-docker run -d -p 8080:3001 -v moonscribe-data:/app/data --name moonscribe moonscribe
-# open http://localhost:8080
+npm run server
 ```
 
-For the PWA to be installable on iPad/phone it must be served over **HTTPS**
-(e.g. behind Caddy, nginx + Let's Encrypt, or any static host — the `dist/`
-folder is fully static). If you don't need sync, you can serve `dist/` from
-any static host and the app runs perfectly on its own.
+For Discord sign-in, configure these environment variables on the server (never commit a client secret):
 
-## Project layout
-
-```
-server/         sync server (node:sqlite, per-user accounts, LWW merge)
-src/
-  db/           IndexedDB schema + repositories (novels, chapters, characters,
-                notes, relationships, stats, world, moodboard, meta, backup)
-  sync/         sync engine (dirty tracking, serialization, push/pull, auth)
-  designs/      premade design packs (cover + page presets)
-  utils/        word counting, markdown/text converters, DOCX export,
-                name highlighting, download helpers, dates
-  context/      global app context (novels, theme, sync, toasts)
-  components/   editor, sidebar, context menu, design palette, binder panel,
-                auth modal, sync status, settings, icons
-  pages/        dashboard, workspace, characters, notes, relationships,
-                world, moodboard, analytics, book designer, 3D cover,
-                print view, onboarding
-  styles/       design tokens (moonstone palette, light + moonlight dark),
-                base, app, print
-tests/          vitest suites for db, sync, converters, words, binder,
-                designer, workspace
+```text
+DISCORD_CLIENT_SECRET=the-rotated-secret-from-Discord
+DISCORD_CLIENT_ID=your-discord-application-id
+GOOGLE_CLIENT_ID=your-google-oauth-client-id
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+APP_ORIGIN=https://your-moonscribe-domain.example
+CORS_ORIGINS=https://your-moonscribe-domain.example
 ```
 
-The design system lives in `styles/tokens.css` — every colour is a variable,
-with a complete moonlight dark theme (choose **Settings → Theme**: light,
-moonlight, or automatic).
+`DISCORD_CLIENT_SECRET` is required for Discord sign-in. Set `VITE_SYNC_SERVER` in a separate frontend deployment when the app and sync server use different origins.
+
+For an older server database that contains unowned records, export and review it before migration. Automatic claiming is disabled by default; a server owner may set `CLAIM_LEGACY_RECORDS_ON_FIRST_ACCOUNT=true` only for a one-time, trusted migration.
+
+---
+
+## Project status
+
+Early development. All data is stored locally; breaking changes to the IndexedDB schema may require a manual data export and re-import between versions.

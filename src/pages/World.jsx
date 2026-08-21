@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useDraftRecovery, readDraft, draftKey } from '../utils/draftRecovery'
 import { useParams } from 'react-router-dom'
 import { getNovel } from '../db/novels'
-import { WORLD_KINDS, listWorld, createWorldItem, updateWorldItem, deleteWorldItem } from '../db/world'
+import { WORLD_KINDS, listWorld, createWorldItem, updateWorldItem, trashWorldItem } from '../db/world'
 import { useApp } from '../context/AppContext'
 import SubPageTopbar from '../components/SubPageTopbar'
 import Modal from '../components/Modal'
@@ -13,6 +14,11 @@ import Icon from '../components/Icon'
 
 const KIND_COLORS = { place: '#7BA3C9', faction: '#B49BCB', item: '#E3C18A', lore: '#A8C5A8', timeline: '#D8B48F' }
 
+const compactText = (value = '', limit = 220) => {
+  const text = value.replace(/\s+/g, ' ').trim()
+  return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text
+}
+
 export default function World({ novelId, embedded }) {
   const { id } = useParams()
   const nid = novelId || id
@@ -22,6 +28,8 @@ export default function World({ novelId, embedded }) {
   const [kind, setKind] = useState('place')
   const [editing, setEditing] = useState(null)
   const [deleting, setDeleting] = useState(null)
+  const [draftRestored, setDraftRestored] = useState(false)
+  const worldDraftKey = (k) => draftKey(nid, 'world', `new-${k}`)
 
   const load = useCallback(async () => {
     setNovel(await getNovel(nid))
@@ -32,7 +40,19 @@ export default function World({ novelId, embedded }) {
     load()
   }, [load])
 
-  const save = async () => {
+  const openNewItem = (k) => {
+    const base = newItem(k)
+    const saved = readDraft(worldDraftKey(k))
+    if (saved && saved.name) {
+      setDraftRestored(true)
+      setEditing({ ...base, ...saved, __new: true })
+    } else {
+      setDraftRestored(false)
+      setEditing(base)
+    }
+  }
+
+  const save = async (clearDraftFn) => {
     if (!editing) return
     if (editing.__new) {
       await createWorldItem(nid, editing)
@@ -41,15 +61,23 @@ export default function World({ novelId, embedded }) {
       await updateWorldItem(editing.id, editing)
       toast('Updated.')
     }
+    clearDraftFn?.()
     setEditing(null)
+    setDraftRestored(false)
     load()
   }
 
+  const cancelEditing = (clearDraftFn) => {
+    clearDraftFn?.()
+    setEditing(null)
+    setDraftRestored(false)
+  }
+
   const remove = async () => {
-    await deleteWorldItem(deleting.id)
+    await trashWorldItem(deleting.id)
     setDeleting(null)
     load()
-    toast('Let go.')
+    toast('Moved to the Trash — recoverable for 30 days.')
   }
 
   const current = items.filter((i) => i.kind === kind)
@@ -79,18 +107,23 @@ export default function World({ novelId, embedded }) {
   return (
     <div className={embedded ? undefined : 'app'}>
       {!embedded && novel && <SubPageTopbar novel={novel} title="Worldbuilding" />}
-      <div className="page page-wide">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 'var(--space-5)', flexWrap: 'wrap' }}>
-          <div>
-            <h2 style={{ margin: 0 }}>Worldbuilding</h2>
-            <p className="muted small" style={{ margin: '4px 0 0' }}>The places, peoples and strange things your story leans on.</p>
+      <div className="page page-wide world-library">
+        <header className="world-hero">
+          <div className="world-hero-mark" aria-hidden="true"><Icon icon="fa-solid fa-globe" /></div>
+          <div className="world-hero-copy">
+            <span className="world-eyebrow">Story atlas</span>
+            <h2>Worldbuilding</h2>
+            <p>The places, peoples and strange things your story leans on.</p>
           </div>
-          <button className="button button-primary" onClick={() => setEditing(newItem(kind))}>
+          <div className="world-hero-stat" aria-label={`${items.length} world entries`}>
+            <strong>{items.length}</strong><span>entries</span>
+          </div>
+          <button className="button button-primary world-add-button" onClick={() => openNewItem(kind)}>
             <Icon icon="fa-solid fa-plus" style={{ marginRight: 6 }} /> Add {active?.label.toLowerCase().replace(/s$/, '')}
           </button>
-        </div>
+        </header>
 
-        <div className="kind-tabs">
+        <div className="kind-tabs world-kind-tabs" aria-label="Worldbuilding categories">
           {WORLD_KINDS.map((k) => (
             <button key={k.key} className={`kind-tab ${kind === k.key ? 'active' : ''}`} onClick={() => setKind(k.key)}>
               <span className="nav-icon"><Icon icon={k.icon} /></span>
@@ -101,36 +134,62 @@ export default function World({ novelId, embedded }) {
         </div>
 
         {current.length === 0 ? (
-          <EmptyState icon={active?.icon} title={`No ${active?.label.toLowerCase()} yet`} action={<button className="button button-primary" onClick={() => setEditing(newItem(kind))}>Create the first one</button>}>
+          <EmptyState icon={active?.icon} title={`No ${active?.label.toLowerCase()} yet`} action={<button className="button button-primary" onClick={() => openNewItem(kind)}>Create the first one</button>}>
             Every world needs its corners. Start with one detail — a name, a view, a smell.
           </EmptyState>
         ) : (
-          <div className="card-grid">
+          <div className="world-card-grid">
             {current.map((i) => (
-              <div className="card" key={i.id} style={{ borderTop: `3px solid ${i.color || KIND_COLORS[i.kind]}` }} onContextMenu={(e) => worldMenu(e, i)}>
-                <h3 style={{ marginBottom: 2 }}>{i.name}</h3>
-                {i.summary && <p className="body" style={{ marginTop: 'var(--space-2)', whiteSpace: 'pre-wrap' }}>{i.summary}</p>}
-                {i.details && <p className="body muted small" style={{ whiteSpace: 'pre-wrap' }}>{i.details}</p>}
+              <article
+                className="world-glass-card"
+                key={i.id}
+                style={{ '--world-color': i.color || KIND_COLORS[i.kind] }}
+                onContextMenu={(e) => worldMenu(e, i)}
+                onClick={() => setEditing({ ...i })}
+              >
+                <div className="world-card-head">
+                  <span className="world-card-icon"><Icon icon={WORLD_KINDS.find((entry) => entry.key === i.kind)?.icon || active?.icon} /></span>
+                  <div>
+                    <span className="world-card-kind">{WORLD_KINDS.find((entry) => entry.key === i.kind)?.label}</span>
+                    <h3>{i.name}</h3>
+                  </div>
+                </div>
+                <div className="world-card-content">
+                  {i.summary && <p className="world-card-summary">{compactText(i.summary, 150)}</p>}
+                  {i.details && <p className="world-card-details">{compactText(i.details)}</p>}
+                  {!i.summary && !i.details && <p className="world-card-details">Open this entry to begin shaping its history and story purpose.</p>}
+                </div>
                 {i.tags?.length > 0 && (
-                  <div className="character-tags">
-                    {i.tags.map((t, idx) => (
+                  <div className="world-card-tags">
+                    {i.tags.slice(0, 3).map((t, idx) => (
                       <span className="tag" key={idx}>{t}</span>
                     ))}
+                    {i.tags.length > 3 && <span className="tag">+{i.tags.length - 3}</span>}
                   </div>
                 )}
-                <div className="muted small" style={{ marginTop: 'var(--space-2)' }}>{timeAgo(i.updatedAt || i.createdAt)}</div>
-                <div className="card-actions">
-                  <button className="button button-quiet" onClick={() => setEditing({ ...i })}>Edit</button>
-                  <button className="button button-quiet" onClick={() => setDeleting(i)}>Delete</button>
+                <div className="world-card-foot">
+                  <span><Icon icon="fa-regular fa-clock" /> {timeAgo(i.updatedAt || i.createdAt)}</span>
+                  <div className="world-card-actions">
+                    <button className="button button-quiet" onClick={(e) => { e.stopPropagation(); setEditing({ ...i }) }}><Icon icon="fa-solid fa-pen" /> Edit</button>
+                    <button className="button button-quiet world-delete" onClick={(e) => { e.stopPropagation(); setDeleting(i) }}><Icon icon="fa-solid fa-trash" /> Delete</button>
+                  </div>
                 </div>
-              </div>
+              </article>
             ))}
           </div>
         )}
       </div>
 
       {editing && (
-        <WorldModal item={editing} onChange={setEditing} onClose={() => setEditing(null)} onSave={save} isNew={!!editing.__new} />
+        <WorldModal
+          item={editing}
+          onChange={setEditing}
+          onClose={cancelEditing}
+          onSave={save}
+          isNew={!!editing.__new}
+          draftKey={editing.__new ? worldDraftKey(editing.kind) : draftKey(nid, 'world', editing.id)}
+          draftRestored={draftRestored && !!editing.__new}
+        />
       )}
       <ConfirmDialog open={!!deleting} onClose={() => setDeleting(null)} onConfirm={remove} title="Remove from the world?">
         “{deleting?.name}” will disappear from this world.
@@ -139,11 +198,17 @@ export default function World({ novelId, embedded }) {
   )
 }
 
-function WorldModal({ item, onChange, onClose, onSave, isNew }) {
+function WorldModal({ item, onChange, onClose, onSave, isNew, draftKey: dk, draftRestored }) {
+  const { clearDraft } = useDraftRecovery(dk, item)
   const set = (patch) => onChange({ ...item, ...patch })
 
   return (
-    <Modal open onClose={onClose} title={isNew ? 'New world entry' : item.name} width={560}>
+    <Modal open onClose={() => onClose(clearDraft)} title={isNew ? 'New world entry' : item.name} width={600} className="world-entry-modal">
+      {draftRestored && (
+        <div className="draft-restored-banner">
+          <Icon icon="fa-solid fa-rotate-left" /> Draft recovered — your unsaved work is back.
+        </div>
+      )}
       <div className="field">
         <label>Name</label>
         <input value={item.name || ''} onChange={(e) => set({ name: e.target.value })} autoFocus placeholder="The Alder Canal…" />
@@ -153,7 +218,7 @@ function WorldModal({ item, onChange, onClose, onSave, isNew }) {
         <div className="swatch-row" style={{ gap: 8 }}>
           {WORLD_KINDS.map((k) => (
             <button key={k.key} className={`tag ${item.kind === k.key ? 'tag-on' : ''}`} style={item.kind === k.key ? { background: 'var(--accent-fill)', color: 'var(--accent-fg)' } : {}} onClick={() => set({ kind: k.key, color: KIND_COLORS[k.key] })}>
-              {k.icon} {k.label}
+              <Icon icon={k.icon} /> {k.label}
             </button>
           ))}
         </div>
@@ -171,8 +236,8 @@ function WorldModal({ item, onChange, onClose, onSave, isNew }) {
         <input value={(item.tags || []).join(', ')} onChange={(e) => set({ tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="canal, magic, borderland" />
       </div>
       <div className="modal-foot">
-        <button className="button button-ghost" onClick={onClose}>Cancel</button>
-        <button className="button button-primary" onClick={onSave}>{isNew ? 'Set it in the world' : 'Save changes'}</button>
+        <button className="button button-ghost" onClick={() => onClose(clearDraft)}>Cancel</button>
+        <button className="button button-primary" onClick={() => onSave(clearDraft)}>{isNew ? 'Set it in the world' : 'Save changes'}</button>
       </div>
     </Modal>
   )

@@ -1,80 +1,122 @@
 /* ============================================================
-   Moonscribe design tokens — soft moonstone palette
-   Three themes: Daylight (light), Moonlight (dark), Amoled.
-   Every theme shares the same semantic token ladder so colours
-   always sit in one family. `auto` resolves to Daylight/Moonlight.
+   Moonscribe design tokens — brand v1
+   Ground + ink, a single moonlight-gold accent used only as stroke,
+   underline and small tint (never a solid fill). Cormorant Garamond +
+   Lora, tight 2/4/7 radii, soft ink-tinted shadows. Light "Parchment"
+   is the default; two dark themes retune the same semantic ladder to
+   gold-on-night.
    ============================================================ */
 :root {
   color-scheme: light;
 
-  /* palette — Daylight (warm cream + moon blue) */
-  --moon: #7ba3c9;
-  --moon-deep: #6a92bb;
-  --twilight: #4a6b8a;
-  --cream: #f9f6f1;
-  --ivory: #fffcf9;
-  --ivory-warm: #fdf9f3;
-  --rose: #d4a5a5;
-  --rose-deep: #c08f8f;
-  --charcoal: #3d3a36;
-  --grey: #8a847c;
-  --grey-soft: #b3ada4;
-  --sage: #a8c5a8;
-  --sage-deep: #7ea37e;
-  --mist: #e8e2d9;
-  --mist-soft: #f0ebe3;
+  /* ---- brand raw tokens (source of truth: the brand kit) ---- */
+  --color-bg: #f3f2f2;
+  --color-surface: #eae9e9;
+  --color-ink: #201f1d;
+  --color-accent: #b68235;
 
-  /* typography */
-  --font-heading: 'Cormorant Garamond', 'Georgia', serif;
-  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
-  --font-editor: 'Literata', 'Georgia', 'Times New Roman', serif;
+  --color-neutral-100: #f8f4f4;
+  --color-neutral-200: #eae7e7;
+  --color-neutral-300: #d7d3d3;
+  --color-neutral-400: #bab6b6;
+  --color-neutral-500: #9b9797;
+  --color-neutral-600: #7d7979;
+  --color-neutral-700: #605d5d;
+  --color-neutral-800: #444141;
+  --color-neutral-900: #2d2b2b;
+
+  --color-accent-100: #fff3e4;
+  --color-accent-200: #ffe3bf;
+  --color-accent-300: #facb8d;
+  --color-accent-400: #e1ad66;
+  --color-accent-500: #c28d41;
+  --color-accent-600: #a06f24;
+  --color-accent-700: #7d5411;
+  --color-accent-800: #5a3b0a;
+  --color-accent-900: #3a270d;
+
+  --divider: color-mix(in srgb, #201f1d 16%, transparent);
+  --divider-soft: color-mix(in srgb, #201f1d 9%, transparent);
+
+  /* ---- app semantic palette, mapped onto the brand ---- */
+  --moon: var(--color-accent);
+  --moon-deep: var(--color-accent-700);
+  --twilight: var(--color-neutral-900);
+  --cream: var(--color-bg);
+  --ivory: var(--color-surface);
+  --ivory-warm: #efeeee;
+  --rose: #a86a52;        /* restrained functional danger in a single-accent kit */
+  --rose-deep: #8f5540;
+  --charcoal: var(--color-ink);
+  --grey: var(--color-neutral-700);
+  --grey-soft: var(--color-neutral-500);
+  --sage: #7d8a6a;        /* functional 'final' status */
+  --sage-deep: #67754f;
+  --mist: var(--color-neutral-300);
+  --mist-soft: var(--color-neutral-200);
+
+  /* typography —
+     Cormorant Garamond : wordmark / large display headings
+     Fraunces           : chapter titles inside the editor (opsz optical-size axis)
+     Lora               : UI chrome, labels, notes
+     Source Serif 4     : editor body prose (opsz 8-60, highly legible at 16-18px) */
+  --font-heading:        'Cormorant Garamond', Georgia, serif;
+  --font-chapter:        'Fraunces', 'Cormorant Garamond', Georgia, serif;
+  --font-ui:             'Lora', Georgia, serif;
+  --font-editor:         'Source Serif 4', 'Lora', Georgia, 'Times New Roman', serif;
+  --font-heading-weight: 600;
 
   /* surfaces */
   --bg: var(--cream);
   --surface: var(--ivory);
   --surface-warm: var(--ivory-warm);
   --surface-elev: #ffffff;
-  --border: var(--mist);
-  --border-soft: var(--mist-soft);
+  --border: var(--divider);
+  --border-soft: var(--divider-soft);
 
-  /* accent states */
-  --active-bg: #eef3f8;
-  --active-border: #dce6ef;
-  --hover-bg: var(--mist-soft);
+  /* accent states — soft gold tints, never a solid brand fill */
+  --active-bg: var(--color-accent-100);
+  --active-border: color-mix(in srgb, var(--color-accent) 35%, transparent);
+  --hover-bg: color-mix(in srgb, var(--color-ink) 5%, transparent);
 
-  /* accent fills — filled pills & primary buttons */
-  --accent: var(--moon);
-  --accent-deep: var(--moon-deep);
-  --accent-soft: #eef3f8;
-  --accent-fill: var(--moon);
-  --accent-fill-hover: var(--moon-deep);
-  --accent-fg: #ffffff;
+  /* "fill" tokens resolve to a gold tint + dark-gold text, so every element
+     the app fills reads as considered tint rather than a solid block */
+  --accent: var(--color-accent);
+  --accent-deep: var(--color-accent-700);
+  --accent-soft: var(--color-accent-100);
+  --accent-fill: var(--color-accent-200);
+  --accent-fill-hover: var(--color-accent-300);
+  --accent-fg: var(--color-accent-800);
 
-  /* rose fills — warm actions (delete, remove, "for Storm") */
   --rose-fill: var(--rose);
   --rose-fill-hover: var(--rose-deep);
   --rose-fg: #ffffff;
 
-  --toast-bg: var(--charcoal);
-  --toast-fg: #f5f2ec;
+  --toast-bg: var(--color-ink);
+  --toast-fg: var(--color-bg);
 
   /* scrims & rings */
-  --overlay: rgba(61, 58, 54, 0.35);
-  --focus-ring: rgba(123, 163, 201, 0.28);
+  --overlay: color-mix(in srgb, var(--color-neutral-900) 42%, transparent);
+  --focus-ring: color-mix(in srgb, var(--color-accent) 30%, transparent);
 
-  /* activity heatmap */
-  --heat-1: #dbe6f2;
-  --heat-2: #a9c4dd;
-  --heat-3: #6f95bf;
-  --heat-4: #4a6d94;
+  /* activity heatmap — gold ramp */
+  --heat-1: var(--color-accent-100);
+  --heat-2: var(--color-accent-200);
+  --heat-3: var(--color-accent-400);
+  --heat-4: var(--color-accent-600);
 
-  /* effects */
-  --shadow-sm: 0 1px 2px rgba(61, 58, 54, 0.05), 0 2px 8px rgba(61, 58, 54, 0.04);
-  --shadow-md: 0 2px 6px rgba(61, 58, 54, 0.06), 0 10px 32px rgba(61, 58, 54, 0.07);
-  --shadow-lg: 0 8px 24px rgba(61, 58, 54, 0.10), 0 24px 64px rgba(61, 58, 54, 0.10);
-  --radius-sm: 8px;
-  --radius: 14px;
-  --radius-lg: 22px;
+  /* motion — shared easing curves */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.5, 1);
+
+  /* effects — soft ink shadows, tight radii */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2d2b2b 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2d2b2b 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2d2b2b 22%, transparent);
+  --radius-sm: 2px;
+  --radius: 4px;
+  --radius-lg: 7px;
 
   /* spacing */
   --space-1: 4px;
@@ -90,118 +132,308 @@
   --measure: 68ch;
 }
 
-/* ---------------- Moonlight (dark) — deep-sea night ----------------
-   One cool hue family end to end: warm text is gone, rose and sage are
-   cool-tinted, and every grey is a shade of the same blue-black. */
+/* An explicit light selector so the toggle can force Parchment from a dark
+   theme; it simply reuses the :root brand values. */
+[data-theme='light'] { color-scheme: light; }
+
+/* ---------------- Moonlight (dark) — gold on a deep night ---------------- */
 [data-theme='dark'] {
   color-scheme: dark;
 
-  --moon: #8fb5da;
-  --moon-deep: #b6d1ec;
-  --twilight: #c3d6e9;
-  --cream: #10151d;
-  --ivory: #161d27;
-  --ivory-warm: #1b232e;
-  --rose: #d2a3ad;
-  --rose-deep: #c18d99;
-  --charcoal: #dfe6ee;
-  --grey: #8d9bab;
-  --grey-soft: #64727f;
-  --sage: #a0b9a8;
-  --sage-deep: #87a990;
-  --mist: #28323f;
-  --mist-soft: #1e2630;
+  --twilight: #efe8dc;
+  --cream: #16151a;
+  --ivory: #1d1c22;
+  --ivory-warm: #22212a;
+  --charcoal: #ece7de;
+  --grey: #9c968b;
+  --grey-soft: #6f6a62;
+  --sage: #9aa87f;
+  --sage-deep: #b0bd95;
+  --rose: #c08a72;
+  --rose-deep: #d09a82;
+  --mist: #322f39;
+  --mist-soft: #262430;
+
+  --moon: #d8ab5c;
+  --moon-deep: #ecc98a;
 
   --bg: var(--cream);
   --surface: var(--ivory);
   --surface-warm: var(--ivory-warm);
-  --surface-elev: #1e2733;
-  --border: var(--mist);
-  --border-soft: var(--mist-soft);
+  --surface-elev: #26242e;
+  --border: color-mix(in srgb, #efe8dc 14%, transparent);
+  --border-soft: color-mix(in srgb, #efe8dc 8%, transparent);
 
-  --active-bg: #1d2734;
-  --active-border: #2c3a4a;
-  --hover-bg: var(--mist-soft);
+  --active-bg: #2a2416;
+  --active-border: color-mix(in srgb, #d8ab5c 40%, transparent);
+  --hover-bg: color-mix(in srgb, #efe8dc 7%, transparent);
 
-  --accent-soft: #1d2734;
-  --accent-fill: #4d7baa;
-  --accent-fill-hover: #5e8fbf;
-  --accent-fg: #ffffff;
+  --accent: #d8ab5c;
+  --accent-deep: #ecc98a;
+  --accent-soft: #2a2416;
+  --accent-fill: #3a2f18;
+  --accent-fill-hover: #4c3d1f;
+  --accent-fg: #f0d9a8;
 
-  --rose-fill: #a97d89;
-  --rose-fill-hover: #b98c98;
+  --rose-fill: #9c6a54;
+  --rose-fill-hover: #b07b63;
   --rose-fg: #ffffff;
 
   --toast-bg: var(--surface-elev);
   --toast-fg: var(--charcoal);
 
-  --overlay: rgba(4, 8, 14, 0.55);
-  --focus-ring: rgba(143, 181, 218, 0.25);
+  --overlay: rgba(8, 7, 10, 0.55);
+  --focus-ring: rgba(216, 171, 92, 0.28);
 
-  --heat-1: #202a36;
-  --heat-2: #2c4a63;
-  --heat-3: #3f6d8f;
-  --heat-4: #5d90b8;
+  --heat-1: #2a2416;
+  --heat-2: #4a3a1c;
+  --heat-3: #7d5f2a;
+  --heat-4: #b6883c;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
-  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.3), 0 10px 32px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4), 0 24px 64px rgba(0, 0, 0, 0.45);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
-/* ---------------- Amoled (dark) — pure night ----------------
-   True-black background for OLED screens. Elevation is carried by
-   borders, not shadows, so black pixels stay black. */
+/* ---------------- Amoled (dark) — pure night ---------------- */
 [data-theme='amoled'] {
   color-scheme: dark;
 
-  --moon: #9cc2e8;
-  --moon-deep: #c5daf2;
-  --twilight: #d0e0f0;
+  --twilight: #f2ece1;
   --cream: #000000;
-  --ivory: #0a0c10;
-  --ivory-warm: #10141a;
-  --rose: #d9a9b4;
-  --rose-deep: #cf94a1;
-  --charcoal: #e8ecf2;
-  --grey: #98a4b2;
-  --grey-soft: #64727f;
-  --sage: #a4c1ab;
-  --sage-deep: #8cae96;
-  --mist: #1d242e;
-  --mist-soft: #141922;
+  --ivory: #0b0a0d;
+  --ivory-warm: #121116;
+  --charcoal: #efe9df;
+  --grey: #9c968b;
+  --grey-soft: #6a655d;
+  --sage: #a1af86;
+  --sage-deep: #b7c49b;
+  --rose: #c68d74;
+  --rose-deep: #d59d84;
+  --mist: #24222b;
+  --mist-soft: #17161c;
+
+  --moon: #e0b366;
+  --moon-deep: #f0cf90;
 
   --bg: var(--cream);
   --surface: var(--ivory);
   --surface-warm: var(--ivory-warm);
-  --surface-elev: #141922;
-  --border: var(--mist);
-  --border-soft: var(--mist-soft);
+  --surface-elev: #141319;
+  --border: color-mix(in srgb, #efe9df 12%, transparent);
+  --border-soft: color-mix(in srgb, #efe9df 7%, transparent);
 
-  --active-bg: #11161d;
-  --active-border: #24303d;
-  --hover-bg: var(--mist-soft);
+  --active-bg: #211a0f;
+  --active-border: color-mix(in srgb, #e0b366 42%, transparent);
+  --hover-bg: color-mix(in srgb, #efe9df 6%, transparent);
 
-  --accent-soft: #10161f;
-  --accent-fill: #3b6ea8;
-  --accent-fill-hover: #4c82bd;
-  --accent-fg: #ffffff;
+  --accent: #e0b366;
+  --accent-deep: #f0cf90;
+  --accent-soft: #1a1509;
+  --accent-fill: #2e2613;
+  --accent-fill-hover: #40341a;
+  --accent-fg: #f2d9a8;
 
-  --rose-fill: #a97a87;
-  --rose-fill-hover: #bb8b98;
+  --rose-fill: #9c6a54;
+  --rose-fill-hover: #b07b63;
   --rose-fg: #ffffff;
 
   --toast-bg: var(--surface-elev);
   --toast-fg: var(--charcoal);
 
   --overlay: rgba(0, 0, 0, 0.7);
-  --focus-ring: rgba(156, 194, 232, 0.3);
+  --focus-ring: rgba(224, 179, 102, 0.3);
 
-  --heat-1: #0f141b;
-  --heat-2: #1c3348;
-  --heat-3: #2f5a7d;
-  --heat-4: #4f8bb8;
+  --heat-1: #171106;
+  --heat-2: #3a2c12;
+  --heat-3: #6e5322;
+  --heat-4: #b0863a;
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --shadow-md: 0 2px 6px rgba(0, 0, 0, 0.5), 0 10px 32px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.55), 0 24px 64px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+/* ── Ember — warm ember-glow ink on deep ochre night ─────────────────────── */
+[data-theme='ember'] {
+  color-scheme: dark;
+  --twilight: #f5dfc0;
+  --cream:    #1a0f07;
+  --ivory:    #231408;
+  --ivory-warm: #2c1b0b;
+  --charcoal: #f4deb8;
+  --grey:     #b08862;
+  --grey-soft:#7a5c3a;
+  --sage:     #a8935a;
+  --sage-deep:#c4ad72;
+  --rose:     #d07050;
+  --rose-deep:#e09060;
+  --mist:     #36200e;
+  --mist-soft:#261508;
+  --moon:     #e07030;
+  --moon-deep:#f09050;
+  --bg:       var(--cream);
+  --surface:  var(--ivory);
+  --surface-warm: var(--ivory-warm);
+  --surface-elev: #301c0a;
+  --border:     color-mix(in srgb, #f5dfc0 14%, transparent);
+  --border-soft:color-mix(in srgb, #f5dfc0 8%, transparent);
+  --active-bg:  #2e1a06;
+  --active-border: color-mix(in srgb, #e07030 40%, transparent);
+  --hover-bg:   color-mix(in srgb, #f5dfc0 7%, transparent);
+  --accent:     #e07030;
+  --accent-deep:#f09050;
+  --accent-soft:#261508;
+  --accent-fill:#3a1e08;
+  --accent-fill-hover:#502a0a;
+  --accent-fg:  #f5ddb8;
+  --rose-fill:  #8a4030;
+  --rose-fill-hover:#a05040;
+  --rose-fg:    #fff;
+  --toast-bg:   var(--surface-elev);
+  --toast-fg:   var(--charcoal);
+  --overlay:    rgba(12,6,2,0.6);
+  --focus-ring: rgba(224,112,48,0.3);
+  --heat-1:#2e1a06; --heat-2:#5a3010; --heat-3:#a05020; --heat-4:#d07030;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 3px 10px rgba(0,0,0,0.5);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.55);
+}
+
+/* ── Moss — sage-green ink on earthy forest night ────────────────────────── */
+[data-theme='moss'] {
+  color-scheme: dark;
+  --twilight: #d4e8c8;
+  --cream:    #080f07;
+  --ivory:    #0e1a0c;
+  --ivory-warm: #141f12;
+  --charcoal: #cce0c0;
+  --grey:     #7aa878;
+  --grey-soft:#4d7050;
+  --sage:     #a8c880;
+  --sage-deep:#bcd898;
+  --rose:     #a07060;
+  --rose-deep:#b88070;
+  --mist:     #1a2e18;
+  --mist-soft:#101e0e;
+  --moon:     #5fa870;
+  --moon-deep:#80c890;
+  --bg:       var(--cream);
+  --surface:  var(--ivory);
+  --surface-warm: var(--ivory-warm);
+  --surface-elev: #162014;
+  --border:     color-mix(in srgb, #d4e8c8 14%, transparent);
+  --border-soft:color-mix(in srgb, #d4e8c8 8%, transparent);
+  --active-bg:  #142810;
+  --active-border: color-mix(in srgb, #5fa870 40%, transparent);
+  --hover-bg:   color-mix(in srgb, #d4e8c8 7%, transparent);
+  --accent:     #5fa870;
+  --accent-deep:#80c890;
+  --accent-soft:#0e1e0c;
+  --accent-fill:#182e14;
+  --accent-fill-hover:#20401c;
+  --accent-fg:  #c0dca8;
+  --rose-fill:  #6a4a3c;
+  --rose-fill-hover:#806050;
+  --rose-fg:    #fff;
+  --toast-bg:   var(--surface-elev);
+  --toast-fg:   var(--charcoal);
+  --overlay:    rgba(2,8,2,0.6);
+  --focus-ring: rgba(95,168,112,0.3);
+  --heat-1:#142810; --heat-2:#2a4a20; --heat-3:#406e30; --heat-4:#5fa048;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 3px 10px rgba(0,0,0,0.5);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.55);
+}
+
+/* ── Sandstone — warm desert parchment (light) ───────────────────────────── */
+[data-theme='sandstone'] {
+  color-scheme: light;
+  --twilight: #3d3428;
+  --cream:    #f5eedf;
+  --ivory:    #ede5d2;
+  --ivory-warm:#e8deca;
+  --charcoal: #2e2618;
+  --grey:     #7a6e58;
+  --grey-soft:#a09080;
+  --sage:     #6e7a56;
+  --sage-deep:#565f40;
+  --rose:     #9a6050;
+  --rose-deep:#7e4c3c;
+  --mist:     #d8cdb8;
+  --mist-soft:#e5dccc;
+  --moon:     #b68235;
+  --moon-deep:#8a6020;
+  --bg:       var(--cream);
+  --surface:  var(--ivory);
+  --surface-warm: var(--ivory-warm);
+  --surface-elev: #faf5ea;
+  --border:     color-mix(in srgb, #2e2618 16%, transparent);
+  --border-soft:color-mix(in srgb, #2e2618 9%, transparent);
+  --active-bg:  #f0e4c8;
+  --active-border: color-mix(in srgb, #b68235 35%, transparent);
+  --hover-bg:   color-mix(in srgb, #2e2618 5%, transparent);
+  --accent:     #b68235;
+  --accent-deep:#8a6020;
+  --accent-soft:#f8eedc;
+  --accent-fill:#f2e4c0;
+  --accent-fill-hover:#e8d8a8;
+  --accent-fg:  #5a3b0a;
+  --rose-fill:  #c4806a;
+  --rose-fill-hover:#b07060;
+  --rose-fg:    #fff;
+  --toast-bg:   #2e2618;
+  --toast-fg:   #f5eedf;
+  --overlay:    rgba(30,24,14,0.42);
+  --focus-ring: rgba(182,130,53,0.3);
+  --heat-1:#f8ecd8; --heat-2:#f0d8a8; --heat-3:#d4a840; --heat-4:#a07818;
+  --shadow-sm: 0 1px 2px rgba(30,24,14,0.14);
+  --shadow-md: 0 3px 10px rgba(30,24,14,0.16);
+  --shadow-lg: 0 12px 32px rgba(30,24,14,0.22);
+}
+
+/* ── Midnight — pure obsidian, silver ink ────────────────────────────────── */
+[data-theme='midnight'] {
+  color-scheme: dark;
+  --twilight: #e8e4f0;
+  --cream:    #06060a;
+  --ivory:    #0c0b14;
+  --ivory-warm:#121020;
+  --charcoal: #e2dff0;
+  --grey:     #7874a0;
+  --grey-soft:#504d6e;
+  --sage:     #8090b0;
+  --sage-deep:#a0b0d0;
+  --rose:     #b06878;
+  --rose-deep:#c07888;
+  --mist:     #1c1a2e;
+  --mist-soft:#12111e;
+  --moon:     #9060d0;
+  --moon-deep:#b090e8;
+  --bg:       var(--cream);
+  --surface:  var(--ivory);
+  --surface-warm: var(--ivory-warm);
+  --surface-elev: #181620;
+  --border:     color-mix(in srgb, #e8e4f0 12%, transparent);
+  --border-soft:color-mix(in srgb, #e8e4f0 7%, transparent);
+  --active-bg:  #1a1230;
+  --active-border: color-mix(in srgb, #9060d0 40%, transparent);
+  --hover-bg:   color-mix(in srgb, #e8e4f0 6%, transparent);
+  --accent:     #9060d0;
+  --accent-deep:#b090e8;
+  --accent-soft:#160e28;
+  --accent-fill:#22183c;
+  --accent-fill-hover:#30204e;
+  --accent-fg:  #d8c0f8;
+  --rose-fill:  #7a4050;
+  --rose-fill-hover:#905060;
+  --rose-fg:    #fff;
+  --toast-bg:   var(--surface-elev);
+  --toast-fg:   var(--charcoal);
+  --overlay:    rgba(0,0,4,0.72);
+  --focus-ring: rgba(144,96,208,0.3);
+  --heat-1:#1a1230; --heat-2:#302050; --heat-3:#583890; --heat-4:#7848c0;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.55);
+  --shadow-md: 0 3px 10px rgba(0,0,0,0.6);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.65);
 }

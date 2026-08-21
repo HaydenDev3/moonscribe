@@ -30,6 +30,8 @@ export async function createTile(novelId, data) {
     image: data.image || null, // dataURL
     url: data.url || '', // link tiles
     palette: data.palette || [], // palette tiles: hex strings
+    links: data.links || [],
+    stack: data.stack || null,
     createdAt: now,
     updatedAt: now
   }
