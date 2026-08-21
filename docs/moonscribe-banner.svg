@@ -1,0 +1,93 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="420" viewBox="0 0 1400 420" role="img" aria-labelledby="title desc">
+  <title id="title">MoonScribe banner</title>
+  <desc id="desc">MoonScribe hero illustration with a moon, stars, and soft waves.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#0f1223"/>
+      <stop offset="45%" stop-color="#171b35"/>
+      <stop offset="100%" stop-color="#1d1b2d"/>
+    </linearGradient>
+    <linearGradient id="moonGlow" x1="0%" x2="100%" y1="0%" y2="0%">
+      <stop offset="0%" stop-color="#fef7d8"/>
+      <stop offset="100%" stop-color="#d8d8ff"/>
+    </linearGradient>
+    <linearGradient id="waveA" x1="0%" x2="100%" y1="0%" y2="0%">
+      <stop offset="0%" stop-color="#8ac7ff" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#8f86ff" stop-opacity="0.6"/>
+    </linearGradient>
+    <linearGradient id="waveB" x1="0%" x2="100%" y1="0%" y2="0%">
+      <stop offset="0%" stop-color="#7ce7d2" stop-opacity="0.8"/>
+      <stop offset="100%" stop-color="#dcb7ff" stop-opacity="0.7"/>
+    </linearGradient>
+    <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="18" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <style><![CDATA[
+      .floater { animation: float 8s ease-in-out infinite; }
+      .pulse { animation: pulse 5s ease-in-out infinite; }
+      .waveA { animation: driftA 16s ease-in-out infinite alternate; }
+      .waveB { animation: driftB 18s ease-in-out infinite alternate; }
+      .star { animation: twinkle 3.5s ease-in-out infinite; }
+      @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-12px); }
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.75; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.05); }
+      }
+      @keyframes driftA {
+        0% { transform: translateX(-10px); }
+        100% { transform: translateX(18px); }
+      }
+      @keyframes driftB {
+        0% { transform: translateX(14px); }
+        100% { transform: translateX(-18px); }
+      }
+      @keyframes twinkle {
+        0%, 100% { opacity: 0.35; }
+        50% { opacity: 1; }
+      }
+    ]]></style>
+  </defs>
+
+  <rect width="1400" height="420" fill="url(#bg)"/>
+  <circle class="pulse" cx="1110" cy="110" r="72" fill="url(#moonGlow)" opacity="0.92"/>
+  <circle cx="1088" cy="96" r="58" fill="#f4efe3" opacity="0.12"/>
+
+  <g class="star" opacity="0.9">
+    <circle cx="118" cy="82" r="3" fill="#f7e7ae"/>
+    <circle cx="255" cy="124" r="2.5" fill="#e8e5ff"/>
+    <circle cx="330" cy="70" r="2.3" fill="#c7eaff"/>
+    <circle cx="690" cy="80" r="2.8" fill="#f7d7ff"/>
+    <circle cx="840" cy="130" r="2.6" fill="#dff6ff"/>
+    <circle cx="1270" cy="75" r="2.4" fill="#f3f0ff"/>
+    <circle cx="980" cy="160" r="2.5" fill="#f4d69c"/>
+  </g>
+
+  <g class="floater">
+    <rect x="150" y="135" width="390" height="190" rx="20" fill="#f9f6ff" opacity="0.12" stroke="#d5d4ff" stroke-opacity="0.28"/>
+    <path d="M196 260 h310" stroke="#d5d7ff" stroke-width="3" stroke-linecap="round" opacity="0.75"/>
+    <path d="M196 222 h242" stroke="#d5d7ff" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+    <path d="M196 185 h280" stroke="#d5d7ff" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+    <path d="M196 145 h160" stroke="#d5d7ff" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+    <circle cx="510" cy="164" r="24" fill="#8ac7ff" opacity="0.75"/>
+    <circle cx="540" cy="164" r="12" fill="#c4d9ff" opacity="0.9"/>
+  </g>
+
+  <g class="waveA" opacity="0.95">
+    <path d="M0 304 C 170 265, 250 345, 420 315 S 720 270, 900 320 S 1220 350, 1400 310 L1400 420 L0 420 Z" fill="url(#waveA)"/>
+  </g>
+  <g class="waveB" opacity="0.88">
+    <path d="M0 340 C 150 305, 260 375, 440 352 S 760 318, 900 354 S 1200 390, 1400 336 L1400 420 L0 420 Z" fill="url(#waveB)"/>
+  </g>
+
+  <g filter="url(#softGlow)">
+    <text x="130" y="110" fill="#f4f1ff" font-family="Georgia, 'Times New Roman', serif" font-size="60" font-weight="700" letter-spacing="2">MoonScribe</text>
+    <text x="132" y="156" fill="#cdd7ff" font-family="Arial, sans-serif" font-size="22" letter-spacing="3">PRIVATE WRITING • WORLD-BUILDING • BOOK DESIGN</text>
+  </g>
+</svg>
