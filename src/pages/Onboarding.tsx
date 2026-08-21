@@ -32,7 +32,7 @@ export default function Onboarding() {
         <div className="moon-mark">
           <MoonMark />
         </div>
-        <h1>Moonscribe</h1>
+        <h1>MoonScribe</h1>
         <div className="dedication">made with love, for Storm</div>
         <p className="lead">
           A quiet, private place for your stories. Everything you write stays on this device —

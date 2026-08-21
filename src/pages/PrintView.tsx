@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { useParams } from 'react-router-dom'
 import { getNovel, updateNovel } from '../db/novels'
 import { listChapters } from '../db/chapters'
@@ -16,9 +16,9 @@ const FONTS = {
 
 export default function PrintView() {
   const { id } = useParams()
-  const [novel, setNovel] = useState(null)
-  const [chapters, setChapters] = useState([])
-  const [layout, setLayout] = useState({})
+  const [novel, setNovel] = useState<any>(null)
+  const [chapters, setChapters] = useState<any[]>([])
+  const [layout, setLayout] = useState<Record<string, any>>({})
   const [useDesignerTheme, setUseDesignerTheme] = useState(true)
   const [device, setDevice] = useState('print')
 
@@ -27,7 +27,7 @@ export default function PrintView() {
       const n = await getNovel(id)
       setNovel(n)
       setChapters(await listChapters(id))
-      let printOptions = {}
+      let printOptions: Record<string, any> = {}
       try {
         printOptions = JSON.parse(sessionStorage.getItem(`moonscribe:print:${id}`) || '{}')
       } catch {
@@ -86,7 +86,7 @@ export default function PrintView() {
       </div>
 
       <div className={`device-preview device-${device}`} style={activeDevice.width ? { width: activeDevice.width, height: activeDevice.height } : undefined}>
-      <div className={`book-view ${layout.dropCap ? 'dropcap' : ''}`} style={{ fontFamily: fontFamily, fontSize: device === 'print' ? `${bodyPx}px` : `${Math.max(13, bodyPx)}px`, '--print-paper': theme.paper, '--print-ink': theme.ink, '--print-accent': theme.accent, width: device === 'print' ? `${w}mm` : '100%', minHeight: device === 'print' ? `${h}mm` : '100%', padding: device === 'print' ? `${margin}mm` : device === 'iphone' ? '42px 28px' : '54px 44px' }}>
+      <div className={`book-view ${layout.dropCap ? 'dropcap' : ''}`} style={{ fontFamily: fontFamily, fontSize: device === 'print' ? `${bodyPx}px` : `${Math.max(13, bodyPx)}px`, ['--print-paper' as any]: theme.paper, ['--print-ink' as any]: theme.ink, ['--print-accent' as any]: theme.accent, width: device === 'print' ? `${w}mm` : '100%', minHeight: device === 'print' ? `${h}mm` : '100%', padding: device === 'print' ? `${margin}mm` : device === 'iphone' ? '42px 28px' : '54px 44px' } as CSSProperties}>
         {layout.includeFrontMatter !== false && <div className="title-page">
           <div className="t-title">{novel.title}</div>
           <div className="t-by">{coverByline(layout, novel)}</div>

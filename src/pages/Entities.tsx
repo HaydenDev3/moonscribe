@@ -63,7 +63,7 @@ function EntityCard({ entity, kind, onClick, onContextMenu }) {
 }
 
 function EntityModal({ open, onClose, entity, kind, onSave }) {
-  const [form, setForm] = useState({})
+  const [form, setForm] = useState<Record<string, any>>({})
   const [activeTab, setActiveTab] = useState(0)
   const fileRef = useRef(null)
   const colors = entityColors()

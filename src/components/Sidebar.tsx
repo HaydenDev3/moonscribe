@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
+import type { CSSProperties, RefObject } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { formatWords } from '../utils/words'
 import { timeAgo } from '../utils/dates'
@@ -11,8 +12,18 @@ import { useApp } from '../context/AppContext'
 import ProfileAvatar from './ProfileAvatar'
 
 // ── Add-item dropdown ────────────────────────────────────────────────────────
-function AddMenu({ onAdd, currentChapter, onClose, anchorRef }) {
-  const ref = useRef(null)
+function AddMenu({
+  onAdd,
+  currentChapter: _currentChapter,
+  onClose,
+  anchorRef,
+}: {
+  onAdd: (kind: string, parentId: string | null) => void
+  currentChapter?: unknown
+  onClose: () => void
+  anchorRef: RefObject<HTMLButtonElement | null>
+}) {
+  const ref = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     const handler = (e) => {
@@ -264,7 +275,7 @@ export default function Sidebar({
                 <span
                   key={person.id}
                   className={`binder-live-avatar ${person.activity === 'writing' ? 'is-writing' : 'is-viewing'}`}
-                  style={{ '--presence-color': person.activity === 'writing' ? 'var(--accent)' : 'var(--panel-ink)' }}
+                  style={{ ['--presence-color' as any]: person.activity === 'writing' ? 'var(--accent)' : 'var(--panel-ink)' } as CSSProperties}
                   title={`${person.username} · ${person.activity === 'writing' ? 'writing' : 'viewing'}`}
                 >
                   <ProfileAvatar src={person.avatar} name={person.username} />

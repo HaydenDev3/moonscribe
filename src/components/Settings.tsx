@@ -15,12 +15,12 @@ import * as syncEngine from '../sync/engine'
 import { NOVEL_NAV } from '../nav'
 
 const IDLE_OPTIONS = [
-  { value: 0, label: 'Never' },
-  { value: 1, label: '1 minute' },
-  { value: 5, label: '5 minutes' },
-  { value: 15, label: '15 minutes' },
-  { value: 30, label: '30 minutes' },
-  { value: 60, label: '1 hour' }
+  { value: '0', label: 'Never' },
+  { value: '1', label: '1 minute' },
+  { value: '5', label: '5 minutes' },
+  { value: '15', label: '15 minutes' },
+  { value: '30', label: '30 minutes' },
+  { value: '60', label: '1 hour' }
 ]
 
 const CATEGORIES = [
@@ -106,6 +106,7 @@ export default function Settings() {
               fontName={fontName}
               setFontName={setFontName}
               fontFileRef={fontFileRef}
+              toast={toast}
             />
           )}
           {!query && cat === 'editor' && <EditorSettings settings={settings} updateSettings={updateSettings} />}
@@ -133,7 +134,7 @@ export default function Settings() {
           )}
           {!query && cat === 'about' && (
             <section className="settings-panel">
-              <h2>Moonscribe</h2>
+              <h2>MoonScribe</h2>
               <p className="muted">A quiet, private place to write — made with love, for Storm. Every word stays on your device by default; nothing is ever counted against you.</p>
               <p className="muted small">Online across your devices · offline-safe · yours.</p>
               <div className="settings-row" style={{ marginTop: 'var(--space-5)' }}>
@@ -319,7 +320,7 @@ const ACCENT_OPTIONS = [
   { value: 'silver', label: 'Silver', color: '#7c858f' },
 ]
 
-function Appearance({ settings, updateSettings, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, fontName, setFontName, fontFileRef }) {
+function Appearance({ settings, updateSettings, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, fontName, setFontName, fontFileRef, toast }) {
   const themes = [
     ['light', 'Parchment', '#f4efe5', '#27221d'], ['sandstone', 'Sandstone', '#d8c0a2', '#3c2d22'],
     ['dark', 'Moonlight', '#17161c', '#e8e0d5'], ['ember', 'Ember', '#211713', '#f0c7a3'],
@@ -457,7 +458,7 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
         {settings.ambientSound && <div className="settings-row"><div><div className="settings-row-title">Ambient mood</div><div className="settings-row-sub">Set the atmosphere of the room while you write.</div></div><Select ariaLabel="Ambient mood" width={190} value={settings.ambientMood || 'moonlit'} onChange={(v) => updateSettings({ ambientMood: v })} options={[{ value: 'moonlit', label: 'Moonlit studio', hint: 'airy and calm' }, { value: 'hearth', label: 'Hearth glow', hint: 'warm and intimate' }, { value: 'rainglass', label: 'Rain on glass', hint: 'cool and reflective' }]} /></div>}
         <div className="settings-row"><div><div className="settings-row-title">Sound volume</div><div className="settings-row-sub">Keep feedback comfortably beneath music and calls.</div></div><input className="settings-volume" type="range" min="0" max="100" value={Number(settings.soundVolume) || 35} onChange={(e) => updateSettings({ soundVolume: Number(e.target.value) })} aria-label="Sound volume" /></div>
       </>}
-      <div className="settings-row"><div><div className="settings-row-title">Interface scale</div><div className="settings-row-sub">Resize navigation, dialogs, buttons and labels throughout MoonScribe.</div></div><Select ariaLabel="Interface scale" width={150} value={Number(settings.interfaceScale) || 100} onChange={(v) => updateSettings({ interfaceScale: Number(v) })} options={[{ value: 90, label: '90%', hint: 'compact' }, { value: 100, label: '100%', hint: 'default' }, { value: 110, label: '110%', hint: 'large' }, { value: 120, label: '120%', hint: 'largest' }]} /></div>
+      <div className="settings-row"><div><div className="settings-row-title">Interface scale</div><div className="settings-row-sub">Resize navigation, dialogs, buttons and labels throughout MoonScribe.</div></div><Select ariaLabel="Interface scale" width={150} value={String(settings.interfaceScale || 100)} onChange={(v) => updateSettings({ interfaceScale: Number(v) })} options={[{ value: '90', label: '90%', hint: 'compact' }, { value: '100', label: '100%', hint: 'default' }, { value: '110', label: '110%', hint: 'large' }, { value: '120', label: '120%', hint: 'largest' }]} /></div>
       <div className="settings-row"><div><div className="settings-row-title">Control density</div><div className="settings-row-sub">Choose how much information fits on screen.</div></div><Select ariaLabel="Control density" width={160} value={settings.interfaceDensity || 'comfortable'} onChange={(v) => updateSettings({ interfaceDensity: v })} options={[{ value: 'compact', label: 'Compact' }, { value: 'comfortable', label: 'Comfortable' }, { value: 'spacious', label: 'Spacious' }]} /></div>
       <div className="settings-row"><div><div className="settings-row-title">Corner style</div><div className="settings-row-sub">Change the visual character of cards, menus and controls.</div></div><Select ariaLabel="Corner style" width={160} value={settings.cornerStyle || 'rounded'} onChange={(v) => updateSettings({ cornerStyle: v })} options={[{ value: 'square', label: 'Precise' }, { value: 'rounded', label: 'Rounded' }, { value: 'soft', label: 'Extra soft' }]} /></div>
       <div className="settings-row"><div><div className="settings-row-title">Simplify decoration</div><div className="settings-row-sub">Reduce grain, glow and ornamental effects while keeping the theme.</div></div><Toggle checked={!!settings.simplifiedDecorations} onChange={(v) => updateSettings({ simplifiedDecorations: v })} /></div>
@@ -558,7 +559,7 @@ function EditorSettings({ settings, updateSettings }) {
       <div className="settings-row">
         <div>
           <div className="settings-row-title">Evening warmth</div>
-          <div className="settings-row-sub">After 5 pm the screen very gently warms toward amber — like f.lux, but just for Moonscribe.</div>
+          <div className="settings-row-sub">After 5 pm the screen very gently warms toward amber — like f.lux, but just for MoonScribe.</div>
         </div>
         <Toggle checked={!!settings.timewarmth} onChange={(v) => updateSettings({ timewarmth: v })} />
       </div>
@@ -586,8 +587,8 @@ function Performance({ settings, updateSettings }) {
       <p className="muted">Tune MoonScribe for instant-feeling typing without sacrificing draft safety.</p>
       <div className="settings-row">
         <div><div className="settings-row-title">Autosave pause</div><div className="settings-row-sub">Save after you briefly stop typing. Writes are serialised so an older save cannot replace a newer draft.</div></div>
-        <Select ariaLabel="Autosave pause" width={160} value={Number(settings.autosaveDelay) || 1800} onChange={(v) => updateSettings({ autosaveDelay: Number(v) })} options={[
-          { value: 800, label: 'Fast', hint: '0.8 sec' }, { value: 1800, label: 'Balanced', hint: '1.8 sec' }, { value: 3500, label: 'Relaxed', hint: '3.5 sec' },
+        <Select ariaLabel="Autosave pause" width={160} value={String(settings.autosaveDelay || 1800)} onChange={(v) => updateSettings({ autosaveDelay: Number(v) })} options={[
+          { value: '800', label: 'Fast', hint: '0.8 sec' }, { value: '1800', label: 'Balanced', hint: '1.8 sec' }, { value: '3500', label: 'Relaxed', hint: '3.5 sec' },
         ]} />
       </div>
       <div className="settings-row">
@@ -701,7 +702,7 @@ function LockSecurity({ appLock, enableAppLock, updateAppLock, disableAppLock, l
           </div>
           <div className="settings-row">
             <div><div className="settings-row-title">Auto-lock after idle</div><div className="settings-row-sub">Re-lock if left unattended.</div></div>
-            <Select ariaLabel="Auto-lock" width={150} value={appLock.autoLockMinutes || 0} onChange={(v) => updateAppLock({ autoLockMinutes: Number(v) })} options={IDLE_OPTIONS} />
+            <Select ariaLabel="Auto-lock" width={150} value={String(appLock.autoLockMinutes ?? 0)} onChange={(v) => updateAppLock({ autoLockMinutes: Number(v) })} options={IDLE_OPTIONS} />
           </div>
           <div className="actions-row" style={{ flexWrap: 'wrap' }}>
             <button className="button button-ghost" onClick={lockNow}>Lock now</button>
@@ -719,7 +720,7 @@ function LockSecurity({ appLock, enableAppLock, updateAppLock, disableAppLock, l
           <div className="field"><input className="text-field" type="password" inputMode={kind === 'pin' ? 'numeric' : 'text'} value={confirm} onChange={(e) => setConfirm(clean(e.target.value))} placeholder="Enter it again to confirm" /></div>
           <div className="settings-row">
             <div><div className="settings-row-title">Auto-lock after idle</div></div>
-            <Select ariaLabel="Auto-lock" width={150} value={minutes} onChange={(v) => setMinutes(Number(v))} options={IDLE_OPTIONS} />
+            <Select ariaLabel="Auto-lock" width={150} value={String(minutes)} onChange={(v) => setMinutes(Number(v))} options={IDLE_OPTIONS} />
           </div>
           <button className="button button-primary" onClick={turnOn} disabled={!pass || !confirm}>Turn on app lock</button>
         </>
@@ -844,7 +845,7 @@ function PrivacyData({ toast, refreshNovels, fileRef }) {
           {Object.entries(dbStats).map(([name, count]) => (
             <div key={name} className="db-stat-row">
               <span className="db-stat-name">{name}</span>
-              <span className="db-stat-count">{count} records</span>
+              <span className="db-stat-count">{Number(count) || 0} records</span>
             </div>
           ))}
         </div>

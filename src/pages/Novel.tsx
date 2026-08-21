@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { getNovel, updateNovel } from '../db/novels'
 import { listChapters, updateChapter, createChapter, trashChapter, moveChapter, mergeChapters, tidyChapter, reorderChapter } from '../db/chapters'
@@ -114,7 +115,7 @@ export default function Novel() {
   const [annotations, setAnnotations] = useState([])
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
   const [activeAnnotationId, setActiveAnnotationId] = useState(null)
-  const [commentDraft, setCommentDraft] = useState(null)
+  const [commentDraft, setCommentDraft] = useState<any>(null)
   const [editChapter, setEditChapter] = useState(null)
   const [deleteChapterTarget, setDeleteChapterTarget] = useState(null)
   const [titleDraft, setTitleDraft] = useState('')
@@ -265,8 +266,8 @@ export default function Novel() {
     }
     queuedRevisionRef.current = revision
 
-    const patch = { content: html, wordCount: words, updatedAt: now }
-    const versions = [...(ch.versions || [])]
+    const patch: any = { content: html, wordCount: words, updatedAt: now }
+    const versions = [...(((ch as any).versions) || [])]
     const last = versions[versions.length - 1]
     if (html && html !== ch.content && (!last || now - last.at > 90000)) {
       versions.push({ at: now, words, html })
@@ -544,7 +545,7 @@ export default function Novel() {
       quote: commentDraft.quote,
       comment: commentDraft.comment.trim(),
       type: commentDraft.type
-    })
+    } as any)
     const next = await listAnnotations(id, chapter.id)
     setAnnotations(next)
     setActiveAnnotationId(next[next.length - 1]?.id || null)
@@ -949,7 +950,7 @@ export default function Novel() {
   return (
     <div
       className={`workspace ${editorDesign ? `design-${editorDesign}` : ''} ${focusMode && activeSection === 'write' ? 'focus-mode' : ''}`}
-      style={editorDesign === 'custom' ? { '--design-custom-bg': customDesignBg, '--design-custom-text': customDesignText } : undefined}
+      style={editorDesign === 'custom' ? ({ ['--design-custom-bg' as any]: customDesignBg, ['--design-custom-text' as any]: customDesignText } as CSSProperties) : undefined}
     >
       <Sidebar
         novel={novel}
@@ -1068,7 +1069,7 @@ export default function Novel() {
               'divider',
               { label: 'Close tab', icon: 'fa-solid fa-xmark', onClick: () => closeChapterTab(tabId) },
               { label: 'Close other tabs', icon: 'fa-solid fa-table-columns', disabled: openChapterTabs.length < 2, onClick: () => { setOpenChapterTabs([tabId]); setWorkspacePaneIds((current) => current.filter((item) => item === tabId)) } },
-            ])} draggable onDragStart={(event) => { event.dataTransfer.setData('text/plain', tabId); event.dataTransfer.effectAllowed = 'move' }}><Icon icon="fa-regular fa-file-lines" /><span>{tabChapter.title || 'Untitled chapter'}</span>{tabPeople.length > 0 && <span className="chapter-tab-presence" aria-label={`${tabPeople.length} collaborator${tabPeople.length === 1 ? '' : 's'} in this chapter`} title={tabPeople.map((person) => `${person.username} · ${person.activity === 'writing' ? 'writing' : 'viewing'} · ${person.tabName || 'This chapter'}`).join('\n')}>{tabPeople.slice(0, 3).map((person) => <span key={person.id} className={`chapter-tab-presence-dot ${person.activity === 'writing' ? 'is-writing' : 'is-viewing'}`} style={{ '--presence-color': presenceColor(person.id) }} />)}{tabPeople.length > 3 && <b>+{tabPeople.length - 3}</b>}</span>}<i role="button" aria-label="Close tab" onClick={(event) => { event.stopPropagation(); closeChapterTab(tabId) }}><Icon icon="fa-solid fa-xmark" /></i></button>
+            ])} draggable onDragStart={(event) => { event.dataTransfer.setData('text/plain', tabId); event.dataTransfer.effectAllowed = 'move' }}><Icon icon="fa-regular fa-file-lines" /><span>{tabChapter.title || 'Untitled chapter'}</span>{tabPeople.length > 0 && <span className="chapter-tab-presence" aria-label={`${tabPeople.length} collaborator${tabPeople.length === 1 ? '' : 's'} in this chapter`} title={tabPeople.map((person) => `${person.username} · ${person.activity === 'writing' ? 'writing' : 'viewing'} · ${person.tabName || 'This chapter'}`).join('\n')}>{tabPeople.slice(0, 3).map((person) => <span key={person.id} className={`chapter-tab-presence-dot ${person.activity === 'writing' ? 'is-writing' : 'is-viewing'}`} style={{ ['--presence-color' as any]: presenceColor(person.id) } as CSSProperties} />)}{tabPeople.length > 3 && <b>+{tabPeople.length - 3}</b>}</span>}<i role="button" aria-label="Close tab" onClick={(event) => { event.stopPropagation(); closeChapterTab(tabId) }}><Icon icon="fa-solid fa-xmark" /></i></button>
           })}
           <button className={`button button-quiet chapter-split-toggle ${splitOpen ? 'active' : ''}`} onClick={toggleSplitView} title={splitOpen ? 'Close split view' : 'Open split view'}>
             <Icon icon="fa-solid fa-table-columns" />
@@ -1213,17 +1214,18 @@ export default function Novel() {
             </div>
 
             <div className={`editor-host ${splitOpen && workspacePanes.length ? 'editor-host-split' : ''}`}>
-              <div className={`split-view ${splitOpen && workspacePanes.length ? 'active' : ''}`} style={splitOpen && workspacePanes.length ? { '--pane-count': 1 + workspacePanes.length } : undefined}>
+              <div className={`split-view ${splitOpen && workspacePanes.length ? 'active' : ''}`} style={splitOpen && workspacePanes.length ? ({ ['--pane-count' as any]: 1 + workspacePanes.length } as CSSProperties) : undefined}>
                 <div
                   className="split-editor split-editor-primary"
                   onWheel={(e) => {
+                    const target = e.target as HTMLElement | null
                     if (
-                      e.target.closest('.editor-wrap') ||
-                      e.target.closest('.cselect') ||
-                      e.target.closest('.cselect-pop') ||
-                      e.target.closest('select') ||
-                      e.target.closest('input') ||
-                      e.target.closest('textarea')
+                      target?.closest('.editor-wrap') ||
+                      target?.closest('.cselect') ||
+                      target?.closest('.cselect-pop') ||
+                      target?.closest('select') ||
+                      target?.closest('input') ||
+                      target?.closest('textarea')
                     ) return
                     const wrap = e.currentTarget.querySelector('.editor-wrap')
                     if (wrap) wrap.scrollTop += e.deltaY
@@ -1234,7 +1236,7 @@ export default function Novel() {
                     e.preventDefault()
                     openContextMenu(e, [
                       { label: 'Add comment', icon: 'fa-regular fa-comment', onClick: () => { setCommentDraft({ quote: '', comment: '', type: 'note' }); setAnnotationsOpen(true) } },
-                      { label: 'Add milestone snapshot', icon: 'fa-solid fa-flag', onClick: () => saveMilestone() },
+                      { label: 'Add milestone snapshot', icon: 'fa-solid fa-flag', onClick: () => saveMilestone('Manual snapshot') },
                       'divider',
                       { label: 'Open another chapter in split view', icon: 'fa-solid fa-table-columns', onClick: () => toggleSplitView() },
                       { label: 'Tidy formatting', icon: 'fa-solid fa-wand-magic-sparkles', onClick: () => handleTidy(chapter) },
@@ -1609,13 +1611,14 @@ function SecondarySplitEditor({
       <div
         className="split-editor-body"
         onWheel={(e) => {
+          const target = e.target as HTMLElement | null
           if (
-            e.target.closest('.editor-wrap') ||
-            e.target.closest('.cselect') ||
-            e.target.closest('.cselect-pop') ||
-            e.target.closest('select') ||
-            e.target.closest('input') ||
-            e.target.closest('textarea')
+            target?.closest('.editor-wrap') ||
+            target?.closest('.cselect') ||
+            target?.closest('.cselect-pop') ||
+            target?.closest('select') ||
+            target?.closest('input') ||
+            target?.closest('textarea')
           ) return
           const wrap = e.currentTarget.querySelector('.editor-wrap')
           if (wrap) wrap.scrollTop += e.deltaY
@@ -1628,6 +1631,8 @@ function SecondarySplitEditor({
           title={titleDraft}
           onTitleChange={setTitleDraft}
           onTitleBlur={commitTitle}
+          onComment={undefined}
+          onCommentHover={undefined}
           typewriterMode={settings.typewriterMode}
           onSave={saveContent}
           readOnly={!canEdit}
@@ -1637,8 +1642,11 @@ function SecondarySplitEditor({
           terms={terms}
           entities={entities}
           collaborators={collaborators}
+          canEdit={canEdit}
           chapterId={chapter.id}
           placeholder="Open another chapter and keep both threads moving."
+          onDesigns={undefined}
+          onLineSpacingChange={undefined}
           pageLayout={layout}
           onPageLayoutChange={() => {}}
         />

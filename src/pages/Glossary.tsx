@@ -82,8 +82,8 @@ export default function Glossary({ novelId, embedded }) {
     load()
   }
 
-  const cancelEditing = (clearDraftFn) => {
-    clearDraftFn?.()
+  const cancelEditing = (clearDraftFn = () => {}) => {
+    clearDraftFn()
     setEditing(null)
     setDraftRestored(false)
   }

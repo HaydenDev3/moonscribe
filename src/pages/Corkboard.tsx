@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { listChapters, reorderChapter, updateChapter } from '../db/chapters'
 import { listCharacters } from '../db/characters'
@@ -146,7 +147,7 @@ export default function Corkboard({ novelId, embedded }) {
               key={s}
               className={`cork-status-chip ${filter === s ? 'active' : ''}`}
               onClick={() => setFilter(filter === s ? '' : s)}
-              style={{ '--status-color': STATUS_CSS[s].dot }}
+              style={{ ['--status-color' as any]: STATUS_CSS[s].dot } as CSSProperties}
             >
               <span className="cork-status-dot" />
               {STATUS_LABEL[s]} <span className="cork-status-count">{counts[s]}</span>

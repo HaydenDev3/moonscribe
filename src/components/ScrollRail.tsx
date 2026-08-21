@@ -110,7 +110,7 @@ export default function ScrollRail({ scrollElRef, className = '', markers = [] }
             initial={false}
             animate={{ top: `${Math.max(0, Math.min(1, marker.topRatio || 0)) * 100}%` }}
             transition={{ type: 'spring', stiffness: 360, damping: 34, mass: 0.28 }}
-            style={{ '--marker-color': marker.color || '#84b9ff' }}
+            style={{ '--marker-color': marker.color || '#84b9ff' } as React.CSSProperties}
             title={marker.label || 'Collaborator'}
             aria-label={marker.label || 'Collaborator marker'}
             onClick={() => {

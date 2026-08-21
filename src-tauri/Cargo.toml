@@ -1,0 +1,19 @@
+[package]
+name = "moonscribe"
+version = "0.1.0"
+description = "MoonScribe desktop app"
+authors = ["MoonScribe"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.78"
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.11.5", features = [] }
+tauri-plugin-shell = "2.3.5"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

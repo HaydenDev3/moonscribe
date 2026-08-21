@@ -135,6 +135,11 @@ npm run server
 
 ---
 
+## Documentation
+
+- [Server architecture and API reference](./docs/server-guide.md)
+- [Project overview and product page](./README.md)
+
 ## Project status
 
 MoonScribe is actively evolving as a local-first writing and publishing workspace. It is designed for authors who want a quiet, private drafting environment first, with collaboration and export tools layered on top when needed.

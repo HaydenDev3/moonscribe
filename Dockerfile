@@ -1,4 +1,4 @@
-# Moonscribe — self-host with Docker
+# MoonScribe — self-host with Docker
 # Builds the app, then runs the sync server (node:sqlite + static files).
 # All the writers' data lives in the mounted /app/data volume.
 

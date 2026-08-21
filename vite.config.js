@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Moonscribe',
-        short_name: 'Moonscribe',
+        name: 'MoonScribe',
+        short_name: 'MoonScribe',
         description: 'A quiet, private place to write — made for two.',
         theme_color: '#7BA3C9',
         background_color: '#F9F6F1',

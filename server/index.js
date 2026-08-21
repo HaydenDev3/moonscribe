@@ -1,4 +1,4 @@
-// Moonscribe sync server.
+// MoonScribe sync server.
 //
 // A tiny, dependency-free backend that keeps two writers in step.
 //   - node:sqlite database (no external DB server needed)
@@ -11,7 +11,7 @@
 // Env:  PORT (default 3001), DATA_DIR
 // The first account to register claims any records left by an older server.
 //
-// Testable: createMoonscribeServer({ db, rateLimit }) builds the whole app
+// Testable: createMoonScribeServer({ db, rateLimit }) builds the whole app
 // around an injected database (use new DatabaseSync(':memory:') in tests) and
 // returns { server, db } — call server.listen(0) and use the real HTTP API.
 
@@ -372,7 +372,7 @@ function serveStatic(req, res, url, dist) {
 }
 
 // ---- the app ----
-export function createMoonscribeServer({ db, dataDir, rateLimit, distDir, corsOrigins } = {}) {
+export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOrigins } = {}) {
   const dist = distDir || DIST
   const dir = dataDir || process.env.DATA_DIR || join(ROOT, 'data')
   const database = db || (() => {
@@ -1168,9 +1168,9 @@ function safeJson(raw) {
 // ---- entrypoint: `node server/index.js` ----
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
 if (isMain) {
-  const { server, limiter } = createMoonscribeServer()
+  const { server, limiter } = createMoonScribeServer()
   server.listen(PORT, () => {
-    console.log(`🌙 Moonscribe server listening on http://localhost:${PORT}`)
+    console.log(`🌙 MoonScribe server listening on http://localhost:${PORT}`)
     console.log('   Accounts: sign in or create one in the app (Settings → Sign in).')
     if (!existsSync(DIST)) {
       console.log('   (no dist/ yet — run `npm run build` to serve the app here)')

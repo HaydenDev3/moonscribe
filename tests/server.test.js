@@ -8,7 +8,7 @@ import { request as httpRequest } from 'node:http'
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { createMoonscribeServer } from '../server/index.js'
+import { createMoonScribeServer } from '../server/index.js'
 
 let db = null
 let server = null
@@ -17,7 +17,7 @@ let base = ''
 
 async function startServer(opts = {}) {
   db = new DatabaseSync(':memory:')
-  const app = createMoonscribeServer({ db, distDir: opts.distDir, rateLimit: opts.rateLimit })
+  const app = createMoonScribeServer({ db, distDir: opts.distDir, rateLimit: opts.rateLimit })
   server = app.server
   limiter = app.limiter
   await new Promise((resolve) => server.listen(0, resolve))

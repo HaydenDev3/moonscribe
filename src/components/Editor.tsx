@@ -90,22 +90,23 @@ function initials(name) {
 export default function Editor({
   initialHtml,
   onReport,
-  placeholder,
-  title,
-  onTitleChange,
-  onTitleBlur,
-  onComment,
+  placeholder = '',
+  title = '',
+  onTitleChange = (_value: string) => {},
+  onTitleBlur = () => {},
+  onComment = undefined,
   annotations = [],
-  onCommentHover,
-  typewriterMode,
-  onSave,
-  characters,
-  terms,
-  entities,
-  onDesigns,
-  onLineSpacingChange,
+  onCommentHover = undefined,
+  typewriterMode = false,
+  onSave = undefined,
+  characters = [],
+  terms = [],
+  entities = [],
+  onDesigns = undefined,
+  onLineSpacingChange = undefined,
   pageLayout,
-  onPageLayoutChange,
+  onPageLayoutChange = (_patch: any) => {},
+  canEdit = false,
   readOnly = false,
   spellCheck = true,
   autoCorrect = true,
@@ -520,7 +521,9 @@ export default function Editor({
     const para =
       node?.nodeType === 3
         ? node.parentElement?.closest('p,h1,h2,h3,h4,blockquote')
-        : node?.closest?.('p,h1,h2,h3,h4,blockquote')
+        : node instanceof Element
+          ? node.closest('p,h1,h2,h3,h4,blockquote')
+          : null
 
     el.querySelectorAll('.tw-active').forEach((n) => {
       n.classList.remove('tw-active')
@@ -587,7 +590,7 @@ export default function Editor({
   // Pages are calculated visually from the rendered height of each block.
   //
   const recalcPages = useCallback(() => {
-    const prose = ref.current
+    const prose = ref.current as HTMLElement | null
 
     const ps = pageSize === 'continuous'
       ? null
@@ -619,19 +622,20 @@ export default function Editor({
     // actual leaf writing blocks instead, while still including explicit
     // page/scene breaks wherever they are nested.
     const blockSelector = 'p,h1,h2,h3,h4,blockquote,pre,ul,ol,figure,.scene-break,.pg-break,[data-page-break="true"]'
-    const children = Array.from(prose.querySelectorAll(blockSelector)).filter((node) => {
+    const children = Array.from(prose.querySelectorAll(blockSelector)) as Element[]
+    const leafChildren = children.filter((node) => {
       if (node.matches('.pg-auto-break,[data-auto-page-break="true"]')) return false
       return !node.querySelector(blockSelector)
     })
 
     // Plain-text contentEditable states can briefly have no block children.
     // In that case the prose itself is still a valid single page.
-    if (!children.length && prose.textContent?.trim()) {
+    if (!leafChildren.length && prose.textContent?.trim()) {
       setPageCount(1)
       return
     }
 
-    if (!children.length) {
+    if (!leafChildren.length) {
       setPageCount(1)
       return
     }
@@ -685,18 +689,15 @@ export default function Editor({
       return marker
     }
 
-    for (let i = 0; i < children.length; i++) {
-      const child = children[i]
+    for (let i = 0; i < leafChildren.length; i++) {
+      const child = leafChildren[i]
 
       if (isManualBreak(child)) {
-        const next = children[i + 1]
+        const next = leafChildren[i + 1]
         const breakTop = getTop(child)
         const pageBottom = pageTop + ps.heightPx - ps.marginBottomPx
 
-        child.style.setProperty(
-          '--pg-fill-before',
-          `${Math.max(0, Math.round(pageBottom - breakTop))}px`,
-        )
+        child.setAttribute('style', `${child.getAttribute('style') ?? ''}; --pg-fill-before: ${Math.max(0, Math.round(pageBottom - breakTop))}px;`)
 
         currentPage += 1
         pageTop = next
@@ -975,9 +976,11 @@ export default function Editor({
     const node = sel?.anchorNode
 
     const block =
-      node?.nodeType === 3
-        ? node.parentElement?.closest('h1,h2,h3,h4,p')
-        : node?.closest?.('h1,h2,h3,h4,p')
+      node instanceof Element
+        ? node.closest('h1,h2,h3,h4,p')
+        : node?.nodeType === Node.TEXT_NODE
+          ? node.parentElement?.closest('h1,h2,h3,h4,p')
+          : null
 
     if (
       block &&
@@ -1016,9 +1019,9 @@ export default function Editor({
       // editing engines still honour execCommand for pending inline typing
       // state, while our span wrapper remains the cleaner path for selections.
       try {
-        document.execCommand('styleWithCSS', false, true)
+        document.execCommand('styleWithCSS', false, 'true')
         if (prop === 'fontFamily') {
-          document.execCommand('fontName', false, value)
+          document.execCommand('fontName', false, String(value))
         } else if (prop === 'fontSize') {
           const marker = document.createElement('span')
           marker.style[prop] = value
@@ -1188,7 +1191,11 @@ export default function Editor({
     const sel = window.getSelection()
     if (!sel?.isCollapsed || !sel.rangeCount) return false
     const node = sel.anchorNode
-    const block = node?.nodeType === Node.TEXT_NODE ? node.parentElement?.closest('p') : node?.closest?.('p')
+    const block = node instanceof Element
+      ? node.closest('p')
+      : node?.nodeType === Node.TEXT_NODE
+        ? node.parentElement?.closest('p')
+        : null
     if (!block || !ref.current?.contains(block)) return false
     const marker = block.textContent.trim()
     const commands = { '#': 'h1', '##': 'h2', '###': 'h3' }
@@ -1418,10 +1425,14 @@ export default function Editor({
       dictationRef.current = null
     }
     recognition.onresult = (event) => {
-      const transcript = Array
-        .from(event.results || [])
-        .slice(event.resultIndex || 0)
-        .filter((result) => result.isFinal)
+      const speechEvent = event as {
+        results?: ArrayLike<{ isFinal?: boolean; [index: number]: { transcript?: string } }>
+        resultIndex?: number
+      }
+      const results = Array.from(speechEvent.results || [])
+      const transcript = results
+        .slice(speechEvent.resultIndex || 0)
+        .filter((result) => typeof result === 'object' && result !== null && 'isFinal' in result && Boolean((result as { isFinal?: boolean }).isFinal))
         .map((result) => result[0]?.transcript || '')
         .join(' ')
         .trim()
@@ -1441,11 +1452,10 @@ export default function Editor({
 
   // ── Image drop ───────────────────────────────────────────────────────────
   const handleImageDrop = useCallback((e) => {
-    const files = Array
-      .from(e.dataTransfer?.files || [])
-      .filter((file) =>
-        file.type.startsWith('image/'),
-      )
+    const files = Array.from(e.dataTransfer?.files || []).filter((file) => {
+      const candidate = file as File & { type?: unknown }
+      return typeof candidate.type === 'string' && candidate.type.startsWith('image/')
+    })
 
     if (!files.length) return
 
@@ -1454,13 +1464,15 @@ export default function Editor({
     const selection = window.getSelection()
 
     files.forEach((file) => {
+      const safeFile = file as File
       const reader = new FileReader()
 
       reader.onload = () => {
         const img = document.createElement('img')
+        const src = typeof reader.result === 'string' ? reader.result : ''
 
-        img.src = reader.result
-        img.alt = file.name || 'Manuscript image'
+        img.src = src
+        img.alt = typeof safeFile.name === 'string' ? safeFile.name : 'Manuscript image'
         img.style.maxWidth = '100%'
         img.style.height = 'auto'
         img.style.display = 'block'
@@ -1491,7 +1503,7 @@ export default function Editor({
         report()
       }
 
-      reader.readAsDataURL(file)
+      reader.readAsDataURL(safeFile)
     })
   }, [report])
 
@@ -1572,9 +1584,12 @@ export default function Editor({
   const handlePaste = useCallback((e) => {
     const clipboardHtml = e.clipboardData?.getData('text/html') || ''
     const imageFiles = Array.from(e.clipboardData?.items || [])
-      .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
-      .map((item) => item.getAsFile())
-      .filter(Boolean)
+      .filter((item) => {
+        const candidate = item as DataTransferItem & { kind?: string; type?: string }
+        return candidate.kind === 'file' && typeof candidate.type === 'string' && candidate.type.startsWith('image/')
+      })
+      .map((item) => (item as DataTransferItem).getAsFile())
+      .filter((file): file is File => Boolean(file))
     const htmlImageSources = imageFiles.length || !clipboardHtml
       ? []
       : Array.from(new DOMParser().parseFromString(clipboardHtml, 'text/html').querySelectorAll('img'))
@@ -1752,18 +1767,16 @@ export default function Editor({
       container = el
     }
 
+    const currentContainer = container instanceof Element ? container : el
+
     const previousBreak =
-      container?.previousElementSibling
-        ?.classList
-        ?.contains('scene-break')
-        ? container.previousElementSibling
+      currentContainer.previousElementSibling?.classList?.contains('scene-break')
+        ? currentContainer.previousElementSibling
         : null
 
     const nextBreak =
-      container?.nextElementSibling
-        ?.classList
-        ?.contains('scene-break')
-        ? container.nextElementSibling
+      currentContainer.nextElementSibling?.classList?.contains('scene-break')
+        ? currentContainer.nextElementSibling
         : null
 
     if (
@@ -1788,18 +1801,12 @@ export default function Editor({
       )
     }
 
-    if (
-      container?.closest?.(
-        '.scene-break',
-      )
-    ) {
+    const sceneBreak = container instanceof Element ? container.closest('.scene-break') : null
+
+    if (sceneBreak) {
       e.preventDefault()
 
-      return removeSceneBreak(
-        container.closest(
-          '.scene-break',
-        ),
-      )
+      return removeSceneBreak(sceneBreak)
     }
 
     return false
@@ -2224,8 +2231,15 @@ export default function Editor({
     children,
     title: buttonTitle,
     ariaLabel,
-    active,
+    active = false,
     disabled = false,
+  }: {
+    action: () => void
+    children: React.ReactNode
+    title: string
+    ariaLabel?: string
+    active?: boolean
+    disabled?: boolean
   }) => (
     <button
       className={`tb-btn${
@@ -2281,10 +2295,8 @@ export default function Editor({
         {/* ── Row 1 ─────────────────────────────────────────────────────── */}
         <div className="tb-row">
           <Select
-            value={fontFamily}
-            onChange={
-              handleFontChange
-            }
+            value={String(fontFamily)}
+            onChange={(value) => handleFontChange(String(value))}
             ariaLabel="Font family"
             width={162}
             disabled={readOnly}
@@ -2294,12 +2306,10 @@ export default function Editor({
             renderLabel={(opt) => (
               <span
                 style={{
-                  fontFamily:
-                    opt?.value,
+                  fontFamily: String(opt?.value ?? ''),
                 }}
               >
-                {opt?.label ??
-                  '—'}
+                {opt?.label ?? '—'}
               </span>
             )}
             options={editorFontOptions}
@@ -2325,15 +2335,16 @@ export default function Editor({
           />
 
           <Select
-            value={pageSize}
+            value={String(pageSize)}
             onChange={(v) => {
-              setPageSize(v)
-              onPageLayoutChange?.({ pageSize: v })
+              const next = String(v)
+              setPageSize(next)
+              onPageLayoutChange?.({ pageSize: next })
 
               try {
                 localStorage.setItem(
                   'moonscribe:pageSize',
-                  v,
+                  next,
                 )
               } catch {
                 // Ignore storage failures.
@@ -3049,13 +3060,9 @@ export default function Editor({
                       '--page-margin-left': `${ps.marginLeftPx}px`,
                     }
                   : {}),
-                '--editor-line-height':
-                  lineSpacing,
-                '--editor-font-size':
-                  ps
-                    ? '12pt'
-                    : undefined,
-              }}
+                '--editor-line-height': lineSpacing,
+                '--editor-font-size': ps ? '12pt' : undefined,
+              } as React.CSSProperties}
             >
               {/* ── Chapter title ─────────────────────────────────────── */}
               {title !==
@@ -3216,44 +3223,27 @@ export default function Editor({
                   handleImageDrop
                 }
                 onMouseOver={(e) => {
-                  const commentSpan =
-                    e.target.closest?.(
-                      '.comment-anchor',
-                    )
+                  const target = e.target instanceof Element ? e.target : null
+                  const commentSpan = target?.closest('.comment-anchor') as HTMLElement | null
 
                   if (commentSpan) {
                     onCommentHover?.(
-                      commentSpan
-                        .dataset
-                        .commentId || null,
+                      commentSpan.dataset.commentId || null,
                     )
                     setCharTip(null)
                     setEntityTip(null)
                     return
                   }
 
-                  const nameSpan =
-                    e.target.closest?.(
-                      '.hl-name',
-                    )
+                  const nameSpan = target?.closest('.hl-name') as HTMLElement | null
 
                   if (nameSpan) {
-                    setEntityTip(
-                      null,
-                    )
+                    setEntityTip(null)
 
-                    const char =
-                      charactersRef.current.find(
-                        (c) =>
-                          c.id ===
-                          nameSpan
-                            .dataset
-                            .charId,
-                      )
+                    const char = charactersRef.current.find((c) => c.id === nameSpan.dataset.charId)
 
                     if (char) {
-                      const rect =
-                        nameSpan.getBoundingClientRect()
+                      const rect = nameSpan.getBoundingClientRect()
 
                       setCharTip({
                         char,
@@ -3265,28 +3255,15 @@ export default function Editor({
                     return
                   }
 
-                  const entitySpan =
-                    e.target.closest?.(
-                      '.hl-entity',
-                    )
+                  const entitySpan = target?.closest('.hl-entity') as HTMLElement | null
 
                   if (entitySpan) {
-                    setCharTip(
-                      null,
-                    )
+                    setCharTip(null)
 
-                    const entity =
-                      entitiesRef.current.find(
-                        (en) =>
-                          en.id ===
-                          entitySpan
-                            .dataset
-                            .entityId,
-                      )
+                    const entity = entitiesRef.current.find((en) => en.id === entitySpan.dataset.entityId)
 
                     if (entity) {
-                      const rect =
-                        entitySpan.getBoundingClientRect()
+                      const rect = entitySpan.getBoundingClientRect()
 
                       setEntityTip({
                         entity,
@@ -3304,32 +3281,19 @@ export default function Editor({
                   )
                 }}
                 onMouseOut={(e) => {
-                  if (
-                    e.target.closest?.(
-                      '.comment-anchor',
-                    )
-                  ) {
+                  const target = e.target instanceof Element ? e.target : null
+                  const related = e.relatedTarget instanceof Element ? e.relatedTarget : null
+
+                  if (target?.closest('.comment-anchor')) {
                     onCommentHover?.(null)
                   }
 
-                  if (
-                    !e.relatedTarget?.closest?.(
-                      '.char-tip',
-                    )
-                  ) {
-                    setCharTip(
-                      null,
-                    )
+                  if (!related?.closest('.char-tip')) {
+                    setCharTip(null)
                   }
 
-                  if (
-                    !e.relatedTarget?.closest?.(
-                      '.entity-tip',
-                    )
-                  ) {
-                    setEntityTip(
-                      null,
-                    )
+                  if (!related?.closest('.entity-tip')) {
+                    setEntityTip(null)
                   }
                 }}
               />
@@ -3340,7 +3304,7 @@ export default function Editor({
                     <div
                       key={person.id}
                       className={`editor-presence-marker ${person.activity === 'writing' ? 'is-writing' : 'is-viewing'}`}
-                      style={{ '--presence-color': person.color, '--presence-top': `${person.topRatio * 100}%` }}
+                      style={{ '--presence-color': person.color, '--presence-top': `${person.topRatio * 100}%` } as React.CSSProperties}
                     >
                       <span className="editor-presence-stripe" />
                       <span className="editor-presence-bubble">{person.shortLabel}</span>
@@ -3444,11 +3408,10 @@ export default function Editor({
             <div
               className={`char-tip ${hasDetails ? '' : 'compact'} ${hasRole ? '' : 'no-role'}`}
               style={{
-                '--ctip-color':
-                  baseColor,
+                '--ctip-color': baseColor,
                 left: charTip.x,
                 top: charTip.y,
-              }}
+              } as React.CSSProperties}
               onMouseLeave={() =>
                 setCharTip(null)
               }
@@ -3616,11 +3579,10 @@ export default function Editor({
             <div
               className="entity-tip"
               style={{
-                '--etip-color':
-                  color,
+                '--etip-color': color,
                 left: entityTip.x,
                 top: entityTip.y,
-              }}
+              } as React.CSSProperties}
               onMouseLeave={() =>
                 setEntityTip(
                   null,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { listChapters } from '../db/chapters'
 import { computeNumbers, titleFor, isContainer } from '../utils/numbering'
@@ -198,7 +199,7 @@ export default function Timeline({ novelId, embedded }) {
               <button
                 key={p}
                 className={`tl-legend-chip ${filterPov === p ? 'active' : ''}`}
-                style={{ '--chip-color': povColors[p] }}
+                style={{ ['--chip-color' as any]: povColors[p] } as CSSProperties}
                 onClick={() => setFilterPov(filterPov === p ? '' : p)}
               >
                 <span className="tl-legend-dot" />
@@ -229,7 +230,7 @@ export default function Timeline({ novelId, embedded }) {
                       const povColor = pov ? (povColors[pov] || 'var(--grey)') : null
                       const wBar = Math.max(6, Math.min(100, (c.wordCount || 0) / 3))
                       return (
-                        <div key={c.id} className={`tl-scene ${i % 2 ? 'below' : 'above'}`} style={{ '--scene-color': povColor || beatColor(m.beat) }} onClick={() => open(c)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && open(c)}>
+                        <div key={c.id} className={`tl-scene ${i % 2 ? 'below' : 'above'}`} style={{ ['--scene-color' as any]: povColor || beatColor(m.beat) } as CSSProperties} onClick={() => open(c)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && open(c)}>
                           {/* Vertical line connector */}
                           <div className="tl-connector">
                             <span className="tl-scene-index">{numbers.get(c.id)?.label || i + 1}</span>

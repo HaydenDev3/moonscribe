@@ -1,6 +1,6 @@
 // App shell: routing, onboarding gate, PWA registration, theme wiring.
 import { lazy, Suspense, useEffect, type ReactNode } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import { useApp } from './context/AppContext'
 import Dashboard from './pages/Dashboard'
@@ -12,6 +12,7 @@ import Settings from './components/Settings'
 import ConflictModal from './components/ConflictModal'
 import Onboarding from './pages/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
+import FeatureGuard from './components/FeatureGuard'
 import NotFound from './pages/NotFound'
 import LockScreen from './components/LockScreen'
 import { purgeExpired } from './db/trash'
@@ -51,7 +52,7 @@ function SplashScreen() {
         fontWeight: 600, color: 'var(--twilight)', letterSpacing: '0.01em',
         marginBottom: 6,
       }}>
-        Moonscribe<span style={{ color: 'var(--accent)' }}>.</span>
+        MoonScribe<span style={{ color: 'var(--accent)' }}>.</span>
       </div>
       {/* Tagline */}
       <div style={{
@@ -118,22 +119,24 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <ErrorBoundary>
         <Routes>
           <Route path="/" element={<Landing />} />
-          <Route path="/dashboard" element={enterStudio(<Dashboard />)} />
-          <Route path="/novel/:id" element={enterStudio(<Novel />)} />
+          <Route path="/dashboard" element={enterStudio(<FeatureGuard featureName="dashboard" title="Dashboard unavailable"><Dashboard /></FeatureGuard>)} />
+          <Route path="/novel/:id" element={enterStudio(<FeatureGuard featureName="novel" title="Novel workspace unavailable"><Novel /></FeatureGuard>)} />
           {/* Every section is a mode of the writer workspace. */}
-          <Route path="/novel/:id/:mode" element={enterStudio(<Novel />)} />
+          <Route path="/novel/:id/:mode" element={enterStudio(<FeatureGuard featureName="novel-mode" title="Writer mode unavailable"><Novel /></FeatureGuard>)} />
           {/* Legacy binder deep links still resolve to the inline mode. */}
-          <Route path="/novel/:id/binder/:section" element={enterStudio(<Novel />)} />
+          <Route path="/novel/:id/binder/:section" element={enterStudio(<FeatureGuard featureName="binder" title="Binder unavailable"><Novel /></FeatureGuard>)} />
           <Route
             path="/novel/:id/design/print"
             element={enterStudio(
-              <Suspense fallback={<Loading />}>
-                <PrintView />
-              </Suspense>
+              <FeatureGuard featureName="print-view" title="Print preview unavailable">
+                <Suspense fallback={<Loading />}>
+                  <PrintView />
+                </Suspense>
+              </FeatureGuard>
             )}
           />
           <Route path="*" element={<NotFound />} />
@@ -143,6 +146,6 @@ export default function App() {
         <ConflictModal />
         <Toasts />
       </ErrorBoundary>
-    </BrowserRouter>
+    </HashRouter>
   )
 }

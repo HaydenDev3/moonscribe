@@ -13,7 +13,8 @@ const STATUS = {
 function cursorContext() {
   const selection = window.getSelection?.()
   const node = selection?.anchorNode
-  const root = node && (node.nodeType === 1 ? node : node.parentElement)?.closest?.('.prose[contenteditable="true"], .ProseMirror')
+  const element = node instanceof Element ? node : node?.parentElement ?? null
+  const root = element?.closest('.prose[contenteditable="true"], .ProseMirror') ?? null
   if (!root || !selection?.rangeCount) return { activity: 'viewing', lineNumber: null, cursorOffset: null }
   const before = document.createRange()
   before.selectNodeContents(root)

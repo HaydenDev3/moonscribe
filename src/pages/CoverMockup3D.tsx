@@ -19,7 +19,7 @@ function texture(draw, width = 1024, height = 1536) {
   map.needsUpdate = true
   return map
 }
-function drawCropped(ctx, image, w, h, crop = {}, alpha = 1) {
+function drawCropped(ctx, image, w, h, crop: any = {}, alpha = 1) {
   const zoom = Math.max(1, Number(crop.zoom) || 1)
   const scale = Math.max(w / image.width, h / image.height) * zoom
   const dw = image.width * scale
@@ -38,7 +38,7 @@ function loadTextureImage(src, map, draw) {
   image.src = src
   draw(null)
 }
-function frontTexture(settings) {
+function frontTexture(settings: any) {
   const colors = palette(settings.coverStyle, settings.gradient)
   return texture((ctx, w, h, map) => {
     const fill = ctx.createLinearGradient(0, 0, w, h); fill.addColorStop(0, colors[0]); fill.addColorStop(.56, colors[1]); fill.addColorStop(1, colors[2]); ctx.fillStyle = fill; ctx.fillRect(0, 0, w, h)
@@ -58,7 +58,7 @@ function frontTexture(settings) {
     loadTextureImage(settings.coverImage, map, draw)
   })
 }
-function spineTexture(settings, aspect = .08) {
+function spineTexture(settings: any, aspect = .08) {
   const colors = palette(settings.coverStyle, settings.gradient)
   const height = 1536
   // Preserve the physical spine-to-height ratio. A large minimum width made
@@ -78,7 +78,7 @@ function spineTexture(settings, aspect = .08) {
     loadTextureImage(settings.spineImage, map, draw)
   }, width, height)
 }
-function backTexture(settings) {
+function backTexture(settings: any) {
   const colors = palette(settings.coverStyle, settings.gradient)
   return texture((ctx, w, h, map) => {
     const draw = image => {

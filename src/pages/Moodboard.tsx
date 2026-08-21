@@ -339,7 +339,7 @@ function LinkModal({ draft, onClose, onSave }) {
   }, [draft])
   if (!draft) return null
   return (
-    <Modal open onClose={onClose} title={draft.id ? 'Edit link' : 'Pin a reference'}>
+    <Modal open onClose={onClose} title={draft.id ? 'Edit link' : 'Pin a reference'} width={440}>
       <div className="field">
         <label>URL</label>
         <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="pinterest.com/board/cape-light" autoFocus onKeyDown={(e) => e.key === 'Enter' && url.trim() && onSave()} />
@@ -367,7 +367,7 @@ function PaletteModal({ draft, onChange, onClose, onSave }) {
   }
   if (!draft) return null
   return (
-    <Modal open onClose={onClose} title={draft.id ? 'Edit palette' : 'A palette for the mood'}>
+    <Modal open onClose={onClose} title={draft.id ? 'Edit palette' : 'A palette for the mood'} width={440}>
       <div className="field">
         <label>Label <span className="hint">(optional)</span></label>
         <input value={draft.label || ''} onChange={(e) => onChange({ ...draft, label: e.target.value })} placeholder="Sea-glass dusk" />

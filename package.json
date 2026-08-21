@@ -11,6 +11,9 @@
     "server": "node server/index.js",
     "test": "vitest run",
     "icons": "node scripts/generate-icons.mjs",
+    "tauri:icons": "node scripts/generate-tauri-icons.mjs",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests --ext .ts,.tsx,.js,.jsx",
     "format": "prettier --write ."
@@ -50,6 +53,8 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",

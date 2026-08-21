@@ -1,0 +1,40 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "MoonScribe",
+  "version": "0.1.0",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:5173",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "MoonScribe",
+        "width": 1440,
+        "height": 950,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "publisher": "MoonScribe",
+    "category": "Productivity",
+    "shortDescription": "A private writing studio for long-form fiction and book design.",
+    "longDescription": "MoonScribe is a local-first writing studio for authors who want a calm place to draft, plan, design, and export without losing privacy.",
+    "copyright": "© 2026 MoonScribe",
+    "icon": [
+      "icons/icon-32.png",
+      "icons/icon-128.png",
+      "icons/icon-256.png",
+      "icons/icon-512.png"
+    ]
+  }
+}

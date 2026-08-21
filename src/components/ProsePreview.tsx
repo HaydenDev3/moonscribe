@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { annotateProse } from '../utils/highlight'
 import { sanitizeStoredHtml } from '../utils/formatHtml'
 import Icon from './Icon'
@@ -153,5 +154,5 @@ function cardStyle(hover) {
     width,
     zIndex: 90,
     ...(openBelow ? { top: hover.bottom + 8 } : { bottom: `calc(100vh - ${hover.y - 8}px)` })
-  }
+  } as CSSProperties
 }

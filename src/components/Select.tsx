@@ -1,11 +1,33 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import Icon from './Icon'
+
+export type SelectOption = {
+  value: string
+  label: string
+  group?: string
+  hint?: string
+  style?: CSSProperties
+}
+
+type SelectProps = {
+  value: string
+  onChange: (value: string) => void
+  options?: SelectOption[]
+  ariaLabel?: string
+  width?: number | string
+  onMouseDown?: (event: React.MouseEvent<HTMLButtonElement>) => void
+  renderLabel?: (option?: SelectOption) => ReactNode
+  className?: string
+  popClassName?: string
+  disabled?: boolean
+}
 
 // A themed dropdown that replaces the native <select> so menus match the app.
 // options: [{ value, label, hint? }]. Values are compared as strings.
 // The popup is portalled to <body> so it is never clipped by overflow:hidden panels.
-export default function Select({ value, onChange, options = [], ariaLabel = 'Select', width = 180, onMouseDown: onMD, renderLabel, className = '', popClassName = '', disabled = false }) {
+export default function Select({ value, onChange, options = [], ariaLabel = 'Select', width = 180, onMouseDown: onMD, renderLabel, className = '', popClassName = '', disabled = false }: SelectProps) {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const [rect, setRect] = useState(null)
@@ -56,7 +78,7 @@ export default function Select({ value, onChange, options = [], ariaLabel = 'Sel
     else if (e.key === 'Enter') { e.preventDefault(); options[active] && choose(options[active]) }
   }
 
-  const popupStyle = rect
+  const popupStyle: React.CSSProperties = rect
     ? {
         position: 'fixed',
         top: rect.bottom + 6,

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Icon from './Icon'
 
 // A small, themed calendar. Replaces the native <input type="date"> so the
-// picker matches Moonscribe rather than the OS. Value is an ISO date string
+// picker matches MoonScribe rather than the OS. Value is an ISO date string
 // (yyyy-mm-dd) or '' — kept in local time so the day never drifts.
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']

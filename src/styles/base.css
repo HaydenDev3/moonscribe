@@ -182,7 +182,7 @@ input[type='radio']:checked::after {
   color: var(--grey-soft);
 }
 
-/* ---- Moonscribe scrollbar — ultra-thin, accent-tinted, ink-track ---- */
+/* ---- MoonScribe scrollbar — ultra-thin, accent-tinted, ink-track ---- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--accent) 35%, var(--mist));

@@ -64,7 +64,7 @@ export async function encryptJSON(obj, passphrase) {
 }
 
 export async function decryptJSON(envelope, passphrase) {
-  if (!isEncryptedBackup(envelope)) throw new Error('Not an encrypted Moonscribe backup')
+  if (!isEncryptedBackup(envelope)) throw new Error('Not an encrypted MoonScribe backup')
   const c = subtle()
   const iterations = Number(envelope.iterations || (envelope.v === 1 ? LEGACY_ITERATIONS : 0))
   if (!Number.isInteger(iterations) || iterations < LEGACY_ITERATIONS || iterations > 1_000_000) {

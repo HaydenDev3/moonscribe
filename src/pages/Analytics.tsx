@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useParams } from 'react-router-dom'
 import { getNovel } from '../db/novels'
 import { listChapters } from '../db/chapters'
@@ -106,7 +107,7 @@ export default function Analytics({ embedded }) {
 
             <div className="card chart-card analytics-primary-chart">
               <div className="analytics-card-head"><div><span className="analytics-eyebrow">Momentum</span><h3>Words per day</h3></div><span className="analytics-range">Last 30 days</span></div>
-              <div className="chart-bars" style={{ '--max': maxDay }}>
+              <div className="chart-bars" style={{ ['--max' as any]: maxDay } as CSSProperties}>
                 {clippedHistory.slice(-30).map((d) => (
                   <div className="chart-col" key={d.date} title={`${prettyDate(d.date)} — ${formatWords(d.words)} words`}>
                     <div className="chart-bar" style={{ height: `${d.words ? Math.max(4, (d.words / maxDay) * 100) : 2}%` }}>
@@ -150,7 +151,7 @@ export default function Analytics({ embedded }) {
 
             <div className="card chart-card">
               <div className="analytics-card-head"><div><span className="analytics-eyebrow">Long view</span><h3>Words per month</h3></div><span className="analytics-range">Last 12 months</span></div>
-              <div className="chart-bars month-bars" style={{ '--max': Math.max(...monthly.map((m) => m.words), 1) }}>
+              <div className="chart-bars month-bars" style={{ ['--max' as any]: Math.max(...monthly.map((m) => m.words), 1) } as CSSProperties}>
                 {monthly.map((m) => (
                   <div className="chart-col" key={m.key} title={`${m.label} — ${formatWords(m.words)} words`}>
                     <div className="chart-bar" style={{ height: `${m.words ? Math.max(4, (m.words / Math.max(...monthly.map((x) => x.words), 1)) * 100) : 2}%` }}>
@@ -189,16 +190,19 @@ export default function Analytics({ embedded }) {
                     ['draft', 'Draft', byStatus.draft, 'var(--mist)'],
                     ['revised', 'Revised', byStatus.revised, 'var(--rose)'],
                     ['final', 'Final', byStatus.final, 'var(--sage)']
-                  ].map(([key, label, words, color]) => (
-                    <div className="status-row" key={key}>
-                      <span className="dot" style={{ background: color }} />
-                      <span className="cb-label">{label}</span>
-                      <div className="cb-track">
-                        <div className="cb-fill" style={{ width: `${totalWords ? (words / totalWords) * 100 : 0}%`, background: color }} />
+                  ].map(([key, label, words, color]) => {
+                    const wordCount = Number(words) || 0
+                    return (
+                      <div className="status-row" key={String(key)}>
+                        <span className="dot" style={{ background: color }} />
+                        <span className="cb-label">{String(label)}</span>
+                        <div className="cb-track">
+                          <div className="cb-fill" style={{ width: `${totalWords ? (wordCount / totalWords) * 100 : 0}%`, background: color }} />
+                        </div>
+                        <span className="cb-words">{formatWords(wordCount)}</span>
                       </div>
-                      <span className="cb-words">{formatWords(words)}</span>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
                 <p className="small muted" style={{ marginTop: 16 }}>
                   {writingDays} writing days in the last 30. {streak > 0 ? `A quiet streak of ${streak}.` : 'A fresh beginning.'}

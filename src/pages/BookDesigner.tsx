@@ -21,7 +21,7 @@ import { clearPresence, subscribePresence, updatePresence } from '../sync/engine
 // ─── constants ────────────────────────────────────────────────────────────────
 
 const SCENE_BREAKS = ['❦', '✦', '◆', '✧', '❧', '❋', '✴', '❖', '—', '*', ' ']
-const BODY_SIZES   = [10.5, 11.5, 12.5, 14]
+const BODY_SIZES   = ['10.5', '11.5', '12.5', '14']
 const BOOK_ENVIRONMENTS = [
   { value: 'studio', label: 'Moonlit studio' },
   { value: 'library', label: 'Old library' },
@@ -581,7 +581,7 @@ export default function BookDesigner({
             </button>
           </div>
           <div className="ds-panel-body studio-rail-scroll" data-section={section}>
-            {renderSection(section, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements })}
+            {renderSection(section, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements, designerFontOptions })}
           </div>
         </div>
 
@@ -692,7 +692,7 @@ export default function BookDesigner({
 
 // ─── section renderer ─────────────────────────────────────────────────────────
 
-function renderSection(section, { cover, novel, layout, sig, updateCover, update, toast, coverSurface, setCoverSurface, measurements }) {
+function renderSection(section, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements, designerFontOptions }) {
   switch (section) {
     case 'cover':     return <CoverTab cover={cover} updateCover={updateCover} />
     case 'palette':   return <PaletteTab cover={cover} updateCover={updateCover} />
@@ -700,7 +700,7 @@ function renderSection(section, { cover, novel, layout, sig, updateCover, update
     case 'image':     return <ImageTab novel={novel} cover={cover} updateCover={updateCover} surface={coverSurface} setSurface={setCoverSurface} />
     case 'shapes':    return <ShapesTab cover={cover} layout={layout} updateCover={updateCover} update={update} />
     case 'atmosphere': return <AtmosphereTab layout={layout} update={update} toast={toast} />
-    case 'body':      return <BodyTab layout={layout} update={update} />
+    case 'body':      return <BodyTab layout={layout} update={update} designerFontOptions={designerFontOptions} />
     case 'headers':   return <HeadersTab layout={layout} update={update} />
     case 'title':     return <TitleTab layout={layout} update={update} />
     case 'signature': return <SignatureTab sig={sig} update={update} />
@@ -964,14 +964,14 @@ function AtmosphereTab({ layout, update, toast }) {
   )
 }
 
-function BodyTab({ layout, update }) {
+function BodyTab({ layout, update, designerFontOptions = buildDesignerFontOptions({}) }) {
   return (
     <>
       <Field label="Font">
         <Select ariaLabel="Body font" width="100%" value={layout.bodyFont || 'literata'} onChange={(v) => update({ bodyFont: v })} options={designerFontOptions} />
       </Field>
       <Field label="Size">
-        <Select ariaLabel="Body size" width="100%" value={layout.bodySize ?? 11.5} onChange={(v) => update({ bodySize: Number(v) })} options={BODY_SIZES.map((s) => ({ value: s, label: `${s} pt` }))} />
+        <Select ariaLabel="Body size" width="100%" value={String(layout.bodySize ?? '11.5')} onChange={(v) => update({ bodySize: Number(v) })} options={BODY_SIZES.map((s) => ({ value: String(s), label: `${s} pt` }))} />
       </Field>
       <Field label="Line spacing">
         <Select ariaLabel="Line spacing" width="100%" value={layout.bodyLineSpacing || '1.5'} onChange={(v) => update({ bodyLineSpacing: v })} options={LINE_SPACINGS_BODY.map((s) => ({ value: s.id, label: s.label }))} />
@@ -1281,7 +1281,7 @@ function SectionDivider({ children }: { children: React.ReactNode }) {
 
 // ─── cover previews ───────────────────────────────────────────────────────────
 
-function Cover3D({ novel, cover, autoSpin, immersive, surface, environment, measurements, designerFontOptions = [], onSurfaceSelect, onSurfaceContext }: { novel: any; cover: any; autoSpin?: boolean; immersive?: boolean; surface?: string; environment?: string; measurements: any; designerFontOptions?: DesignerFontOption[]; onSurfaceSelect?: (surface: string) => void; onSurfaceContext?: (event: any) => void }) {
+function Cover3D({ novel, cover, autoSpin, immersive, surface, environment, measurements, designerFontOptions = [], onSurfaceSelect, onSurfaceContext }: { novel: any; cover: any; autoSpin?: boolean; immersive?: boolean; surface?: string; environment?: string; measurements: any; designerFontOptions?: DesignerFontOption[]; onSurfaceSelect?: (surface: string) => void; onSurfaceContext?: (event: any, surface?: string) => void }) {
   const [coverUrl, setCoverUrl] = useState<string | null>(null)
   const [Comp, setComp] = useState<ComponentType<any> | null>(null)
   useEffect(() => {

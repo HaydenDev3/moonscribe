@@ -27,7 +27,7 @@ export async function wipeEverything() {
 }
 
 export async function importBackup(data) {
-  if (!data || data.app !== 'moonscribe') throw new Error('Not a Moonscribe backup')
+  if (!data || data.app !== 'moonscribe') throw new Error('Not a MoonScribe backup')
   const db = await getDB()
   const stores = ALL_STORES.filter((s) => db.objectStoreNames.contains(s))
   const tx = db.transaction(stores, 'readwrite')

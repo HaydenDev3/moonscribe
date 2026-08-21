@@ -7,6 +7,8 @@ export type DesignerFontOption = {
 declare global {
   interface Window {
     designerFontOptions?: DesignerFontOption[]
+    SpeechRecognition?: any
+    webkitSpeechRecognition?: any
   }
 }
 

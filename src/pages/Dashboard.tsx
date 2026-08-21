@@ -492,7 +492,7 @@ export default function Dashboard() {
           <div>
             <div className="brand-row">
               <span className="brand">
-                Moonscribe<span className="brand-mark">✦</span>
+                MoonScribe<span className="brand-mark">✦</span>
               </span>
               <span className="tagline">a quiet place to write, made for two</span>
             </div>
@@ -601,8 +601,8 @@ export default function Dashboard() {
             <div className="dashboard-tools-bottom">
               <div className="genre-chips">
                 <button className={`chip ${genreFilter === null ? 'active' : ''}`} onClick={() => setGenreFilter(null)}>All</button>
-                {(allGenres.length ? allGenres : GENRES).slice(0, 12).map((g) => (
-                  <button key={g} className={`chip ${genreFilter === g ? 'active' : ''}`} onClick={() => setGenreFilter(genreFilter === g ? null : g)}>{g}</button>
+                {((Array.isArray(allGenres) && allGenres.length ? allGenres : GENRES) as string[]).slice(0, 12).map((g) => (
+                  <button key={String(g)} className={`chip ${genreFilter === g ? 'active' : ''}`} onClick={() => setGenreFilter(genreFilter === g ? null : g)}>{g}</button>
                 ))}
               </div>
               <div className="dashboard-sort">
@@ -844,7 +844,7 @@ function RenameModal({ novel, onClose, onSave }) {
   }, [novel])
 
   return (
-    <Modal open={!!novel} onClose={onClose} title="About this novel">
+    <Modal open={!!novel} onClose={onClose} title="About this novel" width={520}>
       <div className="field">
         <label>Title</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} />

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useDraftRecovery, readDraft, draftKey } from '../utils/draftRecovery'
 import { useParams } from 'react-router-dom'
 import { getNovel } from '../db/novels'
@@ -143,7 +144,7 @@ export default function World({ novelId, embedded }) {
               <article
                 className="world-glass-card"
                 key={i.id}
-                style={{ '--world-color': i.color || KIND_COLORS[i.kind] }}
+                style={{ ['--world-color' as any]: i.color || KIND_COLORS[i.kind] } as CSSProperties}
                 onContextMenu={(e) => worldMenu(e, i)}
                 onClick={() => setEditing({ ...i })}
               >
