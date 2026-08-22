@@ -29,6 +29,7 @@ const DIST = join(ROOT, 'dist')
 const PORT = Number(process.env.PORT || 3001)
 const notificationSockets = new Map()
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID)
+const CANONICAL_WEB_ORIGIN = 'https://moonscribe.cc'
 
 const STORES = new Set([
   'novels',
@@ -553,7 +554,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
   const isAllowedOrigin = (origin) => {
     try {
       const parsed = new URL(origin)
-      return allowedOrigins.has(parsed.origin) || (ALLOW_DEV_TUNNELS && parsed.protocol === 'https:' && DEV_TUNNEL_HOST.test(parsed.hostname))
+      return allowedOrigins.has(parsed.origin) || parsed.origin === CANONICAL_WEB_ORIGIN || (ALLOW_DEV_TUNNELS && parsed.protocol === 'https:' && DEV_TUNNEL_HOST.test(parsed.hostname))
     } catch { return false }
   }
 
@@ -563,6 +564,8 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
   // recognized HTTPS tunnel hosts are accepted only in development.
   const publicOrigin = (req, requested = null) => {
     if (requested && isAllowedOrigin(requested)) return new URL(requested).origin
+    const requestHost = String(req.headers.host || '').split(':')[0].toLowerCase()
+    if (requestHost === 'moonscribe.cc' || requestHost === 'www.moonscribe.cc') return CANONICAL_WEB_ORIGIN
     const requestOrigin = req.headers.origin
     if (requestOrigin && isAllowedOrigin(requestOrigin)) return new URL(requestOrigin).origin
     if (process.env.TRUST_PROXY === 'true') {
