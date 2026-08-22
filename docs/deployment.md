@@ -8,6 +8,10 @@
 ## Railway deployment
 
 MoonScribe’s Docker image intentionally does not declare a Docker `VOLUME` instruction. On Railway, create a Railway Volume in the service settings and mount it at `/app/data`. Keep `DATA_DIR=/app/data`, deploy one replica, and use `/api/health` as the health-check path. SQLite requires a single persistent service instance; multiple replicas would have separate databases and are not supported by this deployment.
+
+## Vercel frontend with Railway API
+
+If the web assets are deployed to Vercel while the sync server runs on Railway, keep `vercel.json` in the project root. It proxies `/auth/*` and `/api/*` from the public MoonScribe domain to the Railway service so OAuth and API requests do not fall through to the frontend’s 404 page. Update the Railway hostname in `vercel.json` if the Railway service uses a different public domain. WebSocket collaboration should be tested after deployment; if the Vercel proxy does not support the upgrade, set `VITE_SYNC_SERVER` to the Railway HTTPS origin for the client and use the Railway origin for realtime connections.
 - HTTPS application origin and reverse proxy.
 - Verified Resend sending domain.
 - Google/Discord OAuth applications with exact callback URLs.

@@ -28,6 +28,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = join(ROOT, 'dist')
 const PORT = Number(process.env.PORT || 3001)
 const notificationSockets = new Map()
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID)
 
 const STORES = new Set([
   'novels',
@@ -47,7 +48,7 @@ const STORES = new Set([
 // Providers always return through the public application origin. In local
 // development Vite proxies /auth to this process, so backend ports never leak
 // into provider-facing redirect URIs.
-const APP_ORIGIN = (process.env.APP_ORIGIN || (process.env.NODE_ENV === 'production' ? 'https://moonscribe.cc' : 'http://localhost:5173')).replace(/\/+$/, '')
+const APP_ORIGIN = (process.env.APP_ORIGIN || (IS_PRODUCTION ? 'https://moonscribe.cc' : 'http://localhost:5173')).replace(/\/+$/, '')
 // Magic Links must always land on the real MoonScribe web app. This is
 // intentionally independent from APP_ORIGIN so local/test servers cannot
 // send unusable localhost links through Resend.
@@ -63,7 +64,7 @@ const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET
 const DISCORD_SCOPES = 'identify'
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
-const ALLOW_DEV_TUNNELS = process.env.ALLOW_DEV_TUNNELS === 'true' || process.env.NODE_ENV !== 'production'
+const ALLOW_DEV_TUNNELS = process.env.ALLOW_DEV_TUNNELS === 'true' || !IS_PRODUCTION
 const DEV_TUNNEL_HOST = /(?:^|\.)(?:ngrok-free\.app|ngrok-free\.dev|ngrok\.io|loca\.lt)$/i
 
 const OAUTH_STATE_SECRET = process.env.OAUTH_STATE_SECRET || DISCORD_CLIENT_SECRET || GOOGLE_CLIENT_SECRET
@@ -581,7 +582,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
   // the provider code.
   const oauthCallbackOrigin = (req) => {
     if (process.env.API_ORIGIN) return API_ORIGIN
-    if (process.env.NODE_ENV !== 'production') return API_ORIGIN
+    if (!IS_PRODUCTION) return API_ORIGIN
     const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim()
     const host = forwardedHost || String(req.headers.host || '').trim()
     if (!host) return API_ORIGIN
