@@ -4,6 +4,10 @@
 
 - Supported current Node.js and npm versions.
 - Persistent writable storage for `DATA_DIR`.
+
+## Railway deployment
+
+MoonScribe’s Docker image intentionally does not declare a Docker `VOLUME` instruction. On Railway, create a Railway Volume in the service settings and mount it at `/app/data`. Keep `DATA_DIR=/app/data`, deploy one replica, and use `/api/health` as the health-check path. SQLite requires a single persistent service instance; multiple replicas would have separate databases and are not supported by this deployment.
 - HTTPS application origin and reverse proxy.
 - Verified Resend sending domain.
 - Google/Discord OAuth applications with exact callback URLs.
