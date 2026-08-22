@@ -26,6 +26,7 @@ import './styles/app.css'
 import { AppProvider } from './context/AppContext'
 import { ContextMenuProvider } from './components/ContextMenu'
 import App from './App'
+import { registerDesktopAuthLinks } from './api/desktopAuth'
 
 const legacyDesignerFontOptions = [
   { key: 'cormorant', label: 'Cormorant italic' },
@@ -36,6 +37,8 @@ const legacyDesignerFontOptions = [
 if (typeof window !== 'undefined' && !window.designerFontOptions) {
   window.designerFontOptions = legacyDesignerFontOptions
 }
+
+registerDesktopAuthLinks().catch((error) => console.error('[Desktop auth link]', error))
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

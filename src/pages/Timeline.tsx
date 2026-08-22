@@ -92,11 +92,9 @@ export default function Timeline({ novelId, embedded }) {
   // Group into parts
   const groups = useMemo(() => {
     const gs = []
-    let currentPart = null
     for (const c of chapters) {
       if (isContainer(c)) {
-        currentPart = c.title || c.part
-        gs.push({ part: currentPart, id: c.id, scenes: [] })
+        gs.push({ part: c.title || c.part, id: c.id, scenes: [] })
       } else {
         const target = gs[gs.length - 1]
         if (target) target.scenes.push(c)

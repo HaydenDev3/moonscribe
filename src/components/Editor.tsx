@@ -165,6 +165,8 @@ export default function Editor({
   const [dictating, setDictating] = useState(false)
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
   const [linkDraft, setLinkDraft] = useState('')
+  const [linkPopover, setLinkPopover] = useState(null)
+  const editingLinkRef = useRef<ReturnType<typeof document.createElement> | null>(null)
 
   // ── Pagination ───────────────────────────────────────────────────────────
   const [pageCount, setPageCount] = useState(1)
@@ -1046,6 +1048,17 @@ export default function Editor({
       return
     }
 
+    // Browser range wrapping can create invalid markup when a whole paragraph
+    // is selected (for example Ctrl/Cmd+A in the manuscript). Let the editing
+    // engine apply highlights across block boundaries instead of wrapping <p>
+    // elements in a span.
+    if (prop === 'backgroundColor') {
+      document.execCommand('backColor', false, String(value))
+      savedRange.current = range.cloneRange()
+      report()
+      return
+    }
+
     const span = document.createElement('span')
 
     span.style[prop] = value
@@ -1246,6 +1259,23 @@ export default function Editor({
       return
     }
 
+    // Structural markers must never replace selected manuscript text.
+    if (!range.collapsed) {
+      range.collapse(false)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+    const endElement = range.endContainer.nodeType === Node.ELEMENT_NODE
+      ? range.endContainer as Element
+      : range.endContainer.parentElement
+    const block = endElement?.closest('p,h1,h2,h3,blockquote')
+    if (block && el.contains(block)) {
+      range.setStartAfter(block)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+
     const marker = document.createElement('div')
 
     marker.className = 'pg-break'
@@ -1290,18 +1320,42 @@ export default function Editor({
 
     el.focus()
 
-    document.execCommand(
-      'insertHTML',
-      false,
-      `
-        <div
-          class="scene-break"
-          contenteditable="false"
-          data-scene-break="true"
-        >❦</div>
-        <p><br></p>
-      `,
-    )
+    const selection = window.getSelection()
+    if (selection?.rangeCount) {
+      const range = selection.getRangeAt(0)
+      if (el.contains(range.commonAncestorContainer) && !range.collapsed) {
+        range.collapse(false)
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
+      const endElement = range.endContainer.nodeType === Node.ELEMENT_NODE
+        ? range.endContainer as Element
+        : range.endContainer.parentElement
+      const block = endElement?.closest('p,h1,h2,h3,blockquote')
+      if (block && el.contains(block)) {
+        range.setStartAfter(block)
+        range.collapse(true)
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
+    }
+
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+    if (!range || !el.contains(range.commonAncestorContainer)) return
+    const marker = document.createElement('div')
+    marker.className = 'scene-break'
+    marker.contentEditable = 'false'
+    marker.dataset.sceneBreak = 'true'
+    marker.textContent = '❦'
+    const paragraph = document.createElement('p')
+    paragraph.innerHTML = '<br>'
+    range.insertNode(marker)
+    marker.after(paragraph)
+    const caret = document.createRange()
+    caret.setStart(paragraph, 0)
+    caret.collapse(true)
+    selection?.removeAllRanges()
+    selection?.addRange(caret)
 
     report()
   }, [report])
@@ -1309,12 +1363,60 @@ export default function Editor({
   // ── Link ─────────────────────────────────────────────────────────────────
   const insertLink = useCallback(() => {
     const sel = window.getSelection()
+    if (sel?.rangeCount && ref.current?.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+      savedRange.current = sel.getRangeAt(0).cloneRange()
+    }
     const selectedText = sel && !sel.isCollapsed ? sel.toString().trim() : ''
     const suggested = selectedText && /^https?:\/\//i.test(selectedText) ? selectedText : ''
 
+    editingLinkRef.current = null
     setLinkDraft(suggested || 'https://')
     setLinkDialogOpen(true)
   }, [])
+
+  const openSafeLink = useCallback((value) => {
+    const url = normalizeSafeLinkUrl(value)
+    if (!url) return
+    const opened = window.open(url, '_blank', 'noopener,noreferrer')
+    if (opened) opened.opener = null
+  }, [])
+
+  const handleEditorClick = useCallback((event) => {
+    const target = event.target instanceof Element ? event.target.closest('a[href]') : null
+    if (!target || target.tagName !== 'A') return
+    // A normal click remains an editing gesture. Modifier-click is the explicit
+    // navigation gesture, matching rich-text editors and avoiding lost drafts.
+    if (!(event.ctrlKey || event.metaKey)) {
+      event.preventDefault()
+      const rect = target.getBoundingClientRect()
+      setLinkPopover({
+        href: normalizeSafeLinkUrl(target.getAttribute('href')),
+        text: target.textContent || target.getAttribute('href') || 'Link',
+        node: target,
+        top: rect.bottom + 8,
+        left: Math.min(rect.left, window.innerWidth - 260),
+      })
+      return
+    }
+    event.preventDefault()
+    openSafeLink(target.getAttribute('href'))
+  }, [openSafeLink])
+
+  useEffect(() => {
+    if (!linkPopover) return undefined
+    const close = (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest('.editor-link-popover, a[href]')) setLinkPopover(null)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [linkPopover])
+
+  const removeLink = useCallback((node) => {
+    if (!node?.parentNode) return
+    node.replaceWith(...node.childNodes)
+    setLinkPopover(null)
+    report()
+  }, [report])
 
   const applyLinkInsert = useCallback(() => {
     const url = normalizeSafeLinkUrl(linkDraft)
@@ -1331,8 +1433,20 @@ export default function Editor({
       return
     }
 
+    const editingLink = editingLinkRef.current
+    if (editingLink && editor.contains(editingLink)) {
+      editingLink.setAttribute('href', url)
+      editingLink.setAttribute('target', '_blank')
+      editingLink.setAttribute('rel', 'noopener noreferrer nofollow')
+      editingLinkRef.current = null
+      setLinkDialogOpen(false)
+      setLinkDraft('https://')
+      report()
+      return
+    }
+
     const selection = window.getSelection()
-    const range = selection && selection.rangeCount ? selection.getRangeAt(0) : document.createRange()
+    const range = savedRange.current || (selection && selection.rangeCount ? selection.getRangeAt(0) : document.createRange())
 
     const anchor = document.createElement('a')
     anchor.href = url
@@ -1343,6 +1457,11 @@ export default function Editor({
     anchor.textContent = fallbackText
 
     editor.focus()
+
+    if (savedRange.current && selection) {
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
 
     if (selection && selection.rangeCount && editor.contains(selection.anchorNode)) {
       if (!range.collapsed) {
@@ -1373,6 +1492,7 @@ export default function Editor({
 
     setLinkDialogOpen(false)
     setLinkDraft('https://')
+    savedRange.current = null
     report()
   }, [linkDraft, report])
 
@@ -2038,6 +2158,7 @@ export default function Editor({
   }, [
     exec,
     execUndoRedo,
+    formatBlock,
     toggleHeading,
     insertSceneBreak,
     insertPageBreak,
@@ -2085,7 +2206,44 @@ export default function Editor({
             .trim()
         : ''
 
+    const linkTarget = e.target instanceof Element ? e.target.closest('a[href]') : null
+    const safeLink = linkTarget?.tagName === 'A'
+      ? normalizeSafeLinkUrl(linkTarget.getAttribute('href'))
+      : ''
+
     openContextMenu(e, [
+      ...(safeLink
+        ? [
+            {
+              label: 'Open link',
+              icon: 'fa-solid fa-arrow-up-right-from-square',
+              onClick: () => openSafeLink(safeLink),
+            },
+            {
+              label: 'Copy link',
+              icon: 'fa-regular fa-copy',
+              onClick: () => navigator.clipboard?.writeText(safeLink),
+            },
+            {
+              label: 'Edit link',
+              icon: 'fa-solid fa-pen',
+              onClick: () => {
+                editingLinkRef.current = linkTarget
+                setLinkDraft(safeLink)
+                setLinkDialogOpen(true)
+              },
+            },
+            {
+              label: 'Remove link',
+              icon: 'fa-solid fa-link-slash',
+              onClick: () => {
+                linkTarget.replaceWith(...linkTarget.childNodes)
+                report()
+              },
+            },
+            'divider',
+          ]
+        : []),
       ...(hasSelection
         ? [
             {
@@ -2234,6 +2392,8 @@ export default function Editor({
     removeSceneBreak,
     pageSize,
     execUndoRedo,
+    openSafeLink,
+    report,
   ])
 
   // ── Toolbar handlers ─────────────────────────────────────────────────────
@@ -2382,6 +2542,15 @@ export default function Editor({
           </div>
         </div>
       </Modal>
+      {linkPopover && <div className="editor-link-popover" role="dialog" aria-label="Link actions" style={{ top: linkPopover.top, left: Math.max(8, linkPopover.left) }}>
+        <div className="editor-link-popover-url"><Icon icon="fa-solid fa-link" /> <span title={linkPopover.href}>{linkPopover.text}</span></div>
+        <div className="editor-link-popover-actions">
+          <button type="button" onClick={() => openSafeLink(linkPopover.href)}><Icon icon="fa-solid fa-arrow-up-right-from-square" /> Open</button>
+          <button type="button" onClick={() => { editingLinkRef.current = linkPopover.node; setLinkDraft(linkPopover.href); setLinkDialogOpen(true); setLinkPopover(null) }}><Icon icon="fa-solid fa-pen" /> Edit</button>
+          <button type="button" onClick={() => navigator.clipboard?.writeText(linkPopover.href)}><Icon icon="fa-regular fa-copy" /> Copy</button>
+          <button type="button" onClick={() => removeLink(linkPopover.node)}><Icon icon="fa-solid fa-link-slash" /> Remove</button>
+        </div>
+      </div>}
     <div
       className="editor-shell"
       onMouseMove={
@@ -2648,11 +2817,10 @@ export default function Editor({
                               ? '1px solid var(--border)'
                               : undefined,
                         }}
-                        onMouseDown={(
-                          e,
-                        ) =>
+                        onMouseDown={(e) => {
                           e.preventDefault()
-                        }
+                          saveSelection()
+                        }}
                         onClick={() => {
                           applyStyle(
                             'color',
@@ -2748,11 +2916,10 @@ export default function Editor({
                           border:
                             '1px solid var(--border)',
                         }}
-                        onMouseDown={(
-                          e,
-                        ) =>
+                        onMouseDown={(e) => {
                           e.preventDefault()
-                        }
+                          saveSelection()
+                        }}
                         onClick={() => {
                           if (c === 'transparent') {
                             clearHighlight()
@@ -3314,6 +3481,7 @@ export default function Editor({
                   'The first sentence is the hardest. Start anywhere.'
                 }
                 onInput={report}
+                onClick={handleEditorClick}
                 onBeforeInput={ensureCaretInTextBlock}
                 onBlur={report}
                 onPaste={handlePaste}

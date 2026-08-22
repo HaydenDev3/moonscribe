@@ -211,7 +211,9 @@ export async function unregisterFontEntry(entry) {
   if (!face) return false
   try {
     document.fonts.delete(face)
-  } catch {}
+  } catch {
+    // Some browser font sets do not permit explicit deletion.
+  }
   FONT_FACE_REGISTRY.delete(key)
   return true
 }
@@ -276,7 +278,9 @@ export async function detectSystemFonts() {
     for (const name of SYSTEM_FONT_CANDIDATES) {
       try {
         if (document.fonts?.check?.(`16px "${name}"`)) add(name)
-      } catch {}
+      } catch {
+        // Ignore fonts the current browser cannot inspect.
+      }
     }
   }
 

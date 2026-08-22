@@ -1,6 +1,7 @@
 // Right-click context menus. Any component can open one at the cursor with
 // openContextMenu(x, y, items). Rendered in a portal, closed on click/Esc.
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import type { ComponentRef } from 'react'
 import { createPortal } from 'react-dom'
 import Icon from './Icon'
 
@@ -8,7 +9,10 @@ const Ctx = createContext(null)
 
 export function ContextMenuProvider({ children }) {
   const [menu, setMenu] = useState(null)
-  const menuRef = useRef(null)
+  const menuRef = useRef<ComponentRef<'div'> | null>(null)
+  const focusElement = (element: Element | null | undefined) => {
+    if (element && 'focus' in element && typeof element.focus === 'function') element.focus()
+  }
 
   const close = useCallback(() => setMenu(null), [])
 
@@ -20,9 +24,24 @@ export function ContextMenuProvider({ children }) {
   }, [])
 
   useEffect(() => {
+    const preventNativeMenu = (event) => event.preventDefault()
+    window.addEventListener('contextmenu', preventNativeMenu)
+    return () => window.removeEventListener('contextmenu', preventNativeMenu)
+  }, [])
+
+  useEffect(() => {
     if (!menu) return
     const onKey = (e) => {
-      if (e.key === 'Escape') close()
+      if (e.key === 'Escape') return close()
+      const buttons = Array.from(menuRef.current?.querySelectorAll('button:not(:disabled)') || [])
+      if (!buttons.length || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return
+      e.preventDefault()
+      const current = buttons.indexOf(document.activeElement as (typeof buttons)[number])
+      const next = e.key === 'Home' ? 0
+        : e.key === 'End' ? buttons.length - 1
+          : e.key === 'ArrowDown' ? (current + 1 + buttons.length) % buttons.length
+            : (current - 1 + buttons.length) % buttons.length
+      focusElement(buttons[next])
     }
     const onScroll = () => close()
     window.addEventListener('keydown', onKey)
@@ -45,6 +64,8 @@ export function ContextMenuProvider({ children }) {
     if (x + r.width > window.innerWidth - 8) x = Math.max(8, window.innerWidth - r.width - 8)
     if (y + r.height > window.innerHeight - 8) y = Math.max(8, window.innerHeight - r.height - 8)
     if (x !== menu.x || y !== menu.y) setMenu({ ...menu, x, y })
+    const first = el.querySelector('button:not(:disabled)')
+    requestAnimationFrame(() => focusElement(first))
   }, [menu])
 
   return (

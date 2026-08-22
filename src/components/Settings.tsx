@@ -8,13 +8,15 @@ import { getDB } from '../db/db'
 import { clearOldSnapshots } from '../db/snapshots'
 import { downloadBlob } from '../utils/download'
 import SyncStatus from './SyncStatus'
-import AuthModal from './AuthModal'
+import AccountCentre from './AccountCentre'
 import Select from './Select'
 import Icon from './Icon'
 import RolePermissions from './RolePermissions'
 import * as syncEngine from '../sync/engine'
 import { NOVEL_NAV } from '../nav'
 import { isSupabaseConfigured } from '../lib/supabase'
+import { capabilities } from '../platform/capabilities'
+import UpdateSettings from './UpdateSettings'
 
 const IDLE_OPTIONS = [
   { value: '0', label: 'Never' },
@@ -26,24 +28,35 @@ const IDLE_OPTIONS = [
 ]
 
 const CATEGORIES = [
+  { key: 'overview', label: 'Overview', icon: 'fa-solid fa-sliders', group: 'General', terms: 'home start screen preferences settings' },
+  { key: 'profile', label: 'Profile', icon: 'fa-solid fa-user', group: 'Account', terms: 'name pen name language timezone identity' },
+  { key: 'authentication', label: 'Authentication', icon: 'fa-solid fa-shield-halved', group: 'Account', terms: 'sign in password discord google account identity login provider authentication' },
   { key: 'appearance', label: 'Appearance', icon: 'fa-solid fa-palette', group: 'Experience', terms: 'theme colour paper custom motion' },
   { key: 'editor', label: 'Editor', icon: 'fa-solid fa-pen-nib', group: 'Experience', terms: 'writing font spelling autocorrect page' },
-  { key: 'performance', label: 'Performance', icon: 'fa-solid fa-gauge-high', group: 'Experience', terms: 'speed autosave responsiveness animation' },
-  { key: 'accessibility', label: 'Accessibility', icon: 'fa-solid fa-universal-access', group: 'Experience', terms: 'contrast readable motion keyboard focus' },
-  { key: 'keybinds', label: 'Keybinds', icon: 'fa-regular fa-keyboard', group: 'Experience', terms: 'shortcuts keyboard commands' },
+  { key: 'writing', label: 'Writing experience', icon: 'fa-solid fa-feather-pointed', group: 'Experience', terms: 'autosave typewriter focus writing session' },
+  { key: 'sounds', label: 'Sounds & feedback', icon: 'fa-solid fa-volume-high', group: 'Experience', terms: 'sound ambient clicks notifications feedback' },
+  { key: 'notifications', label: 'Notifications', icon: 'fa-regular fa-bell', group: 'Experience', terms: 'email reminder browser inbox collaboration announcement' },
+  { key: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-house', group: 'Experience', terms: 'home library sidebar widgets landing view' },
+  { key: 'sync', label: 'Sync', icon: 'fa-solid fa-arrows-rotate', group: 'Data & sync', terms: 'cloud sync offline conflicts server' },
+  { key: 'backups', label: 'Backups', icon: 'fa-solid fa-box-archive', group: 'Data & sync', terms: 'backup restore download safety' },
+  { key: 'privacy', label: 'Import, export & storage', icon: 'fa-solid fa-database', group: 'Data & sync', terms: 'backup export import delete encryption storage' },
   { key: 'lock', label: 'Lock & security', icon: 'fa-solid fa-lock', group: 'Privacy & safety', terms: 'password pin idle authorization security' },
-  { key: 'privacy', label: 'Privacy & data', icon: 'fa-solid fa-shield-halved', group: 'Privacy & safety', terms: 'backup export delete encryption storage' },
-  { key: 'sync', label: 'Account & sync', icon: 'fa-solid fa-user-shield', group: 'Account', terms: 'profile discord cloud devices login sessions identity' },
-  { key: 'about', label: 'About', icon: 'fa-solid fa-moon', group: 'MoonScribe', terms: 'version app' }
+  { key: 'sessions', label: 'Sessions & devices', icon: 'fa-solid fa-laptop', group: 'Privacy & safety', terms: 'devices sessions revoke login signed in' },
+  { key: 'accessibility', label: 'Accessibility', icon: 'fa-solid fa-universal-access', group: 'Accessibility', terms: 'contrast readable motion keyboard focus' },
+  { key: 'keybinds', label: 'Keybinds', icon: 'fa-regular fa-keyboard', group: 'Accessibility', terms: 'shortcuts keyboard commands' },
+  { key: 'performance', label: 'Performance', icon: 'fa-solid fa-gauge-high', group: 'Advanced', terms: 'speed autosave responsiveness animation' },
+  ...(capabilities.nativeUpdater ? [{ key: 'updates', label: 'Updates', icon: 'fa-solid fa-cloud-arrow-down', group: 'Advanced', terms: 'desktop version updater stable download restart' }] : []),
+  { key: 'about', label: 'About', icon: 'fa-solid fa-moon', group: 'Advanced', terms: 'version app release notes' }
 ]
 
 export default function Settings() {
   const app = useApp()
   const { settings, updateSettings, refreshNovels, toast, settingsOpen, openSettings, closeSettings,
     appLock, enableAppLock, updateAppLock, disableAppLock, lockNow,
-    customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts } = app
+    customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts,
+    connectDiscord, connectGoogle } = app
 
-  const [cat, setCat] = useState('appearance')
+  const [cat, setCat] = useState('overview')
   const [query, setQuery] = useState('')
   const [connectOpen, setConnectOpen] = useState(false)
   const [fontName, setFontName] = useState('')
@@ -55,7 +68,8 @@ export default function Settings() {
       const mod = e.ctrlKey || e.metaKey
       if (mod && (e.key === 'p' || e.key === 'P')) {
         e.preventDefault()
-        settingsOpen ? closeSettings() : openSettings()
+        if (settingsOpen) closeSettings()
+        else openSettings()
       } else if (e.key === 'Escape' && settingsOpen && !connectOpen) {
         closeSettings()
       }
@@ -112,13 +126,21 @@ export default function Settings() {
             />
           )}
           {!query && cat === 'editor' && <EditorSettings settings={settings} updateSettings={updateSettings} />}
+          {!query && cat === 'overview' && <SettingsOverview onOpenCategory={setCat} />}
+          {!query && cat === 'profile' && <Profile settings={settings} updateSettings={updateSettings} />}
+          {!query && cat === 'authentication' && <AppConnections onOpen={() => setConnectOpen(true)} onConnectDiscord={connectDiscord} onConnectGoogle={connectGoogle} />}
+          {!query && cat === 'writing' && <WritingExperience settings={settings} updateSettings={updateSettings} />}
+          {!query && cat === 'sounds' && <SoundsFeedback settings={settings} updateSettings={updateSettings} />}
+          {!query && cat === 'notifications' && <NotificationPreferences settings={settings} updateSettings={updateSettings} />}
+          {!query && cat === 'dashboard' && <DashboardPreferences settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'performance' && <Performance settings={settings} updateSettings={updateSettings} />}
+          {!query && cat === 'updates' && capabilities.nativeUpdater && <UpdateSettings />}
           {!query && cat === 'accessibility' && <Accessibility settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'keybinds' && <Keybinds />}
           {!query && cat === 'lock' && (
             <LockSecurity appLock={appLock} enableAppLock={enableAppLock} updateAppLock={updateAppLock} disableAppLock={disableAppLock} lockNow={lockNow} toast={toast} settings={settings} updateSettings={updateSettings} />
           )}
-          {!query && cat === 'privacy' && (
+          {!query && (cat === 'privacy' || cat === 'backups') && (
             <PrivacyData toast={toast} refreshNovels={refreshNovels} fileRef={fileRef} />
           )}
           {!query && cat === 'sync' && (
@@ -128,13 +150,13 @@ export default function Settings() {
               <p className="muted">Manage who you are in MoonScribe, where your library lives, and which devices can reach it.</p>
               <SyncPanel onOpen={() => setConnectOpen(true)} />
               <RolePermissions />
-              <AccountSessions />
               <div className="settings-section-card">
                 <div className="settings-section-head"><span className="settings-section-icon"><Icon icon="fa-solid fa-laptop-file" /></span><div><strong>Local writing identity</strong><small>Your offline library is available without an account.</small></div><span className="settings-status-pill safe">Active</span></div>
                 <div className="settings-detail-grid"><span><small>Storage</small><b>This browser</b></span><span><small>Ownership</small><b>Private to you</b></span><span><small>Offline access</small><b>Available</b></span></div>
               </div>
             </section>
           )}
+          {!query && cat === 'sessions' && <SessionsDevices />}
           {!query && cat === 'about' && (
             <section className="settings-panel">
               <h2>MoonScribe</h2>
@@ -148,7 +170,7 @@ export default function Settings() {
         </div>
       </div>
 
-      <AuthModal open={connectOpen} onClose={() => setConnectOpen(false)} />
+      {connectOpen ? <AccountCentre onClose={() => setConnectOpen(false)} /> : null}
     </div>,
     document.body
   )
@@ -170,6 +192,185 @@ function SettingsSearchResults({ query, settings, updateSettings, onOpenCategory
   const matches = actions.filter((item) => `${item.label} ${item.terms}`.toLowerCase().includes(needle))
   const categories = CATEGORIES.filter((item) => `${item.label} ${item.terms}`.toLowerCase().includes(needle))
   return <section className="settings-panel"><div className="settings-panel-kicker">Smart settings search</div><h2>Results for “{query}”</h2><p className="muted">Change common settings directly, or open the full category for more detail.</p><div className="settings-search-results">{matches.map((item) => <div className="settings-row" key={item.label}><button className="settings-search-result-label" onClick={() => onOpenCategory(item.category)}><strong>{item.label}</strong><small>Open {CATEGORIES.find((category) => category.key === item.category)?.label}</small></button>{item.control}</div>)}{categories.map((item) => <button className="settings-search-category" key={item.key} onClick={() => onOpenCategory(item.key)}><Icon icon={item.icon}/><span><strong>{item.label}</strong><small>View every {item.label.toLowerCase()} option</small></span><Icon icon="fa-solid fa-arrow-right"/></button>)}{!matches.length && !categories.length && <div className="palette-hint">No setting matches “{query}”. Try theme, font, layout, security or motion.</div>}</div></section>
+}
+
+function SettingsOverview({ onOpenCategory }) {
+  const shortcuts = [
+    ['appearance', 'Appearance', 'Theme, typography and atmosphere', 'fa-solid fa-palette'],
+    ['writing', 'Writing experience', 'Autosave, focus and session comfort', 'fa-solid fa-feather-pointed'],
+    ['dashboard', 'Dashboard', 'Home, library and sidebar preferences', 'fa-solid fa-house'],
+    ['authentication', 'Authentication', 'Choose how you sign in to MoonScribe', 'fa-solid fa-shield-halved'],
+  ]
+  return (
+    <section className="settings-panel">
+      <div className="settings-panel-kicker">General</div>
+      <h2>Settings, made for your way of writing.</h2>
+      <p className="muted">Account preferences follow your MoonScribe identity. Device-specific controls stay local to this browser.</p>
+      <div className="settings-overview-grid">
+        {shortcuts.map(([key, title, description, icon]) => (
+          <button key={key} className="settings-overview-card" onClick={() => onOpenCategory(key)}>
+            <Icon icon={icon} />
+            <span><strong>{title}</strong><small>{description}</small></span>
+            <Icon icon="fa-solid fa-arrow-right" />
+          </button>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function Profile({ settings, updateSettings }) {
+  const { syncUsername, syncDiscordAvatar } = useApp()
+  return (
+    <section className="settings-panel">
+      <div className="settings-panel-kicker">General</div>
+      <h2>Profile</h2>
+      <p className="muted">Your account name identifies MoonScribe. Your writer name is used for exports when you choose it.</p>
+      <div className="settings-profile-card">
+        {syncDiscordAvatar ? <img src={syncDiscordAvatar} alt="" /> : <span><Icon icon="fa-solid fa-feather-pointed" /></span>}
+        <div><strong>{syncUsername || 'Local writer'}</strong><small>MoonScribe account</small></div>
+      </div>
+      <div className="settings-form-grid">
+        <label className="field"><span>Display name</span><input className="text-field" value={settings.displayName || ''} onChange={(event) => updateSettings({ displayName: event.target.value })} placeholder={syncUsername || 'How MoonScribe addresses you'} /></label>
+        <label className="field"><span>Writer name <em>Optional pen name</em></span><input className="text-field" value={settings.writerName || ''} onChange={(event) => updateSettings({ writerName: event.target.value })} placeholder="Name used on exports" /></label>
+        <label className="field settings-form-wide"><span>Bio <em>Optional</em></span><input className="text-field" value={settings.profileBio || ''} onChange={(event) => updateSettings({ profileBio: event.target.value })} placeholder="Fantasy writer · worldbuilder" /></label>
+        <div className="settings-row"><div><div className="settings-row-title">Timezone</div><div className="settings-row-sub">Used for daily goals and writing streaks.</div></div><Select ariaLabel="Timezone" width={210} value={settings.timezone || 'UTC'} onChange={(value) => updateSettings({ timezone: value })} options={['Australia/Brisbane', 'Australia/Sydney', 'America/New_York', 'Europe/London', 'UTC'].map((value) => ({ value, label: value.replace('_', ' ') }))} /></div>
+        <div className="settings-row"><div><div className="settings-row-title">Language</div><div className="settings-row-sub">Interface and date formatting preference.</div></div><Select ariaLabel="Language" width={210} value={settings.language || 'en-AU'} onChange={(value) => updateSettings({ language: value })} options={[{ value: 'en-AU', label: 'English (Australia)' }, { value: 'en-US', label: 'English (United States)' }, { value: 'en-GB', label: 'English (United Kingdom)' }]} /></div>
+      </div>
+    </section>
+  )
+}
+
+function AppConnections({ onOpen, onConnectDiscord, onConnectGoogle }) {
+  const { syncUsername, syncDiscordAvatar, syncStatus, syncProvider } = useApp() as any
+  const connected = !!syncUsername
+  const provider = syncProvider === 'google' ? 'Google' : 'Discord'
+  return (
+    <section className="settings-panel">
+      <div className="settings-panel-kicker">Account</div>
+      <h2>Authentication</h2>
+      <p className="muted">Choose how you sign in. You only need one method, and every method opens the same MoonScribe library.</p>
+      <div className="settings-identity-card">
+        {syncDiscordAvatar ? <img src={syncDiscordAvatar} alt="" /> : <span><Icon icon="fa-solid fa-moon" /></span>}
+        <div><strong>{syncUsername || 'Your MoonScribe identity'}</strong><small>{connected ? 'Connected and ready to sync' : 'Connect a provider to sync this library'}</small></div>
+        <span className={`settings-status-pill ${syncStatus === 'synced' ? 'safe' : 'warn'}`}>{connected ? 'Active' : 'Local only'}</span>
+      </div>
+      <div className="settings-subheading">Sign-in options</div>
+      <ConnectionRow icon="fa-brands fa-discord" name="Discord" detail={connected && provider === 'Discord' ? `Connected as ${syncUsername}` : 'Use your Discord account'} connected={connected && provider === 'Discord'} onManage={connected && provider === 'Discord' ? onOpen : onConnectDiscord} />
+      <ConnectionRow icon="fa-brands fa-google" name="Google" detail={connected && provider === 'Google' ? `Connected as ${syncUsername}` : 'Use your Google account'} connected={connected && provider === 'Google'} onManage={connected && provider === 'Google' ? onOpen : onConnectGoogle} />
+      <ConnectionRow icon="fa-solid fa-key" name="MoonScribe password" detail="Sign in with an email and password" connected={false} onManage={onOpen} />
+      <ConnectionRow icon="fa-solid fa-fingerprint" name="Passkey" detail="A faster sign-in option coming soon" connected={false} disabled />
+      <div className="settings-help-card"><Icon icon="fa-solid fa-circle-info" /><span><strong>New to MoonScribe?</strong><small>Connect Discord or Google to keep your library available across devices. Your local writing remains available without an account.</small></span></div>
+    </section>
+  )
+}
+
+function ConnectionRow({ icon, name, detail, connected, onManage = () => {}, disabled = false }) {
+  return <div className="settings-row settings-connection-row"><div><div className="settings-row-title"><Icon icon={icon} /> {name}</div><div className="settings-row-sub">{detail}</div></div><button className="button button-secondary" disabled={disabled} onClick={onManage}>{connected ? 'Connected' : disabled ? 'Coming soon' : 'Set up'}</button></div>
+}
+
+function WritingExperience({ settings, updateSettings }) {
+  return (
+    <section className="settings-panel">
+      <div className="settings-panel-kicker">Experience</div>
+      <h2>Writing experience</h2>
+      <p className="muted">Set how MoonScribe behaves while you are inside a writing session.</p>
+      <div className="settings-row"><div><div className="settings-row-title">Autosave delay</div><div className="settings-row-sub">Save after you pause typing.</div></div><Select ariaLabel="Autosave delay" width={160} value={String(settings.autosaveDelay || 1800)} onChange={(value) => updateSettings({ autosaveDelay: Number(value) })} options={[{ value: '800', label: '0.8 seconds' }, { value: '1800', label: '1.8 seconds' }, { value: '3500', label: '3.5 seconds' }]} /></div>
+      <div className="settings-row"><div><div className="settings-row-title">Resume cursor position</div><div className="settings-row-sub">Return to the last place you were writing.</div></div><Toggle checked={settings.resumeCursorPosition !== false} onChange={(value) => updateSettings({ resumeCursorPosition: value })} /></div>
+      <div className="settings-row"><div><div className="settings-row-title">Remember scroll position</div><div className="settings-row-sub">Keep your reading place inside long chapters.</div></div><Toggle checked={settings.rememberScrollPosition !== false} onChange={(value) => updateSettings({ rememberScrollPosition: value })} /></div>
+      <div className="settings-row"><div><div className="settings-row-title">Open last chapter on launch</div><div className="settings-row-sub">Resume the most recently opened chapter when entering a story.</div></div><Toggle checked={settings.openLastChapter !== false} onChange={(value) => updateSettings({ openLastChapter: value })} /></div>
+      <div className="settings-row"><div><div className="settings-row-title">Writing goal reminders</div><div className="settings-row-sub">How assertively MoonScribe should nudge daily goals.</div></div><Select ariaLabel="Writing goal reminders" width={160} value={settings.writingGoalReminders || 'gentle'} onChange={(value) => updateSettings({ writingGoalReminders: value })} options={[{ value: 'off', label: 'Off' }, { value: 'gentle', label: 'Gentle' }, { value: 'regular', label: 'Regular' }]} /></div>
+      <div className="settings-row"><div><div className="settings-row-title">Writing celebrations</div><div className="settings-row-sub">Keep progress moments quiet or turn them off.</div></div><Select ariaLabel="Writing celebrations" width={160} value={settings.writingCelebrations || 'subtle'} onChange={(value) => updateSettings({ writingCelebrations: value })} options={[{ value: 'off', label: 'Off' }, { value: 'subtle', label: 'Subtle' }, { value: 'full', label: 'Full' }]} /></div>
+    </section>
+  )
+}
+
+function SoundsFeedback({ settings, updateSettings }) {
+  const previewAmbience = () => {
+    updateSettings({ soundEnabled: true, ambientSound: true })
+    import('../utils/sounds').then(({ startAmbientSound }) => startAmbientSound(settings.ambientSoundVolume, settings.ambientMood || 'moonlit'))
+  }
+  return (
+    <section className="settings-panel">
+      <div className="settings-panel-kicker">Experience</div>
+      <h2>Sounds &amp; feedback</h2>
+      <p className="muted">MoonScribe uses separate interface, writing, notification and ambience channels. All sound is generated locally and nothing from your writing is recorded.</p>
+      <div className="settings-row"><div><div className="settings-row-title">Master sounds</div><div className="settings-row-sub">Enable sound feedback across MoonScribe.</div></div><Toggle checked={!!settings.soundEnabled} onChange={(value) => updateSettings({ soundEnabled: value })} /></div>
+      <SoundLevel label="Master volume" value={settings.soundVolume} onChange={(value) => updateSettings({ soundVolume: value })} />
+      <div className="settings-row"><div><div className="settings-row-title">Interface sounds</div><div className="settings-row-sub">Short clicks and toggles for controls and navigation.</div></div><Toggle checked={settings.clickSounds !== false} onChange={(value) => updateSettings({ clickSounds: value })} /></div>
+      <SoundLevel label="Interface volume" value={settings.interfaceSoundVolume} onChange={(value) => updateSettings({ interfaceSoundVolume: value })} />
+      <div className="settings-row"><div><div className="settings-row-title">Writing sounds</div><div className="settings-row-sub">Varied key and return sounds while typing.</div></div><Toggle checked={!!settings.typingSounds} onChange={(value) => updateSettings({ typingSounds: value })} /></div>
+      <SoundLevel label="Writing volume" value={settings.writingSoundVolume} onChange={(value) => updateSettings({ writingSoundVolume: value })} />
+      <div className="settings-row"><div><div className="settings-row-title">Notification sounds</div><div className="settings-row-sub">Distinct chimes for attention-worthy events.</div></div><Toggle checked={settings.notificationSounds !== false} onChange={(value) => updateSettings({ notificationSounds: value })} /></div>
+      <SoundLevel label="Notification volume" value={settings.notificationSoundVolume} onChange={(value) => updateSettings({ notificationSoundVolume: value })} />
+      <div className="settings-row"><div><div className="settings-row-title">Ambient soundscape</div><div className="settings-row-sub">A persistent ambience that continues while moving between pages.</div></div><Select ariaLabel="Ambient soundscape" width={180} value={settings.ambientSound ? settings.ambientMood || 'moonlit' : 'off'} onChange={(value) => updateSettings({ ambientMood: value === 'off' ? settings.ambientMood : value, ambientSound: value !== 'off' })} options={[{ value: 'off', label: 'Off' }, { value: 'moonlit', label: 'Moonlit studio' }, { value: 'rainglass', label: 'Rain on glass' }, { value: 'hearth', label: 'Fireplace' }, { value: 'forest', label: 'Forest night' }, { value: 'ocean', label: 'Ocean room' }, { value: 'library', label: 'Quiet library' }, { value: 'cafe', label: 'Café' }]} /></div>
+      <SoundLevel label="Ambient volume" value={settings.ambientSoundVolume} onChange={(value) => updateSettings({ ambientSoundVolume: value })} />
+      <button className="button button-secondary" onClick={previewAmbience}><Icon icon="fa-solid fa-play" /> Preview ambience</button>
+    </section>
+  )
+}
+
+function SoundLevel({ label, value, onChange }) {
+  const current = Number(value) || 0
+  return <div className="settings-row"><div><div className="settings-row-title">{label}</div></div><label className="settings-volume-control"><input className="settings-volume" type="range" min="0" max="100" value={current} onChange={(event) => onChange(Number(event.target.value))} aria-label={label} /><span>{current}%</span></label></div>
+}
+
+function NotificationPreferences({ settings, updateSettings }) {
+  const preferences = settings.notificationPreferences || {}
+  const setPreference = (key, value) => updateSettings({ notificationPreferences: { ...preferences, [key]: value } })
+  const requestBrowserPermission = async (enabled) => {
+    if (!enabled) return updateSettings({ browserNotifications: false })
+    if (!('Notification' in window)) return
+    const permission = await Notification.requestPermission()
+    updateSettings({ browserNotifications: permission === 'granted' })
+  }
+  return (
+    <section className="settings-panel">
+      <div className="settings-panel-kicker">Experience</div>
+      <h2>Notifications</h2>
+      <p className="muted">MoonScribe decides which events deserve attention. Toasts remain temporary; these preferences are for reminders and events worth returning to.</p>
+      <div className="settings-subheading">General</div>
+      <div className="settings-row"><div><div className="settings-row-title">In-app notifications</div><div className="settings-row-sub">Keep important writing, account and collaboration events in your notification centre.</div></div><Toggle checked={preferences.inApp !== false} onChange={(value) => setPreference('inApp', value)} /></div>
+      <div className="settings-row"><div><div className="settings-row-title">Browser notifications</div><div className="settings-row-sub">Only used for reminders and collaboration when MoonScribe is not in view.</div></div><Toggle checked={!!settings.browserNotifications} onChange={requestBrowserPermission} /></div>
+      <div className="settings-subheading">Writing</div>
+      <PreferenceRow label="Writing reminders" setting="writingReminders" preferences={preferences} onChange={setPreference} />
+      <PreferenceRow label="Daily goal updates" setting="dailyGoalUpdates" preferences={preferences} onChange={setPreference} />
+      <PreferenceRow label="Writing streaks and milestones" setting="milestones" preferences={preferences} onChange={setPreference} />
+      <div className="settings-subheading">Stories &amp; account</div>
+      <PreferenceRow label="Shared-story activity" setting="collaboration" preferences={preferences} onChange={setPreference} />
+      <PreferenceRow label="Sync problems and backup reminders" setting="syncProblems" preferences={preferences} onChange={setPreference} />
+      <PreferenceRow label="Announcements and new features" setting="announcements" preferences={preferences} onChange={setPreference} />
+      <div className="settings-subheading">Email delivery</div>
+      <div className="settings-row"><div><div className="settings-row-title">Account &amp; security</div><div className="settings-row-sub">Sign-in, account recovery and security changes are always delivered when email is available.</div></div><span className="settings-status-pill safe">Required</span></div>
+      <PreferenceRow label="Weekly writing summary" setting="emailWeeklySummary" preferences={preferences} onChange={setPreference} />
+      <PreferenceRow label="Writing reminders by email" setting="emailWritingReminders" preferences={preferences} onChange={setPreference} />
+      <PreferenceRow label="Milestones and collaboration by email" setting="emailMilestones" preferences={preferences} onChange={setPreference} />
+      <PreferenceRow label="Announcements by email" setting="emailAnnouncements" preferences={preferences} onChange={setPreference} />
+    </section>
+  )
+}
+
+function PreferenceRow({ label, setting, preferences, onChange }) {
+  return <div className="settings-row"><div><div className="settings-row-title">{label}</div></div><Toggle checked={preferences[setting] !== false} onChange={(value) => onChange(setting, value)} /></div>
+}
+
+function DashboardPreferences({ settings, updateSettings }) {
+  return (
+    <section className="settings-panel">
+      <div className="settings-panel-kicker">Experience</div>
+      <h2>Dashboard</h2>
+      <p className="muted">Choose the information MoonScribe shows before you begin writing.</p>
+      <div className="settings-card-grid">
+        <div className="settings-section-card"><div className="settings-subheading">Home</div><div className="settings-row"><div><div className="settings-row-title">Hero style</div><div className="settings-row-sub">Size of your continue-writing card.</div></div><Select ariaLabel="Hero style" width={140} value={settings.dashboardHeroStyle || 'large'} onChange={(value) => updateSettings({ dashboardHeroStyle: value })} options={[{ value: 'large', label: 'Large' }, { value: 'compact', label: 'Compact' }]} /></div><div className="settings-row"><div><div className="settings-row-title">Show greeting</div></div><Toggle checked={settings.dashboardShowGreeting !== false} onChange={(value) => updateSettings({ dashboardShowGreeting: value })} /></div><div className="settings-row"><div><div className="settings-row-title">Show writing streak</div></div><Toggle checked={settings.dashboardShowStreak !== false} onChange={(value) => updateSettings({ dashboardShowStreak: value })} /></div><div className="settings-row"><div><div className="settings-row-title">Show recent chapters</div></div><Toggle checked={settings.dashboardShowRecent !== false} onChange={(value) => updateSettings({ dashboardShowRecent: value })} /></div></div>
+        <div className="settings-section-card"><div className="settings-subheading">Sidebar</div><div className="settings-row"><div><div className="settings-row-title">Default state</div><div className="settings-row-sub">New dashboard sessions begin expanded.</div></div><Select ariaLabel="Sidebar default state" width={140} value={settings.dashboardSidebarDefault || 'expanded'} onChange={(value) => updateSettings({ dashboardSidebarDefault: value })} options={[{ value: 'expanded', label: 'Expanded' }, { value: 'collapsed', label: 'Collapsed' }]} /></div><div className="settings-row"><div><div className="settings-row-title">Show current story</div></div><Toggle checked={settings.dashboardShowCurrentStory !== false} onChange={(value) => updateSettings({ dashboardShowCurrentStory: value })} /></div><div className="settings-row"><div><div className="settings-row-title">Show tool labels</div></div><Toggle checked={settings.dashboardShowToolLabels !== false} onChange={(value) => updateSettings({ dashboardShowToolLabels: value })} /></div><div className="settings-row"><div><div className="settings-row-title">Animate collapse</div></div><Toggle checked={settings.dashboardAnimateCollapse !== false} onChange={(value) => updateSettings({ dashboardAnimateCollapse: value })} /></div></div>
+      </div>
+      <SidebarVisibility settings={settings} updateSettings={updateSettings} />
+    </section>
+  )
+}
+
+function SessionsDevices() {
+  return <section className="settings-panel"><div className="settings-panel-kicker">Privacy &amp; safety</div><h2>Sessions &amp; devices</h2><p className="muted">Review every device with access to your MoonScribe account and revoke anything you no longer use.</p><AccountSessions /></section>
 }
 
 function AccountSessions() {
@@ -480,18 +681,6 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
         ))}
       </div>
 
-      <SidebarVisibility settings={settings} updateSettings={updateSettings} />
-
-      <div className="settings-subheading">Sound &amp; feedback</div>
-      <div className="settings-row"><div><div className="settings-row-title">App sounds</div><div className="settings-row-sub">Subtle local audio feedback. Nothing is recorded or uploaded.</div></div><Toggle checked={!!settings.soundEnabled} onChange={(v) => updateSettings({ soundEnabled: v })} /></div>
-      {settings.soundEnabled && <>
-        <div className="settings-row"><div><div className="settings-row-title">Interface clicks</div><div className="settings-row-sub">Quiet feedback for buttons, menus and navigation.</div></div><Toggle checked={settings.clickSounds !== false} onChange={(v) => updateSettings({ clickSounds: v })} /></div>
-        <div className="settings-row"><div><div className="settings-row-title">Writing sounds</div><div className="settings-row-sub">A restrained typewriter texture while editing.</div></div><Toggle checked={!!settings.typingSounds} onChange={(v) => updateSettings({ typingSounds: v })} /></div>
-        <div className="settings-row"><div><div className="settings-row-title">Notification sounds</div><div className="settings-row-sub">A soft chime for confirmations and toast notifications.</div></div><Toggle checked={settings.notificationSounds !== false} onChange={(v) => updateSettings({ notificationSounds: v })} /></div>
-        <div className="settings-row"><div><div className="settings-row-title">Ambient background music</div><div className="settings-row-sub">A soft generative bed for longer sessions. It stays local and pauses when the tab is hidden.</div></div><Toggle checked={!!settings.ambientSound} onChange={(v) => updateSettings({ ambientSound: v })} /></div>
-        {settings.ambientSound && <div className="settings-row"><div><div className="settings-row-title">Ambient mood</div><div className="settings-row-sub">Set the atmosphere of the room while you write.</div></div><Select ariaLabel="Ambient mood" width={190} value={settings.ambientMood || 'moonlit'} onChange={(v) => updateSettings({ ambientMood: v })} options={[{ value: 'moonlit', label: 'Moonlit studio', hint: 'airy and calm' }, { value: 'hearth', label: 'Hearth glow', hint: 'warm and intimate' }, { value: 'rainglass', label: 'Rain on glass', hint: 'cool and reflective' }]} /></div>}
-        <div className="settings-row"><div><div className="settings-row-title">Sound volume</div><div className="settings-row-sub">Keep feedback comfortably beneath music and calls.</div></div><input className="settings-volume" type="range" min="0" max="100" value={Number(settings.soundVolume) || 35} onChange={(e) => updateSettings({ soundVolume: Number(e.target.value) })} aria-label="Sound volume" /></div>
-      </>}
       <div className="settings-row"><div><div className="settings-row-title">Interface scale</div><div className="settings-row-sub">Resize navigation, dialogs, buttons and labels throughout MoonScribe.</div></div><Select ariaLabel="Interface scale" width={150} value={String(settings.interfaceScale || 100)} onChange={(v) => updateSettings({ interfaceScale: Number(v) })} options={[{ value: '90', label: '90%', hint: 'compact' }, { value: '100', label: '100%', hint: 'default' }, { value: '110', label: '110%', hint: 'large' }, { value: '120', label: '120%', hint: 'largest' }]} /></div>
       <div className="settings-row"><div><div className="settings-row-title">Control density</div><div className="settings-row-sub">Choose how much information fits on screen.</div></div><Select ariaLabel="Control density" width={160} value={settings.interfaceDensity || 'comfortable'} onChange={(v) => updateSettings({ interfaceDensity: v })} options={[{ value: 'compact', label: 'Compact' }, { value: 'comfortable', label: 'Comfortable' }, { value: 'spacious', label: 'Spacious' }]} /></div>
       <div className="settings-row"><div><div className="settings-row-title">Corner style</div><div className="settings-row-sub">Change the visual character of cards, menus and controls.</div></div><Select ariaLabel="Corner style" width={160} value={settings.cornerStyle || 'rounded'} onChange={(v) => updateSettings({ cornerStyle: v })} options={[{ value: 'square', label: 'Precise' }, { value: 'rounded', label: 'Rounded' }, { value: 'soft', label: 'Extra soft' }]} /></div>

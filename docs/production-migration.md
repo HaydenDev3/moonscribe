@@ -4,19 +4,20 @@ MoonScribe is now set up to support a Supabase-backed live environment without f
 
 ## 1. Environment variables
 
-Add these values to your production environment:
+Copy [`.env.example`](../.env.example) to `.env.local` for development, then
+configure the same server-only values in your deployment provider's encrypted
+environment settings. It includes acquisition links and setup notes for every
+supported integration.
+
+The client only needs the following optional public Supabase values:
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<anon-or-publishable-key>
 VITE_SUPABASE_URL=https://<project>.supabase.co
 VITE_SUPABASE_ANON_KEY=<anon-or-publishable-key>
-RESEND_API_KEY=<your-resend-api-key>
-RESEND_FROM_EMAIL="MoonScribe <noreply@your-domain.com>"
-APP_ORIGIN=https://app.your-domain.com
 ```
 
-Never commit the real secret key. Keep `RESEND_API_KEY` in your deployment environment or secrets manager.
+`RESEND_API_KEY`, OAuth client secrets, and `OAUTH_STATE_SECRET` are server-only
+secrets. Never use a `VITE_` prefix for them and never commit them.
 
 ## 2. Supabase tables
 

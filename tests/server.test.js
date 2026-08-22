@@ -9,6 +9,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import WebSocket from 'ws'
 import { createMoonScribeServer } from '../server/index.js'
 
 let db = null
@@ -77,6 +78,28 @@ async function register(username, password = 'secret1234') {
   return { status: res.status, body: await res.json() }
 }
 
+function openSocket(path) {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(`${base.replace('http', 'ws')}${path}`)
+    socket.once('message', () => resolve(socket))
+    socket.once('error', reject)
+  })
+}
+
+function nextSocketMessage(socket, predicate = () => true) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Timed out waiting for WebSocket message')), 2_000)
+    const receive = (raw) => {
+      const message = JSON.parse(String(raw))
+      if (!predicate(message)) return
+      clearTimeout(timeout)
+      socket.off('message', receive)
+      resolve(message)
+    }
+    socket.on('message', receive)
+  })
+}
+
 describe('accounts', () => {
   beforeEach(async () => startServer())
 
@@ -89,6 +112,20 @@ describe('accounts', () => {
     const login = await post('/api/auth/login', { username: 'alice', password: 'secret1234' })
     expect(login.status).toBe(200)
     expect((await login.json()).token).toBeTruthy()
+  })
+
+  it('persists OAuth handoffs and consumes each exchange exactly once', async () => {
+    const account = await register('oauth-writer')
+    const code = 'durable-oauth-code'
+    db.prepare('INSERT INTO oauth_exchanges (code, user_id, username, avatar, provider, server_origin, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(code, account.body.accountId, account.body.username, '', 'discord', base, Date.now() + 60_000, Date.now())
+
+    const exchanged = await post('/api/auth/discord/exchange', { code })
+    expect(exchanged.status).toBe(200)
+    expect((await exchanged.json()).token).toBeTruthy()
+
+    const replay = await post('/api/auth/discord/exchange', { code })
+    expect(replay.status).toBe(400)
   })
 
   it('reports which authentication providers are configured', async () => {
@@ -172,6 +209,71 @@ describe('accounts', () => {
     expect((await get('/api/sync/pull?since=0', secondToken)).status).toBe(401)
   })
 
+  it('disables an account, revokes every session, blocks login, and allows an admin restore', async () => {
+    const admin = await register('disable-admin')
+    db.prepare("UPDATE users SET role = 'admin', roles = 'user,admin' WHERE id = ?").run(admin.body.accountId)
+    const account = await register('disable-writer')
+    const second = await post('/api/auth/login', { username: 'disable-writer', password: 'secret1234' })
+    const secondToken = (await second.json()).token
+
+    const wrong = await post('/api/auth/disable-account', { confirmation: 'wrong-name' }, account.body.token)
+    expect(wrong.status).toBe(400)
+    const disabled = await post('/api/auth/disable-account', { confirmation: 'disable-writer' }, account.body.token)
+    expect(disabled.status).toBe(200)
+    expect((await get('/api/auth/me', account.body.token)).status).toBe(401)
+    expect((await get('/api/auth/me', secondToken)).status).toBe(401)
+    expect((await post('/api/auth/login', { username: 'disable-writer', password: 'secret1234' })).status).toBe(403)
+
+    const restored = await post(`/api/admin/users/${account.body.accountId}/enable`, {}, admin.body.token)
+    expect(restored.status).toBe(200)
+    expect((await post('/api/auth/login', { username: 'disable-writer', password: 'secret1234' })).status).toBe(200)
+  })
+
+  it('allows admins to permanently delete non-admin users and owned data only', async () => {
+    const admin = await register('delete-admin')
+    db.prepare("UPDATE users SET role = 'admin', roles = 'user,admin' WHERE id = ?").run(admin.body.accountId)
+    const target = await register('delete-target')
+    await post('/api/sync/push', { records: [{ store: 'novels', id: 'doomed-novel', novelId: 'doomed-novel', updatedAt: Date.now(), deleted: false, payload: { title: 'Delete me' } }] }, target.body.token)
+    db.prepare('INSERT INTO notifications (id, user_id, type, category, priority, title, body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run('doomed-notice', target.body.accountId, 'system', 'account', 'normal', 'Notice', 'Delete me', Date.now())
+
+    expect((await fetch(`${base}/api/admin/users/${target.body.accountId}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin.body.token}` }, body: JSON.stringify({ confirmation: 'wrong' }) })).status).toBe(400)
+    const deleted = await fetch(`${base}/api/admin/users/${target.body.accountId}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin.body.token}` }, body: JSON.stringify({ confirmation: 'delete-target' }) })
+    expect(deleted.status).toBe(200)
+    expect(db.prepare('SELECT 1 FROM users WHERE id = ?').get(target.body.accountId)).toBeUndefined()
+    expect(db.prepare('SELECT 1 FROM records WHERE user_id = ?').get(target.body.accountId)).toBeUndefined()
+    expect(db.prepare('SELECT 1 FROM notifications WHERE user_id = ?').get(target.body.accountId)).toBeUndefined()
+    expect((await get('/api/auth/me', target.body.token)).status).toBe(401)
+    expect((await (await get('/api/admin/audit', admin.body.token)).json()).events[0].action).toBe('account.deleted')
+
+    const protectedAdmin = await fetch(`${base}/api/admin/users/${admin.body.accountId}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin.body.token}` }, body: JSON.stringify({ confirmation: 'delete-admin' }) })
+    expect(protectedAdmin.status).toBe(403)
+  })
+
+  it('serves only owned notifications and supports read state', async () => {
+    const owner = await register('notification-owner')
+    const other = await register('notification-other')
+    db.prepare('INSERT INTO notifications (id, user_id, type, category, priority, title, body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run('owned-notice', owner.body.accountId, 'system', 'account', 'normal', 'Welcome', 'Your library is ready.', Date.now())
+    db.prepare('INSERT INTO notifications (id, user_id, type, category, priority, title, body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run('other-notice', other.body.accountId, 'system', 'account', 'normal', 'Private', 'This must not leak.', Date.now())
+
+    const list = await (await get('/api/notifications', owner.body.token)).json()
+    expect(list.unreadCount).toBe(1)
+    expect(list.notifications.map((item) => item.id)).toEqual(['owned-notice'])
+    expect((await post('/api/notifications/owned-notice/read', {}, owner.body.token)).status).toBe(200)
+    expect((await (await get('/api/notifications', owner.body.token)).json()).unreadCount).toBe(0)
+    expect((await post('/api/notifications/other-notice/read', {}, owner.body.token)).status).toBe(404)
+  })
+
+  it('persists admin announcements and exposes published announcements', async () => {
+    const admin = await register('announcement-admin')
+    db.prepare("UPDATE users SET role = 'admin', roles = 'user,admin' WHERE id = ?").run(admin.body.accountId)
+    const created = await post('/api/admin/announcements', { title: 'Maintenance window', body: 'The studio will be refreshed tonight.', severity: 'warning' }, admin.body.token)
+    expect(created.status).toBe(201)
+    expect((await (await get('/api/announcements', admin.body.token)).json()).announcements[0]).toMatchObject({ title: 'Maintenance window', severity: 'warning' })
+    expect((await (await get('/api/admin/audit', admin.body.token)).json()).events[0].action).toBe('announcement.created')
+  })
+
   it('completes a two-factor login without an existing session token', async () => {
     const account = await register('two-factor-writer')
     db.prepare('UPDATE users SET two_factor_enabled = 1, email = ?, email_verified = 1 WHERE id = ?')
@@ -191,6 +293,54 @@ describe('accounts', () => {
 
     const replay = await post('/api/auth/verify-2fa', { userId: account.body.accountId, code })
     expect(replay.status).toBe(400)
+  })
+})
+
+describe('production health and realtime', () => {
+  beforeEach(async () => startServer())
+
+  it('reports API and database health without authentication', async () => {
+    const response = await get('/api/health')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({ status: 'ok', database: 'ok' })
+  })
+
+  it('syncs a live record between two independent sessions', async () => {
+    const first = await register('two-session-writer')
+    const login = await post('/api/auth/login', { username: 'two-session-writer', password: 'secret1234' })
+    const secondToken = (await login.json()).token
+    await post('/api/sync/push', { records: [
+      { store: 'novels', id: 'live-novel', novelId: 'live-novel', updatedAt: 1, deleted: false, payload: { title: 'Live novel' } }
+    ] }, first.body.token)
+
+    const firstSocket = await openSocket(`/ws/presence?novelId=live-novel&token=${encodeURIComponent(first.body.token)}`)
+    const secondSocket = await openSocket(`/ws/presence?novelId=live-novel&token=${encodeURIComponent(secondToken)}`)
+    const update = nextSocketMessage(secondSocket, (message) => message.type === 'record:update')
+    const accepted = nextSocketMessage(firstSocket, (message) => message.type === 'record:accepted' || message.type === 'record:error')
+    firstSocket.send(JSON.stringify({
+      type: 'record:update',
+      record: { store: 'chapters', id: 'live-chapter', novelId: 'live-novel', updatedAt: Date.now(), deleted: false, payload: { title: 'Arrived live' } }
+    }))
+
+    expect(await accepted).toMatchObject({ type: 'record:accepted', recordId: 'live-chapter' })
+    expect((await update).record.payload.title).toBe('Arrived live')
+    const pull = await (await get('/api/sync/pull?since=0', secondToken)).json()
+    expect(pull.records.find((record) => record.id === 'live-chapter').payload.title).toBe('Arrived live')
+    firstSocket.close()
+    secondSocket.close()
+  })
+
+  it('delivers account notifications to the signed-in user in realtime', async () => {
+    const admin = await register('realtime-admin')
+    const target = await register('realtime-target')
+    db.prepare("UPDATE users SET role = 'admin', roles = 'user,admin' WHERE id = ?").run(admin.body.accountId)
+    const socket = await openSocket(`/ws/notifications?token=${encodeURIComponent(target.body.token)}`)
+    const notification = nextSocketMessage(socket, (message) => message.type === 'notification:new')
+
+    const response = await post(`/api/admin/users/${target.body.accountId}`, { roles: ['user', 'beta_tester'] }, admin.body.token)
+    expect(response.status).toBe(200)
+    expect((await notification).notification).toMatchObject({ title: 'Your MoonScribe access changed', priority: 'high' })
+    socket.close()
   })
 })
 
@@ -224,6 +374,7 @@ describe('sync', () => {
     const owner = (await register('share-owner')).body
     const editor = (await register('share-editor')).body
     const viewer = (await register('share-viewer')).body
+    db.prepare("UPDATE users SET role = 'beta_tester', roles = 'user,beta_tester' WHERE username IN ('share-editor', 'share-viewer')").run()
     await post('/api/sync/push', { records: [
       { store: 'novels', id: 'shared-novel', novelId: 'shared-novel', updatedAt: 1, deleted: false, payload: { title: 'Invited manuscript' } },
       { store: 'chapters', id: 'shared-chapter', novelId: 'shared-novel', updatedAt: 2, deleted: false, payload: { title: 'One' } },

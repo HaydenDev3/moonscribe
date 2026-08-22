@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Icon from '../components/Icon'
 import { formatWords } from '../utils/words'
 import { createBranch, deleteBranch, listBranches, restoreBranch } from '../db/branches'
@@ -7,8 +7,8 @@ export default function ArchiveHub({ novelId, chapters, onOpenHistory, onBranchR
   const [branches, setBranches] = useState([])
   const [busy, setBusy] = useState(false)
   const versions = useMemo(() => chapters.flatMap((chapter) => (chapter.versions || []).map((version) => ({ ...version, chapterId: chapter.id, chapterTitle: chapter.title }))).sort((a, b) => b.at - a.at), [chapters])
-  const load = async () => setBranches(await listBranches(novelId))
-  useEffect(() => { load() }, [novelId])
+  const load = useCallback(async () => setBranches(await listBranches(novelId)), [novelId])
+  useEffect(() => { load() }, [load])
 
   const branch = async () => {
     const name = window.prompt('Name this manuscript branch (for example “Beta rewrite” or “Alternate ending”)')

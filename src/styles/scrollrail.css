@@ -1,0 +1,32 @@
+/* MoonScribe scrollrail: the same quiet, animated rail across every scroll container. */
+:root {
+  scrollbar-color: color-mix(in srgb, var(--accent, #b68235) 72%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent, #b68235) 42%, transparent) transparent;
+}
+
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: linear-gradient(90deg, transparent 35%, color-mix(in srgb, var(--accent, #b68235) 7%, transparent) 50%, transparent 65%); }
+*::-webkit-scrollbar-thumb {
+  min-height: 44px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent, #b68235) 90%, white), color-mix(in srgb, var(--accent, #b68235) 48%, #60401d));
+  background-clip: padding-box;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #b68235) 26%, transparent), 0 0 14px color-mix(in srgb, var(--accent, #b68235) 24%, transparent);
+  transition: background .25s ease, box-shadow .25s ease, border-width .25s ease;
+}
+*::-webkit-scrollbar-thumb:hover {
+  border-width: 2px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent, #b68235) 100%, white), color-mix(in srgb, var(--accent, #b68235) 66%, #60401d));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #b68235) 55%, transparent), 0 0 22px color-mix(in srgb, var(--accent, #b68235) 45%, transparent);
+}
+*::-webkit-scrollbar-corner { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  *::-webkit-scrollbar-thumb { transition: none; }
+}

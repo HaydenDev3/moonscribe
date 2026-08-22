@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /novel/
+
+Sitemap: https://moonscribe.cc/sitemap.xml

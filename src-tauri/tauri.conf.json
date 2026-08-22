@@ -15,12 +15,15 @@
         "title": "MoonScribe",
         "width": 1440,
         "height": 950,
+        "minWidth": 960,
+        "minHeight": 680,
+        "center": true,
         "resizable": true,
         "fullscreen": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self' customprotocol: asset:; img-src 'self' asset: http: https: data: blob:; media-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ipc: http://localhost:* ws://localhost:* https: wss:"
     }
   },
   "bundle": {
@@ -35,7 +38,21 @@
       "icons/icon-32.png",
       "icons/icon-128.png",
       "icons/icon-256.png",
-      "icons/icon-512.png"
+      "icons/icon-512.png",
+      "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://updates.moonscribe.cc/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": ""
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": ["moonscribe"]
+      }
+    }
   }
 }

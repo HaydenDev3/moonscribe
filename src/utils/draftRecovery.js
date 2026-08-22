@@ -21,7 +21,6 @@ export function useDraftRecovery(key, value, enabled = true) {
   const hasDraft = useRef(false)
   useEffect(() => {
     hasDraft.current = !!localStorage.getItem(key)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {

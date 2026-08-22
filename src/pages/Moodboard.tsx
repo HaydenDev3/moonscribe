@@ -25,10 +25,13 @@ export default function Moodboard({ novelId, embedded }) {
   const [linkDraft, setLinkDraft] = useState(null) // { url, text } or editing tile
   const [paletteDraft, setPaletteDraft] = useState(null) // { label, palette } or editing tile
   const [zoom, setZoom] = useState(1)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
   const [connecting, setConnecting] = useState(null)
   const fileRef = useRef(null)
   const boardRef = useRef(null)
   const dragState = useRef(null)
+  const panState = useRef(null)
 
   const load = useCallback(async () => {
     setNovel(await getNovel(nid))
@@ -38,6 +41,16 @@ export default function Moodboard({ novelId, embedded }) {
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === 'Escape') setFullscreen(false)
+      if ((event.key === 'f' || event.key === 'F') && !event.target.closest('input,textarea')) setFullscreen((value) => !value)
+      if ((event.metaKey || event.ctrlKey) && event.key === '0') { event.preventDefault(); setZoom(1); setPan({ x: 0, y: 0 }) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     const paste = async (event) => {
@@ -201,6 +214,24 @@ export default function Moodboard({ novelId, embedded }) {
     if (moved) updateTile(tile.id, { x: moved.x, y: moved.y })
   }
 
+  const onBoardWheel = (event) => {
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault()
+      setZoom((value) => Math.min(1.8, Math.max(.5, value - event.deltaY * .001)))
+    }
+  }
+
+  const onBoardPointerDown = (event) => {
+    if (event.target !== event.currentTarget || event.button !== 0) return
+    panState.current = { x: event.clientX, y: event.clientY, pan }
+    event.currentTarget.setPointerCapture(event.pointerId)
+  }
+  const onBoardPointerMove = (event) => {
+    if (!panState.current) return
+    setPan({ x: panState.current.pan.x + event.clientX - panState.current.x, y: panState.current.pan.y + event.clientY - panState.current.y })
+  }
+  const onBoardPointerUp = () => { panState.current = null }
+
   const saveText = async (tile, text) => {
     if (text !== tile.text) {
       await updateTile(tile.id, { text })
@@ -222,9 +253,9 @@ export default function Moodboard({ novelId, embedded }) {
   }
 
   return (
-    <div className={embedded ? undefined : 'app'}>
+    <div className={`${embedded ? '' : 'app'} ${fullscreen ? 'moodboard-fullscreen' : ''}`}>
       {!embedded && <SubPageTopbar novel={novel} title="Moodboard" />}
-      <div className="page page-wide">
+      <div className="page page-wide moodboard-page">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 'var(--space-5)', flexWrap: 'wrap' }}>
           <div>
             <h2 style={{ margin: 0 }}>Moodboard</h2>
@@ -250,6 +281,8 @@ export default function Moodboard({ novelId, embedded }) {
               <span>{Math.round(zoom * 100)}%</span>
               <button onClick={() => setZoom((value) => Math.min(1.8, value + .1))} aria-label="Zoom in">+</button>
             </div>
+            <button className="button button-ghost" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>Fit board</button>
+            <button className="button button-ghost" onClick={() => setFullscreen((value) => !value)}>{fullscreen ? 'Exit full screen' : 'Full screen'}</button>
             {selected && (
               <button className="button button-rose" onClick={removeSelected}>Remove selected</button>
             )}
@@ -259,7 +292,7 @@ export default function Moodboard({ novelId, embedded }) {
           </div>
         </div>
 
-          <div ref={boardRef} className="moodboard moodboard-spatial" onClick={() => setSelected(null)}>
+          <div ref={boardRef} className="moodboard moodboard-spatial" onClick={() => setSelected(null)} onWheel={onBoardWheel} onPointerDown={onBoardPointerDown} onPointerMove={onBoardPointerMove} onPointerUp={onBoardPointerUp}>
             <MoodboardScene3D />
             {tiles.length === 0 && <div className="mb-empty-overlay">
               <Icon icon="fa-regular fa-images" />
@@ -267,7 +300,7 @@ export default function Moodboard({ novelId, embedded }) {
               <p>Drop or paste an image, pin a thought, then drag everything into place.</p>
               <div className="actions-row"><button className="button button-primary" onClick={(e) => { e.stopPropagation(); addNote() }}>Pin a note</button><button className="button button-ghost" onClick={(e) => { e.stopPropagation(); fileRef.current?.click() }}>Add an image</button></div>
             </div>}
-            <div className="moodboard-world" style={{ transform: `scale(${zoom})` }}>
+            <div className="moodboard-world" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
             <svg className="mb-connections" aria-hidden="true">
               {tiles.flatMap((source) => (source.links || []).map((targetId) => {
                 const target = tiles.find((tile) => tile.id === targetId)

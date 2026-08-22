@@ -347,7 +347,7 @@ export default function BookDesigner({
       window.removeEventListener('click', schedulePresence, true)
       leave()
     }
-  }, [id, Boolean(novel), pushPresence])
+  }, [id, novel, pushPresence])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -476,7 +476,8 @@ export default function BookDesigner({
       const key = event.key.toLowerCase()
       if (key === 'z') {
         event.preventDefault()
-        event.shiftKey ? redo() : undo()
+        if (event.shiftKey) redo()
+        else undo()
       } else if (key === 'y') {
         event.preventDefault()
         redo()

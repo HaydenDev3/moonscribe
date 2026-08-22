@@ -75,7 +75,10 @@ export default function Select({ value, onChange, options = [], ariaLabel = 'Sel
     if (e.key === 'Escape') { e.preventDefault(); setOpen(false) }
     else if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, options.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)) }
-    else if (e.key === 'Enter') { e.preventDefault(); options[active] && choose(options[active]) }
+    else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (options[active]) choose(options[active])
+    }
   }
 
   const popupStyle: React.CSSProperties = rect

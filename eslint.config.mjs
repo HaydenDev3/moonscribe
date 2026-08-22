@@ -32,7 +32,25 @@ const browserGlobals = {
   HTMLInputElement: 'readonly',
   HTMLTextAreaElement: 'readonly',
   HTMLDivElement: 'readonly',
+  HTMLButtonElement: 'readonly',
+  HTMLImageElement: 'readonly',
   Node: 'readonly',
+  NodeFilter: 'readonly',
+  Element: 'readonly',
+  Image: 'readonly',
+  File: 'readonly',
+  FontFace: 'readonly',
+  Notification: 'readonly',
+  WebSocket: 'readonly',
+  ResizeObserver: 'readonly',
+  TextEncoder: 'readonly',
+  TextDecoder: 'readonly',
+  EventListener: 'readonly',
+  DataTransferItem: 'readonly',
+  atob: 'readonly',
+  btoa: 'readonly',
+  devicePixelRatio: 'readonly',
+  React: 'readonly',
   navigator: 'readonly',
   Intl: 'readonly',
   performance: 'readonly',
@@ -46,6 +64,7 @@ const nodeGlobals = {
   __dirname: 'readonly',
   __filename: 'readonly',
   Buffer: 'readonly',
+  global: 'readonly',
 }
 
 export default [
@@ -95,7 +114,12 @@ export default [
     },
     rules: {
       ...tseslint.configs.recommended.rules,
-      ...reactHooks.configs.recommended.rules,
+      // The React Compiler diagnostics in `recommended` are migration aids,
+      // not runtime correctness checks. MoonScribe still has intentional
+      // imperative editor/Three.js code, so keep the two production-safety
+      // hook rules as gates and track compiler adoption separately.
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'error',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unused-vars': [

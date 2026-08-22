@@ -31,6 +31,11 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
+    watch: {
+      // Rust/installer outputs are large, frequently replaced, and can be
+      // exclusively locked by the Windows linker. They are never web inputs.
+      ignored: ['**/src-tauri/target/**', '**/data/**', '**/dist/**']
+    },
     allowedHosts: [
       '.loca.lt',
       '.ngrok-free.app',

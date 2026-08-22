@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Link, useLocation, useParams } from 'react-router-dom'
 import { getNovel, updateNovel } from '../db/novels'
@@ -25,27 +25,27 @@ import { computeNumbers, titleFor, isContainer } from '../utils/numbering'
 import Icon from '../components/Icon'
 import DesignPalette from '../components/DesignPalette'
 import { designById, DESIGN_MIME } from '../designs/registry'
-import Characters from './Characters'
-import Entities from './Entities'
-import Relationships from './Relationships'
-import World from './World'
-import Glossary from './Glossary'
-import Moodboard from './Moodboard'
+const Characters = lazy(() => import('./Characters'))
+const Entities = lazy(() => import('./Entities'))
+const Relationships = lazy(() => import('./Relationships'))
+const World = lazy(() => import('./World'))
+const Glossary = lazy(() => import('./Glossary'))
+const Moodboard = lazy(() => import('./Moodboard'))
 import ProsePreview from '../components/ProsePreview'
 import { listGlossary } from '../db/glossary'
 import { listRelationships } from '../db/relationships'
 import { autoChapterMentions } from '../utils/mentions'
 import AnnotationsPanel from '../components/AnnotationsPanel'
 import { listAnnotations, createAnnotation, updateAnnotation, deleteAnnotation } from '../db/annotations'
-import Analytics from './Analytics'
-import BookDesigner from './BookDesigner'
-import Trash from './Trash'
-import Corkboard from './Corkboard'
-import Timeline from './Timeline'
-import Continuity from './Continuity'
-import Milestones from './Milestones'
-import WritingJournal from './WritingJournal'
-import ArchiveHub from './ArchiveHub'
+const Analytics = lazy(() => import('./Analytics'))
+const BookDesigner = lazy(() => import('./BookDesigner'))
+const Trash = lazy(() => import('./Trash'))
+const Corkboard = lazy(() => import('./Corkboard'))
+const Timeline = lazy(() => import('./Timeline'))
+const Continuity = lazy(() => import('./Continuity'))
+const Milestones = lazy(() => import('./Milestones'))
+const WritingJournal = lazy(() => import('./WritingJournal'))
+const ArchiveHub = lazy(() => import('./ArchiveHub'))
 import ReferencePane from '../components/ReferencePane'
 import UserPill from '../components/UserPill'
 import ChapterLibrary from '../components/ChapterLibrary'
@@ -55,6 +55,7 @@ import { saveSnapshot, clearOldSnapshots } from '../db/snapshots'
 import { useContextMenu } from '../components/ContextMenu'
 import ExportModal from '../components/ExportModal'
 import ShareWritingModal from '../components/ShareWritingModal'
+import NotificationBell from '../components/NotificationBell'
 import CollaborationPresence from '../components/CollaborationPresence'
 import { publishLiveRecord } from '../sync/engine'
 import { sentenceDiff } from '../utils/sentenceDiff'
@@ -91,7 +92,8 @@ export default function Novel() {
   const { id, mode, section } = useParams()
   const activeSection = section || mode || 'write'
   const location = useLocation()
-  const { focusMode, setFocusMode, toast, openSettings, isNovelUnlocked, unlockNovel, settings } = useApp()
+  const { focusMode, setFocusMode, toast, openSettings, isNovelUnlocked, unlockNovel, settings, hasRole } = useApp()
+  const canShare = hasRole('admin') || hasRole('developer') || hasRole('beta_tester')
   const { openContextMenu } = useContextMenu()
 
   const [novel, setNovel] = useState(null)
@@ -1039,8 +1041,8 @@ export default function Novel() {
             </span>
           </div>
           <div className="actions-row">
-            <CollaborationPresence novelId={id} chapterId={chapter?.id} chapterTitle={chapter?.title} workspace={SECTION_LABELS[activeSection] || activeSection} onPresenceChange={setCollaboratorPresence} onRecord={applyLiveRecord} />
-            <button className="button button-ghost" onClick={() => setShareOpen(true)} title="Invite writers and manage access"><Icon icon="fa-solid fa-user-plus" style={{ marginRight: 6 }} /> Share</button>
+            {canShare ? <CollaborationPresence novelId={id} chapterId={chapter?.id} chapterTitle={chapter?.title} workspace={SECTION_LABELS[activeSection] || activeSection} onPresenceChange={setCollaboratorPresence} onRecord={applyLiveRecord} /> : <span className="beta-locked-tab" title="Share is available to Beta Testers, Developers, and Admins"><Icon icon="fa-solid fa-lock" /> Live sharing</span>}
+            <button className={`button button-ghost ${!canShare ? 'beta-locked-button' : ''}`} onClick={() => canShare && setShareOpen(true)} disabled={!canShare} title={canShare ? 'Invite writers and manage access' : 'Share is locked during the beta'}><Icon icon={canShare ? 'fa-solid fa-user-plus' : 'fa-solid fa-lock'} style={{ marginRight: 6 }} /> Share</button>
             {activeSection === 'write' ? (
               reading ? (
                 <button className="button button-primary" onClick={() => setReading(false)}><Icon icon="fa-solid fa-pen-nib" style={{ marginRight: 6 }} /> Write</button>
@@ -1058,6 +1060,7 @@ export default function Novel() {
             <button className="button button-ghost" title={focusMode ? 'Exit focus mode' : 'Focus mode — hide everything but the page'} onClick={() => setFocusMode(!focusMode)}>
               <Icon icon={focusMode ? 'fa-solid fa-expand' : 'fa-solid fa-compress'} style={{ marginRight: 6 }} /> {focusMode ? 'Exit focus' : 'Focus'}
             </button>
+            <NotificationBell />
             <UserPill onConnectClick={() => setConnectOpen(true)} />
           </div>
         </div>
@@ -1084,6 +1087,7 @@ export default function Novel() {
           <span className="chapter-tab-limit">{openChapterTabs.length}/{MAX_OPEN_TABS}</span>
         </div>}
 
+        <Suspense fallback={<div className="workspace-loading">Loading workspace…</div>}>
         {activeSection === 'design' ? (
           <div className="mode-body">
             <BookDesigner novelId={id} embedded />
@@ -1402,6 +1406,7 @@ export default function Novel() {
             )}
           </>
         )}
+        </Suspense>
       </div>
 
       <ChapterEditModal chapter={editChapter} onChange={setEditChapter} onClose={() => setEditChapter(null)} onSave={saveChapterEdit} />

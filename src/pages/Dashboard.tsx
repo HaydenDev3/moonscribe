@@ -5,9 +5,11 @@ import { makeLock, verifyLock } from '../db/lock'
 import { exportBackup } from '../db/backup'
 import { getMeta, setMeta } from '../db/meta'
 import { downloadBlob } from '../utils/download'
-import { createChapter } from '../db/chapters'
-import { wordsAndChapters } from '../db/chapters'
-import { monthlyWordsAllNovels, currentStreak } from '../db/stats'
+import { createChapter, listChapters, wordsAndChapters } from '../db/chapters'
+import { dailyHistory, monthlyWordsAllNovels, currentStreak, todayWords } from '../db/stats'
+import { createNote } from '../db/notes'
+import { listAnnotations } from '../db/annotations'
+import { continuityReport } from '../db/continuity'
 import { NOVEL_TEMPLATES } from '../templates'
 import { useApp } from '../context/AppContext'
 import Modal from '../components/Modal'
@@ -21,6 +23,8 @@ import { timeAgo } from '../utils/dates'
 import { formatWords } from '../utils/words'
 import { searchAll } from '../db/search'
 import { acceptShareInvite } from '../sync/engine'
+import DashboardHome from '../dashboard/DashboardHome'
+import ProfileAvatar from '../components/ProfileAvatar'
 
 const COVER_STYLES = [
   { key: 'moonstone', label: 'Moonstone' },
@@ -40,6 +44,9 @@ const COLLECTIONS = [
   { key: 'finished', label: 'Finished' },
   { key: 'ideas', label: 'Ideas' }
 ]
+
+const DEFAULT_DASHBOARD_WIDGETS = ['today', 'pulse', 'recent', 'progress']
+const DASHBOARD_WIDGETS = ['today', 'recent', 'pulse', 'progress', 'editing', 'health', 'quickCapture']
 
 const WRITING_QUOTES = [
   { text: 'The secret of getting ahead is getting started.', author: 'Mark Twain' },
@@ -64,6 +71,15 @@ function initials(title) {
     .map((w) => w[0])
     .join('')
     .toUpperCase()
+}
+
+function textFromHtml(html) {
+  return (html || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function lastLine(html) {
+  const lines = textFromHtml(html).split(/(?<=[.!?])\s+/).filter(Boolean)
+  return lines.at(-1) || ''
 }
 
 function useBlobUrl(blob) {
@@ -266,7 +282,7 @@ function RotatingQuote({ novels }) {
 }
 
 export default function Dashboard() {
-  const { novels, refreshNovels, toast, syncNow, openSettings, forgetNovelUnlock, settings } = useApp()
+  const { novels, refreshNovels, toast, syncUsername, syncStatus, syncDiscordAvatar, syncProvider, syncNow, forgetNovelUnlock, settings, setFocusMode, openSettings, hasRole } = useApp()
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const code = params.get('share')
@@ -304,6 +320,143 @@ export default function Dashboard() {
   const [crossResults, setCrossResults] = useState(null)
   const [analytics, setAnalytics] = useState({ inProgress: 0, monthlyWords: 0, streak: 0 })
   const [libraryLoading, setLibraryLoading] = useState(true)
+  const [dashboardData, setDashboardData] = useState({ today: 0, pulse: [], recent: [], resumeChapter: null, editingQueue: [], health: null })
+  const [dashboardWidgets, setDashboardWidgets] = useState(DEFAULT_DASHBOARD_WIDGETS)
+  const [customizingDashboard, setCustomizingDashboard] = useState(false)
+  const [draggingWidget, setDraggingWidget] = useState(null)
+  const [quickCapture, setQuickCapture] = useState('')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('moonscribe_dashboard_sidebar') === 'collapsed'
+    } catch {
+      return false
+    }
+  })
+  const libraryRef = useRef<HTMLDivElement | null>(null)
+  const [dashboardView, setDashboardView] = useState<'home' | 'library' | 'journal' | 'insights'>('home')
+  const dashboardWidgetsKey = `dashboardWidgets:${syncUsername || 'local'}`
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const saved = await getMeta(dashboardWidgetsKey, DEFAULT_DASHBOARD_WIDGETS)
+      if (!cancelled && Array.isArray(saved) && saved.length) {
+        setDashboardWidgets(saved.filter((widget) => DASHBOARD_WIDGETS.includes(widget)))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [dashboardWidgetsKey])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+      const activeNovels = novels.filter((novel) => !novel.archived)
+      const chaptersByNovel = await Promise.all(activeNovels.map(async (novel) => ({
+        novel,
+        chapters: await listChapters(novel.id)
+      })))
+      const allChapters = chaptersByNovel.flatMap(({ novel, chapters }) =>
+        chapters.map((chapter) => ({ ...chapter, novelTitle: novel.title }))
+      )
+      const recent = [...allChapters]
+        .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+        .slice(0, 5)
+      const recentNovel = [...activeNovels]
+        .sort((a, b) => (b.lastOpened || b.updatedAt || 0) - (a.lastOpened || a.updatedAt || 0))[0]
+      const resumeChapter = recentNovel
+        ? allChapters.filter((chapter) => chapter.novelId === recentNovel.id)
+          .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0] || null
+        : null
+      const [today, histories] = await Promise.all([
+        Promise.all(activeNovels.map((novel) => todayWords(novel.id))).then((values) => values.reduce((total, value) => total + value, 0)),
+        Promise.all(activeNovels.map((novel) => dailyHistory(novel.id, 7)))
+      ])
+      const pulse = Array.from({ length: 7 }, (_, index) => ({
+        date: histories[0]?.[index]?.date || '',
+        words: histories.reduce((total, history) => total + (history[index]?.words || 0), 0)
+      }))
+      const reviewData = await Promise.all(chaptersByNovel.map(async ({ novel, chapters }) => {
+        const [annotations, continuity] = await Promise.all([listAnnotations(novel.id), continuityReport(novel.id)])
+        const unresolvedByChapter = annotations.reduce((counts, annotation) => {
+          if (!annotation.resolved && annotation.chapterId) counts[annotation.chapterId] = (counts[annotation.chapterId] || 0) + 1
+          return counts
+        }, {} as Record<string, number>)
+        return {
+          novel,
+          chapters,
+          unresolvedByChapter,
+          continuityIssues: continuity.issues.filter((issue) => issue.severity > 0)
+        }
+      }))
+      const editingQueue = reviewData.flatMap(({ novel, chapters, unresolvedByChapter, continuityIssues }) =>
+        chapters
+          .filter((chapter) => chapter.status === 'revised' || unresolvedByChapter[chapter.id] || continuityIssues.some((issue) => issue.chapterId === chapter.id))
+          .map((chapter) => ({
+            ...chapter,
+            novelTitle: novel.title,
+            unresolvedComments: unresolvedByChapter[chapter.id] || 0,
+            continuityIssues: continuityIssues.filter((issue) => issue.chapterId === chapter.id).length
+          }))
+      ).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)).slice(0, 5)
+      const health = {
+        chapters: allChapters.length,
+        drafted: allChapters.filter((chapter) => chapter.status === 'draft').length,
+        editing: allChapters.filter((chapter) => chapter.status === 'revised').length,
+        complete: allChapters.filter((chapter) => chapter.status === 'final').length,
+        unresolvedComments: reviewData.reduce((total, item) => total + (Object.values(item.unresolvedByChapter) as number[]).reduce((sum, value) => sum + value, 0), 0),
+        continuityIssues: reviewData.reduce((total, item) => total + item.continuityIssues.length, 0)
+      }
+      if (!cancelled) setDashboardData({ today, pulse, recent, resumeChapter, editingQueue, health })
+      } catch (error) {
+        if (import.meta.env.DEV) console.error('Legacy dashboard sidebar data could not load', error)
+        if (!cancelled) setDashboardData({ today: 0, pulse: [], recent: [], resumeChapter: null, editingQueue: [], health: null })
+      }
+    })()
+    return () => { cancelled = true }
+  }, [novels])
+
+  const saveDashboardWidgets = async (next) => {
+    setDashboardWidgets(next)
+    await setMeta(dashboardWidgetsKey, next)
+  }
+
+  const setSidebarMode = (collapsed) => {
+    setSidebarCollapsed(collapsed)
+    try {
+      localStorage.setItem('moonscribe_dashboard_sidebar', collapsed ? 'collapsed' : 'expanded')
+    } catch {
+      // Storage can be unavailable in private or locked-down browser contexts.
+    }
+  }
+
+  const toggleDashboardWidget = (widget) => {
+    const next = dashboardWidgets.includes(widget)
+      ? dashboardWidgets.filter((item) => item !== widget)
+      : [...dashboardWidgets, widget]
+    saveDashboardWidgets(next.length ? next : dashboardWidgets)
+  }
+
+  const moveDashboardWidget = (target) => {
+    if (!draggingWidget || draggingWidget === target) return
+    const next = [...dashboardWidgets]
+    const from = next.indexOf(draggingWidget)
+    const to = next.indexOf(target)
+    next.splice(from, 1)
+    next.splice(to, 0, draggingWidget)
+    setDraggingWidget(null)
+    saveDashboardWidgets(next)
+  }
+
+  const saveQuickCapture = async () => {
+    const content = quickCapture.trim()
+    const target = resumeNovel
+    if (!content || !target) return
+    const title = content.split(/\r?\n/, 1)[0].slice(0, 72)
+    await createNote(target.id, { title: title || 'Quick capture', content })
+    setQuickCapture('')
+    toast(`Saved to ${target.title}.`)
+  }
 
   useEffect(() => {
     if (!novels.length) return
@@ -471,7 +624,18 @@ export default function Dashboard() {
   }
 
   const resumeNovel = active.sort((a, b) => (b.lastOpened || b.updatedAt || 0) - (a.lastOpened || a.updatedAt || 0))[0]
-
+  const attentionCount = (dashboardData.health?.unresolvedComments || 0) + (dashboardData.health?.continuityIssues || 0)
+  const resumeChapter = dashboardData.resumeChapter
+  const openResume = () => {
+    if (!resumeNovel) return
+    navigate(`/novel/${resumeNovel.id}`, { state: resumeChapter ? { chapterId: resumeChapter.id } : undefined })
+  }
+  const startFocusSession = () => {
+    setFocusMode(true)
+    openResume()
+  }
+  const hasCurrentStory = !!(resumeChapter || (dashboardData.recent && dashboardData.recent.length > 0))
+  const openSearch = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))
   const sharedCardProps = {
     counts,
     onOpen: openNovel,
@@ -486,154 +650,166 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="app">
+    <div className="app dashboard-app">
+      <DashboardSidebar
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarMode(!sidebarCollapsed)}
+        view={dashboardView}
+        onHome={() => setDashboardView('home')}
+        onContinue={openResume}
+        onLibrary={() => setDashboardView('library')}
+        onJournal={() => setDashboardView('journal')}
+        onInsights={() => setDashboardView('insights')}
+        onSearch={openSearch}
+        onNew={() => setNewOpen(true)}
+        onOpenChapter={(chapter) => navigate(`/novel/${chapter.novelId}`, { state: { chapterId: chapter.id } })}
+        onSettings={openSettings}
+        onAdmin={hasRole('admin') ? () => navigate('/admin') : undefined}
+        syncUsername={syncUsername}
+        syncStatus={syncStatus}
+        syncAvatar={syncDiscordAvatar}
+        syncProvider={syncProvider}
+        onSync={syncNow}
+        resumeChapter={resumeChapter}
+        recent={dashboardData.recent}
+        showCurrentStory={hasCurrentStory}
+      />
+      <main className={`dashboard-main ${sidebarCollapsed ? 'dashboard-sidebar-collapsed' : ''}`}>
       <div className={`dashboard dashboard-layout-${settings.appLayout || 'studio'}`}>
         <div className="topbar">
-          <div>
-            <div className="brand-row">
-              <span className="brand">
-                MoonScribe<span className="brand-mark">✦</span>
-              </span>
-              <span className="tagline">a quiet place to write, made for two</span>
-            </div>
-          </div>
+          <button className="dashboard-command-launcher" onClick={openSearch}><Icon icon="fa-solid fa-magnifying-glass" /> Search MoonScribe <kbd>Ctrl K</kbd></button>
           <div className="actions-row">
+            <button
+              className={`button button-quiet dashboard-customize ${customizingDashboard ? 'active' : ''}`}
+              onClick={() => setCustomizingDashboard((editing) => !editing)}
+              aria-pressed={customizingDashboard}
+            >
+              <Icon icon="fa-solid fa-sliders" /> {customizingDashboard ? 'Done' : 'Customize'}
+            </button>
             <SyncStatus onClick={() => setConnectOpen(true)} />
             <UserPill onConnectClick={() => setConnectOpen(true)} />
           </div>
         </div>
 
-        {showNudge && (
-          <div className="backup-nudge">
-            <span className="backup-nudge-icon"><Icon icon="fa-solid fa-shield-heart" /></span>
-            <span className="backup-nudge-text">It's been a while since your last backup. A quick local copy keeps your words safe, no cloud required.</span>
-            <div className="actions-row">
-              <button className="button button-primary" onClick={backupNow}>Back up now</button>
-              <button className="button button-quiet" onClick={snoozeNudge}>Not now</button>
-            </div>
-          </div>
-        )}
+        <div className="dashboard-workspace">
+        {dashboardView === 'home' && <DashboardHome
+          novels={novels}
+          username={syncUsername}
+          syncStatus={syncStatus}
+          onCreate={() => setNewOpen(true)}
+          onLibrary={() => setDashboardView('library')}
+          onSearch={openSearch}
+        />}
 
-        <div className="dashboard-hello">
-          <h1>{greeting}{novels.length ? ',' : ''}</h1>
-          <RotatingQuote novels={novels} />
-        </div>
-
-        {novels.length > 0 && (
-          <div className="dashboard-analytics-strip">
-            ✦ {analytics.inProgress} {analytics.inProgress === 1 ? 'novel' : 'novels'} in progress
-            {analytics.monthlyWords > 0 && <> · {analytics.monthlyWords.toLocaleString()} words this month</>}
-            {analytics.streak > 1 && <> · {analytics.streak}-day streak</>}
-          </div>
-        )}
-
-        {resumeNovel && (
-          <HeroCard novel={resumeNovel} counts={counts[resumeNovel.id]} onOpen={openNovel} />
-        )}
-
-        {novels.length > 0 && (
-          <div className="dashboard-tools">
-            <div className="dashboard-tools-top">
-              <div style={{ position: 'relative', flex: 1, maxWidth: 480 }}>
-                <div className="search-wrap">
-                  <Icon icon="fa-solid fa-magnifying-glass" />
-                  <input
-                    className="search-input"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search titles, ideas, genres…"
-                    aria-label="Search novels"
-                  />
-                  {query && (
-                    <button className="button button-quiet" onClick={() => setQuery('')} aria-label="Clear search">
-                      <Icon icon="fa-solid fa-xmark" />
-                    </button>
-                  )}
-                </div>
-                {crossResults && q.length >= 3 && (
-                  <div className="cross-search-results">
-                    {crossResults.chapters.length > 0 && (
-                      <div className="cross-section">
-                        <div className="cross-section-label">Chapters</div>
-                        {crossResults.chapters.slice(0, 4).map((r) => (
-                          <button key={r.id} className="cross-result" onClick={() => navigate(`/novel/${r.novelId}`, { state: { chapterId: r.id } })}>
-                            <Icon icon="fa-solid fa-book-open" />
-                            <span className="cross-result-title">{r.title}</span>
-                            <span className="cross-result-sub">{r.subtitle}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {crossResults.characters.length > 0 && (
-                      <div className="cross-section">
-                        <div className="cross-section-label">Characters</div>
-                        {crossResults.characters.slice(0, 4).map((r) => (
-                          <button key={r.id} className="cross-result" onClick={() => navigate(`/novel/${r.novelId}/characters`)}>
-                            <Icon icon="fa-solid fa-user" />
-                            <span className="cross-result-title">{r.title}</span>
-                            <span className="cross-result-sub">{r.subtitle}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {crossResults.notes.length > 0 && (
-                      <div className="cross-section">
-                        <div className="cross-section-label">Notes</div>
-                        {crossResults.notes.slice(0, 3).map((r) => (
-                          <button key={r.id} className="cross-result" onClick={() => navigate(`/novel/${r.novelId}/notes`)}>
-                            <Icon icon="fa-solid fa-note-sticky" />
-                            <span className="cross-result-title">{r.title}</span>
-                            <span className="cross-result-sub">{r.subtitle}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                    {!crossResults.chapters.length && !crossResults.characters.length && !crossResults.notes.length && (
-                      <div style={{ padding: '12px 14px', color: 'var(--grey)', fontSize: '0.86rem' }}>No results across all novels.</div>
+        {dashboardView === 'library' && <section className="dashboard-library" ref={libraryRef}>
+        {novels.length === 0 ? (
+          <section className="dashboard-empty-view">
+            <span className="dashboard-section-label">Library</span>
+            <h1>Stories will appear here.</h1>
+            <p>Your novel library is empty right now. Create the first one and MoonScribe will keep it close at hand.</p>
+            <button className="button button-primary" onClick={() => setNewOpen(true)}>Create a story</button>
+          </section>
+        ) : (
+          <>
+            <div className="dashboard-tools">
+              <div className="dashboard-library-heading">
+                <div><h2>Your Library</h2><p>Find a story, continue one, or begin something new.</p></div>
+              </div>
+              <div className="dashboard-tools-top">
+                <div style={{ position: 'relative', flex: 1, maxWidth: 480 }}>
+                  <div className="search-wrap">
+                    <Icon icon="fa-solid fa-magnifying-glass" />
+                    <input
+                      className="search-input"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search stories…"
+                      aria-label="Search novels"
+                    />
+                    {query && (
+                      <button className="button button-quiet" onClick={() => setQuery('')} aria-label="Clear search">
+                        <Icon icon="fa-solid fa-xmark" />
+                      </button>
                     )}
                   </div>
-                )}
+                  {crossResults && q.length >= 3 && (
+                    <div className="cross-search-results">
+                      {crossResults.chapters.length > 0 && (
+                        <div className="cross-section">
+                          <div className="cross-section-label">Chapters</div>
+                          {crossResults.chapters.slice(0, 4).map((r) => (
+                            <button key={r.id} className="cross-result" onClick={() => navigate(`/novel/${r.novelId}`, { state: { chapterId: r.id } })}>
+                              <Icon icon="fa-solid fa-book-open" />
+                              <span className="cross-result-title">{r.title}</span>
+                              <span className="cross-result-sub">{r.subtitle}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {crossResults.characters.length > 0 && (
+                        <div className="cross-section">
+                          <div className="cross-section-label">Characters</div>
+                          {crossResults.characters.slice(0, 4).map((r) => (
+                            <button key={r.id} className="cross-result" onClick={() => navigate(`/novel/${r.novelId}/characters`)}>
+                              <Icon icon="fa-solid fa-user" />
+                              <span className="cross-result-title">{r.title}</span>
+                              <span className="cross-result-sub">{r.subtitle}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {crossResults.notes.length > 0 && (
+                        <div className="cross-section">
+                          <div className="cross-section-label">Notes</div>
+                          {crossResults.notes.slice(0, 3).map((r) => (
+                            <button key={r.id} className="cross-result" onClick={() => navigate(`/novel/${r.novelId}/notes`)}>
+                              <Icon icon="fa-solid fa-note-sticky" />
+                              <span className="cross-result-title">{r.title}</span>
+                              <span className="cross-result-sub">{r.subtitle}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {!crossResults.chapters.length && !crossResults.characters.length && !crossResults.notes.length && (
+                        <div style={{ padding: '12px 14px', color: 'var(--grey)', fontSize: '0.86rem' }}>No results across all novels.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <button className="button button-primary" onClick={() => setNewOpen(true)}>
+                  <Icon icon="fa-solid fa-plus" style={{ marginRight: 6 }} /> New novel
+                </button>
               </div>
-              <button className="button button-primary" onClick={() => setNewOpen(true)}>
-                <Icon icon="fa-solid fa-plus" style={{ marginRight: 6 }} /> New novel
-              </button>
-            </div>
-            <div className="dashboard-tools-bottom">
-              <div className="genre-chips">
-                <button className={`chip ${genreFilter === null ? 'active' : ''}`} onClick={() => setGenreFilter(null)}>All</button>
-                {((Array.isArray(allGenres) && allGenres.length ? allGenres : GENRES) as string[]).slice(0, 12).map((g) => (
-                  <button key={String(g)} className={`chip ${genreFilter === g ? 'active' : ''}`} onClick={() => setGenreFilter(genreFilter === g ? null : g)}>{g}</button>
-                ))}
-              </div>
-              <div className="dashboard-sort">
-                <label htmlFor="novel-sort">Sort by</label>
-                <select id="novel-sort" value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
-                  <option value="recent">Recent</option>
-                  <option value="words">Word count</option>
-                  <option value="chapters">Chapters</option>
-                </select>
-                <div className="view-toggle">
-                  <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setView('grid')} title="Grid view">
-                    <Icon icon="fa-solid fa-grip" />
-                  </button>
-                  <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setView('list')} title="List view">
-                    <Icon icon="fa-solid fa-list" />
-                  </button>
+              <div className="dashboard-tools-bottom">
+                <div className="dashboard-sort">
+                  <label htmlFor="novel-genre">Genre</label>
+                  <select id="novel-genre" value={genreFilter || ''} onChange={(e) => setGenreFilter(e.target.value || null)}>
+                    <option value="">All genres</option>
+                    {((Array.isArray(allGenres) && allGenres.length ? allGenres : GENRES) as string[]).map((genre) => <option key={genre} value={genre}>{genre}</option>)}
+                  </select>
+                  <label htmlFor="novel-status">Status</label>
+                  <select id="novel-status" value={collectionFilter || ''} onChange={(e) => setCollectionFilter(e.target.value || null)}>
+                    <option value="">All statuses</option>
+                    {COLLECTIONS.filter((collection) => collection.key).map((collection) => <option key={collection.key} value={collection.key || ''}>{collection.label}</option>)}
+                  </select>
+                  <label htmlFor="novel-sort">Sort by</label>
+                  <select id="novel-sort" value={sortKey} onChange={(e) => setSortKey(e.target.value)}>
+                    <option value="recent">Recent</option>
+                    <option value="words">Word count</option>
+                    <option value="chapters">Chapters</option>
+                  </select>
+                  <div className="view-toggle">
+                    <button className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setView('grid')} title="Grid view">
+                      <Icon icon="fa-solid fa-grip" />
+                    </button>
+                    <button className={`view-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setView('list')} title="List view">
+                      <Icon icon="fa-solid fa-list" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="collection-chips">
-              {COLLECTIONS.map((c) => (
-                <button
-                  key={String(c.key)}
-                  className={`chip ${collectionFilter === c.key ? 'active' : ''}`}
-                  onClick={() => setCollectionFilter(collectionFilter === c.key ? null : c.key)}
-                >
-                  {c.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          </>
         )}
 
         {libraryLoading && novels.length > 0 && <DashboardSkeleton />}
@@ -697,7 +873,13 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+        </section>
+        }
+        {dashboardView === 'journal' && <DashboardJournal novel={resumeNovel} analytics={analytics} onOpen={() => resumeNovel && navigate(`/novel/${resumeNovel.id}/writing-journal`)} />}
+        {dashboardView === 'insights' && <DashboardInsights analytics={analytics} data={dashboardData} onOpen={() => resumeNovel && navigate(`/novel/${resumeNovel.id}/analytics`)} />}
+        </div>
       </div>
+      </main>
 
       <NewNovelModal open={newOpen} onClose={() => setNewOpen(false)} onCreate={handleCreate} />
       <RenameModal novel={editNovel} onClose={() => setEditNovel(null)} onSave={handleRename} />
@@ -721,7 +903,7 @@ function DashboardSkeleton() {
   </div>
 }
 
-function HeroCard({ novel, counts, onOpen }) {
+function HeroCard({ novel, chapter, counts, todayWords, streak, onOpen, onOpenChapter, onStartFocus }) {
   const coverUrl = useBlobUrl(novel.cover)
   const coverClass = `cover-${novel.coverStyle || 'moonstone'}`
   return (
@@ -735,13 +917,213 @@ function HeroCard({ novel, counts, onOpen }) {
       <div className="hero-body">
         <div className="hero-label">Continue writing</div>
         <div className="hero-title">{novel.title}</div>
-        {novel.blurb && <div className="hero-blurb">{novel.blurb}</div>}
+        {chapter && <div className="hero-chapter">{chapter.title || 'Untitled chapter'} · last edited {timeAgo(chapter.updatedAt)}</div>}
+        {chapter?.meta?.location && <div className="hero-context">Scene: {chapter.meta.location}{chapter.meta.tone ? ` · Tone: ${chapter.meta.tone}` : ''}</div>}
+        {lastLine(chapter?.content) && <div className="hero-last-line">“{lastLine(chapter.content)}”</div>}
         <div className="hero-meta">
-          {formatWords(counts?.words || 0)} words · {counts?.chapters || 0} chapters
+          {formatWords(todayWords)} / {formatWords(novel.goalWords || 500)} today · {counts?.chapters || 0} chapters · {streak || 0}-day streak
         </div>
-        <button className="button button-primary hero-cta">Continue writing →</button>
+        <div className="hero-actions">
+          <button className="button button-primary hero-cta" onClick={(event) => { event.stopPropagation(); onOpen() }}>Continue writing</button>
+          <button className="button button-quiet hero-secondary-action" onClick={(event) => { event.stopPropagation(); onOpenChapter() }}>Open chapter</button>
+          <button className="button button-quiet hero-secondary-action" onClick={(event) => { event.stopPropagation(); onStartFocus() }}>Start focus</button>
+        </div>
       </div>
     </div>
+  )
+}
+
+function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLibrary, onJournal, onInsights, onSearch, onNew, onOpenChapter, onSettings, onAdmin, syncUsername, syncStatus, syncAvatar, syncProvider, onSync, resumeChapter, recent, showCurrentStory = true }) {
+  const { openContextMenu } = useContextMenu()
+  const openProfileMenu = (event) => {
+    event.preventDefault()
+    openContextMenu(event, [
+      { label: syncUsername || 'Local writer', icon: 'fa-solid fa-user', disabled: true },
+      'divider',
+      { label: 'Settings', icon: 'fa-solid fa-gear', onClick: onSettings },
+      { label: 'Sync now', icon: 'fa-solid fa-rotate', onClick: onSync },
+      { label: 'Copy username', icon: 'fa-regular fa-copy', disabled: !syncUsername, onClick: () => syncUsername && navigator.clipboard?.writeText(syncUsername) },
+    ])
+  }
+  const item = (key, label, icon, onClick) => (
+    <button className={`dashboard-sidebar-item ${view === key ? 'active' : ''}`} onClick={onClick} title={collapsed ? label : undefined}>
+      <Icon icon={icon} /><span className="dashboard-sidebar-label">{label}</span>
+    </button>
+  )
+  return (
+    <aside className={`dashboard-sidebar ${collapsed ? 'collapsed' : ''}`}>
+      <div className="dashboard-sidebar-brand">
+        <img src="/moonscribelogo.png" alt="" />
+        <span>MoonScribe<small>Stories, quietly written.</small></span>
+        <button onClick={onToggle} aria-label={collapsed ? 'Expand dashboard sidebar' : 'Collapse dashboard sidebar'}><Icon icon={collapsed ? 'fa-solid fa-angles-right' : 'fa-solid fa-angles-left'} /></button>
+      </div>
+      <nav className="dashboard-sidebar-nav" aria-label="Dashboard navigation">
+        {item('home', 'Home', 'fa-solid fa-house', onHome)}
+        {item('library', 'Library', 'fa-solid fa-book', onLibrary)}
+        {item('journal', 'Writing journal', 'fa-solid fa-feather-pointed', onJournal)}
+        {item('insights', 'Insights', 'fa-solid fa-chart-line', onInsights)}
+        <button className="dashboard-sidebar-item" onClick={onSearch} title={collapsed ? 'Search MoonScribe' : undefined}><Icon icon="fa-solid fa-magnifying-glass" /><span className="dashboard-sidebar-label">Search</span></button>
+      </nav>
+      {showCurrentStory && (
+        <div className="dashboard-current-story">
+          <span>Current story</span>
+          <button onClick={onContinue} title={collapsed ? 'Continue writing' : undefined}>
+            <Icon icon="fa-solid fa-sparkles" />
+            <span className="dashboard-sidebar-label">{recent[0]?.novelTitle || 'Choose a story'}<small>{resumeChapter?.title || 'Start where you left off'}</small></span>
+          </button>
+        </div>
+      )}
+      <div className="dashboard-sidebar-bottom">
+        <button className="dashboard-sidebar-item" onClick={onNew} title={collapsed ? 'New story' : undefined}><Icon icon="fa-solid fa-plus" /><span className="dashboard-sidebar-label">New story</span></button>
+        <button className="dashboard-sidebar-item" onClick={onSettings} title={collapsed ? 'Settings' : undefined}><Icon icon="fa-solid fa-gear" /><span className="dashboard-sidebar-label">Settings</span></button>
+        {onAdmin && <button className="dashboard-sidebar-item dashboard-admin-tab" onClick={onAdmin} title={collapsed ? 'Admin' : undefined}><Icon icon="fa-solid fa-shield-halved" /><span className="dashboard-sidebar-label">Admin</span></button>}
+        <div className={`dashboard-account-card status-${syncStatus || 'offline'}`} title={collapsed ? `${syncUsername || 'Local writer'} · ${syncStatus || 'offline'}` : undefined} onContextMenu={openProfileMenu}>
+          <button className="dashboard-account-identity" type="button" onClick={openProfileMenu} aria-label="Open account menu">
+            <span className="dashboard-account-avatar">
+              <ProfileAvatar src={syncAvatar} name={syncUsername || 'MoonScribe writer'} />
+              <i className={`dashboard-account-presence ${syncStatus === 'synced' ? 'online' : syncStatus === 'error' ? 'error' : ''}`} />
+            </span>
+            <span className="dashboard-sidebar-label dashboard-account-copy">
+              <strong>{syncUsername || 'Local writer'}</strong>
+              <small>{syncStatus === 'synced' ? 'Synced' : syncStatus === 'local' ? 'Saved locally · cloud sync queued' : syncStatus === 'syncing' ? 'Syncing…' : syncStatus === 'connecting' ? 'Connecting…' : syncStatus === 'error' ? 'Sync needs attention' : 'Offline · changes saved locally'}</small>
+            </span>
+          </button>
+          <div className="dashboard-account-actions dashboard-sidebar-label">
+            <button type="button" onClick={onSync} aria-label="Sync now" title="Sync now"><Icon icon="fa-solid fa-rotate" /></button>
+            {syncProvider === 'discord' && <span title="Connected with Discord" aria-label="Connected with Discord"><Icon icon="fa-brands fa-discord" /></span>}
+            <button type="button" onClick={onSettings} aria-label="Open settings" title="Settings"><Icon icon="fa-solid fa-gear" /></button>
+          </div>
+        </div>
+      </div>
+    </aside>
+  )
+}
+
+function RecentTouched({ chapters, onOpenChapter }) {
+  if (!chapters.length) return null
+  return <section className="dashboard-recent-touched">
+    <div className="dashboard-section-label">Recently touched</div>
+    <div>{chapters.slice(0, 3).map((chapter) => <button key={chapter.id} onClick={() => onOpenChapter(chapter)}>{chapter.title || 'Untitled chapter'}<small>{timeAgo(chapter.updatedAt)}</small></button>)}</div>
+  </section>
+}
+
+function DashboardJournal({ novel, analytics, onOpen }) {
+  return <section className="dashboard-empty-view">
+    <span className="dashboard-section-label">Writing journal</span>
+    <h1>Your writing, remembered.</h1>
+    <p>{analytics.streak ? `${analytics.streak} days in your current rhythm.` : 'Start a writing session and MoonScribe will keep the rhythm here.'}</p>
+    {novel && <button className="button button-primary" onClick={onOpen}>Open {novel.title}'s journal</button>}
+  </section>
+}
+
+function DashboardInsights({ analytics, data, onOpen }) {
+  return <section className="dashboard-empty-view">
+    <span className="dashboard-section-label">Insights</span>
+    <h1>Progress without the noise.</h1>
+    <p>{formatWords(analytics.monthlyWords)} words this month · {data.health?.chapters || 0} chapters in your library.</p>
+    <button className="button button-primary" onClick={onOpen}>Open story analytics</button>
+  </section>
+}
+
+function DashboardWidgets({ widgets, customizing, draggingWidget, onDragStart, onDragEnd, onDrop, onToggle, data, analytics, counts, onOpenChapter, quickCapture, onQuickCaptureChange, onSaveQuickCapture }) {
+  const maxPulse = Math.max(...data.pulse.map((day) => day.words), 1)
+  const widgetContent = {
+    today: (
+      <>
+        <div className="dashboard-widget-heading"><Icon icon="fa-solid fa-feather-pointed" /> Today</div>
+        <strong className="dashboard-widget-number">{formatWords(data.today)}</strong>
+        <span>words written</span>
+        <div className="dashboard-widget-summary">{analytics.streak ? `${analytics.streak}-day writing streak` : 'A fresh page is waiting.'}</div>
+      </>
+    ),
+    pulse: (
+      <>
+        <div className="dashboard-widget-heading"><Icon icon="fa-solid fa-wave-square" /> Writing pulse</div>
+        <div className="writing-pulse" aria-label="Words written over the last seven days">
+          {data.pulse.map((day) => <span key={day.date} className="writing-pulse-bar" style={{ height: `${Math.max(8, (day.words / maxPulse) * 100)}%` }} title={`${day.words} words`} />)}
+        </div>
+        <span>Last 7 days · {formatWords(data.pulse.reduce((total, day) => total + day.words, 0))} words</span>
+      </>
+    ),
+    recent: (
+      <>
+        <div className="dashboard-widget-heading"><Icon icon="fa-regular fa-clock" /> Recent chapters</div>
+        <div className="dashboard-recent-list">
+          {data.recent.length ? data.recent.slice(0, 4).map((chapter) => (
+            <button key={chapter.id} onClick={() => onOpenChapter(chapter)}>
+              <span>{chapter.title || 'Untitled chapter'}</span>
+              <small>{chapter.novelTitle} · {timeAgo(chapter.updatedAt)}</small>
+            </button>
+          )) : <span className="muted">Your recently edited chapters will appear here.</span>}
+        </div>
+      </>
+    ),
+    editing: (
+      <>
+        <div className="dashboard-widget-heading"><Icon icon="fa-solid fa-pen-ruler" /> Editing queue</div>
+        <div className="dashboard-recent-list">
+          {data.editingQueue.length ? data.editingQueue.slice(0, 4).map((chapter) => (
+            <button key={chapter.id} onClick={() => onOpenChapter(chapter)}>
+              <span>{chapter.title || 'Untitled chapter'}</span>
+              <small>{chapter.unresolvedComments ? `${chapter.unresolvedComments} unresolved comment${chapter.unresolvedComments === 1 ? '' : 's'}` : chapter.continuityIssues ? `${chapter.continuityIssues} continuity item${chapter.continuityIssues === 1 ? '' : 's'}` : 'Ready for revision'}</small>
+            </button>
+          )) : <span className="muted">Revision-ready chapters and open comments will appear here.</span>}
+        </div>
+      </>
+    ),
+    health: (
+      <>
+        <div className="dashboard-widget-heading"><Icon icon="fa-solid fa-heart-pulse" /> Novel health</div>
+        <strong className="dashboard-widget-number">{data.health?.chapters || 0}</strong>
+        <span>chapters · {data.health?.drafted || 0} drafted · {data.health?.editing || 0} editing · {data.health?.complete || 0} complete</span>
+        <div className="dashboard-widget-summary">{data.health?.unresolvedComments || 0} unresolved comments · {data.health?.continuityIssues || 0} continuity items</div>
+      </>
+    ),
+    quickCapture: (
+      <>
+        <div className="dashboard-widget-heading"><Icon icon="fa-solid fa-bolt" /> Quick capture</div>
+        <textarea className="dashboard-quick-capture" value={quickCapture} onChange={(event) => onQuickCaptureChange(event.target.value)} placeholder="A line, scene idea, or detail before it disappears…" aria-label="Quick capture note" />
+        <button className="button button-ghost dashboard-quick-capture-save" onClick={onSaveQuickCapture} disabled={!quickCapture.trim()}>Save to current story</button>
+      </>
+    ),
+    progress: (
+      <>
+        <div className="dashboard-widget-heading"><Icon icon="fa-solid fa-book-open" /> Story progress</div>
+        <strong className="dashboard-widget-number">{formatWords((Object.values(counts) as { words?: number; chapters?: number }[]).reduce((total, count) => total + (count.words || 0), 0))}</strong>
+        <span>words across {(Object.values(counts) as { words?: number; chapters?: number }[]).reduce((total, count) => total + (count.chapters || 0), 0)} chapters</span>
+        <div className="dashboard-widget-summary">{analytics.inProgress} active {analytics.inProgress === 1 ? 'story' : 'stories'} · {formatWords(analytics.monthlyWords)} words this month</div>
+      </>
+    )
+  }
+
+  return (
+    <section className={`dashboard-widget-area ${customizing ? 'is-customizing' : ''}`} aria-label="Writing dashboard">
+      {customizing && (
+        <div className="dashboard-widget-picker">
+          {DEFAULT_DASHBOARD_WIDGETS.map((widget) => (
+            <button key={widget} className={widgets.includes(widget) ? 'active' : ''} onClick={() => onToggle(widget)}>
+              {widgets.includes(widget) ? <Icon icon="fa-solid fa-eye" /> : <Icon icon="fa-regular fa-eye-slash" />} {widget}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="dashboard-widget-grid">
+        {widgets.map((widget) => (
+          <article
+            key={widget}
+            className={`dashboard-widget dashboard-widget-${widget}`}
+            draggable={customizing}
+            onDragStart={() => onDragStart(widget)}
+            onDragEnd={onDragEnd}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={() => onDrop(widget)}
+          >
+            {customizing && <span className="dashboard-drag-handle" aria-hidden="true"><Icon icon="fa-solid fa-grip-vertical" /></span>}
+            {widgetContent[widget]}
+          </article>
+        ))}
+      </div>
+    </section>
   )
 }
 

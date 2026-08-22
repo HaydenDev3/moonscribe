@@ -94,8 +94,8 @@ export function computeNumbers(chapters) {
       counts[kind] = (counts[kind] || 0) + 1
       const idx = counts[kind]
 
-      let number = null
-      let label = ''
+      let number
+      let label
       let childChapterNum = parentChapterNum
 
       if (kind === 'book' || kind === 'act') {

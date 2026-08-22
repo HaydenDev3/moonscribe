@@ -4,7 +4,7 @@
 
 const KEEP_INLINE = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'S', 'A', 'CODE'])
 const KEEP_BLOCK = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'DIV'])
-const SCENE_PATTERN = /^[❦*•\-\–—_·\s]{2,}$/
+const SCENE_PATTERN = /^[❦*•\-–—_·\s]{2,}$/
 
 function parse(html) {
   return new DOMParser().parseFromString(String(html || ''), 'text/html')
@@ -14,6 +14,7 @@ export function normalizeSafeLinkUrl(value) {
   const raw = String(value || '').trim()
   if (!raw) return ''
 
+  // eslint-disable-next-line no-control-regex -- stripping control bytes is a security boundary
   const cleaned = raw.replace(/[\u0000-\u001F\u007F]/g, '')
   if (!cleaned) return ''
 
@@ -56,7 +57,7 @@ function stripAttrs(el) {
 
 function countWords(str) {
   const text = str.replace(/<[^>]*>/g, ' ').replace(/\u00a0/g, ' ')
-  return (text.match(/[\p{L}\p{N}]+(?:['’\-]\p{L}+)?/gu) || []).length
+  return (text.match(/[\p{L}\p{N}]+(?:['’-]\p{L}+)?/gu) || []).length
 }
 
 function looksLikeHeading(text) {

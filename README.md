@@ -133,6 +133,7 @@ npm run server
 
 ## Documentation
 
+- [Complete documentation handbook](./docs/README.md)
 - [Server architecture and API reference](./docs/server-guide.md)
 - [Project overview and product page](./README.md)
 

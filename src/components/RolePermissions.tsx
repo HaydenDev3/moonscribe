@@ -5,6 +5,7 @@ import * as syncEngine from '../sync/engine'
 const ROLE_META = {
   user: { label: 'User', tone: 'safe' },
   developer: { label: 'Developer', tone: 'warn' },
+  beta_tester: { label: 'Beta Tester', tone: 'warn' },
   admin: { label: 'Admin', tone: 'danger' },
 }
 
@@ -150,9 +151,9 @@ export default function RolePermissions() {
                   <div style={{ fontSize: 12, color: 'var(--grey)' }}>{user.roles.join(', ') || 'user'}</div>
                 </div>
                 <select
-                  value={user.roles.includes('admin') ? 'admin' : user.roles.includes('developer') ? 'developer' : 'user'}
+                  value={user.roles.includes('admin') ? 'admin' : user.roles.includes('developer') ? 'developer' : user.roles.includes('beta_tester') ? 'beta_tester' : 'user'}
                   onChange={(event) => {
-                    const next = event.target.value === 'admin' ? ['user', 'admin'] : event.target.value === 'developer' ? ['user', 'developer'] : ['user']
+                    const next = event.target.value === 'admin' ? ['user', 'admin'] : event.target.value === 'developer' ? ['user', 'developer'] : event.target.value === 'beta_tester' ? ['user', 'beta_tester'] : ['user']
                     updateRole(user.id, next)
                   }}
                   aria-label={`Set role for ${user.username}`}
@@ -160,6 +161,7 @@ export default function RolePermissions() {
                 >
                   <option value="user">User</option>
                   <option value="developer">Developer</option>
+                  <option value="beta_tester">Beta Tester</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>

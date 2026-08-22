@@ -2,8 +2,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { listNovels } from '../db/novels'
 import { getMeta, setMeta } from '../db/meta'
+import { switchDatabaseProfile } from '../db/db'
 import { makeLock, verifyLock } from '../db/lock'
 import * as syncEngine from '../sync/engine'
+import { apiBaseUrl, authReturnUrl } from '../api/config'
+import { openExternalUrl } from '../api/desktopAuth'
 import {
   detectSystemFonts,
   installCustomFontFromFile,
@@ -56,7 +59,63 @@ const DEFAULT_SETTINGS = {
   ambientSound: false,
   ambientMood: 'moonlit',
   soundVolume: 35,
+  interfaceSoundVolume: 25,
+  writingSoundVolume: 18,
+  notificationSoundVolume: 40,
+  ambientSoundVolume: 30,
+  hapticFeedback: false,
+  hapticIntensity: 'subtle',
+  browserNotifications: false,
+  notificationPreferences: {
+    inApp: true,
+    writingReminders: true,
+    dailyGoalUpdates: true,
+    writingStreaks: true,
+    milestones: true,
+    collaboration: true,
+    syncProblems: true,
+    backupReminders: true,
+    announcements: true,
+    tips: false,
+    emailWritingReminders: false,
+    emailWeeklySummary: true,
+    emailMilestones: true,
+    emailCollaboration: true,
+    emailAnnouncements: false,
+  },
   paperStrength: 'soft',
+  displayName: '',
+  writerName: '',
+  profileBio: '',
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  language: 'en-AU',
+  startScreen: 'dashboard',
+  dashboardHeroStyle: 'large',
+  dashboardShowGreeting: true,
+  dashboardShowStreak: true,
+  dashboardShowRecent: true,
+  dashboardShowPulse: true,
+  dashboardShowProgress: true,
+  dashboardShowContinuity: false,
+  dashboardShowEditingQueue: true,
+  dashboardShowQuote: false,
+  dashboardLibraryView: 'grid',
+  dashboardDensity: 'balanced',
+  dashboardSidebarWidth: 240,
+  dashboardSidebarDefault: 'expanded',
+  dashboardAutoCollapse: false,
+  dashboardShowCurrentStory: true,
+  dashboardShowToolLabels: true,
+  dashboardAnimateCollapse: true,
+  writingGoalReminders: 'gentle',
+  writingSessionTimer: false,
+  writingStreaks: true,
+  writingCelebrations: 'subtle',
+  resumeCursorPosition: true,
+  rememberScrollPosition: true,
+  openLastChapter: true,
+  toolbarFadeWhileTyping: false,
+  hideSidebarWhileTyping: false,
 }
 
 const DEFAULT_SYNC = { server: null, username: null, status: 'offline', discordAvatar: null, provider: null }
@@ -64,7 +123,7 @@ const DEFAULT_ACCOUNT = { id: null, username: null, roles: ['user'], role: 'user
 
 function normalizeRoles(input) {
   const raw = Array.isArray(input) ? input : String(input || '').split(',')
-  const allowed = ['user', 'developer', 'admin']
+  const allowed = ['user', 'developer', 'beta_tester', 'admin']
   const roles = raw.map((item) => String(item).trim().toLowerCase()).filter(Boolean)
   const selected = new Set(roles.filter((role) => allowed.includes(role)))
   if (!selected.size) selected.add('user')
@@ -72,10 +131,7 @@ function normalizeRoles(input) {
 }
 
 function discordServer() {
-  if (import.meta.env.VITE_SYNC_SERVER) return import.meta.env.VITE_SYNC_SERVER.replace(/\/+$/, '')
-  // Auth and sync are same-origin. Vite proxies these routes in development;
-  // the production MoonScribe server serves the UI and API together.
-  return window.location.origin
+  return apiBaseUrl()
 }
 
 export function AppProvider({ children }) {
@@ -87,6 +143,7 @@ export function AppProvider({ children }) {
   const [sync, setSync] = useState(DEFAULT_SYNC)
   const [account, setAccount] = useState(DEFAULT_ACCOUNT)
   const [accountReady, setAccountReady] = useState(false)
+  const [guestMode, setGuestMode] = useState(false)
   const [appLock, setAppLockState] = useState(undefined) // undefined = loading, null = none
   const [locked, setLocked] = useState(false)
   const [unlockedNovels, setUnlockedNovels] = useState(() => new Set())
@@ -102,9 +159,14 @@ export function AppProvider({ children }) {
     setToasts((items) => [...items, { id, msg }])
     setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 4200)
     if (settings.soundEnabled && settings.notificationSounds) {
-      import('../utils/sounds').then(({ playAppSound }) => playAppSound('notification', settings.soundVolume))
+      import('../utils/sounds').then(({ playFeedback }) => playFeedback('notification.normal', {
+        masterEnabled: settings.soundEnabled,
+        channelEnabled: settings.notificationSounds,
+        masterVolume: settings.soundVolume,
+        channelVolume: settings.notificationSoundVolume,
+      }))
     }
-  }, [settings.soundEnabled, settings.notificationSounds, settings.soundVolume])
+  }, [settings.soundEnabled, settings.notificationSounds, settings.soundVolume, settings.notificationSoundVolume])
 
   const refreshNovels = useCallback(async () => {
     const all = await listNovels()
@@ -115,6 +177,7 @@ export function AppProvider({ children }) {
   useEffect(() => {
     refreshNovels()
     getMeta('onboardingDone', false).then(setOnboardingDone)
+    getMeta('guestMode', false).then(setGuestMode)
     getMeta('appLock', null).then((l) => {
       setAppLockState(l)
       if (l?.enabled) setLocked(true)
@@ -185,8 +248,25 @@ export function AppProvider({ children }) {
       const exchangeCode = sp.get('discord_exchange')
       const oauthCode = sp.get('oauth_exchange')
       const oauthProvider = sp.get('provider')
+      const magicToken = sp.get('magic_token')
       const dError = sp.get('discord_error')
-      if (exchangeCode || oauthCode) {
+      const oauthError = sp.get('oauth_error')
+      if (magicToken) {
+        window.history.replaceState({}, '', window.location.pathname + window.location.hash)
+        try {
+          const magicServer = discordServer()
+          const response = await fetch(`${magicServer}/api/auth/magic-link/consume`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: magicToken }) })
+          const account = await response.json()
+          if (!response.ok) throw new Error(account.error || 'This sign-in link has expired. Please request another.')
+          await setMeta('authProvider', 'magic')
+          const res = await syncEngine.connectWithToken({ server: account.server || magicServer, token: account.token, username: account.username })
+          if (res.ok) {
+            setSync({ server: account.server || magicServer, username: account.username, status: 'synced', discordAvatar: null, provider: 'magic' })
+            window.location.replace('/dashboard')
+            return
+          }
+        } catch (err) { toast(err.message || 'Could not complete Magic Link sign-in.') }
+      } else if (exchangeCode || oauthCode) {
         window.history.replaceState({}, '', window.location.pathname + window.location.hash)
         try {
           const oauthServer = discordServer()
@@ -226,14 +306,31 @@ export function AppProvider({ children }) {
           console.error('[Discord OAuth]', err)
           toast(err.message || 'Sign-in completed, but MoonScribe could not open the account session.')
         }
-      } else if (dError) {
+      } else if (dError || oauthError) {
         window.history.replaceState({}, '', window.location.pathname + window.location.hash)
-        console.error('[Discord OAuth]', dError)
-        toast('Discord approved the sign-in, but MoonScribe could not complete the secure token exchange. Please try again.')
+        const reason = dError || oauthError
+        console.error('[OAuth]', reason)
+        const providerCredentialError = reason === 'discord_credentials_invalid' || reason === 'google_credentials_invalid'
+        toast(reason === 'oauth_state_expired'
+          ? 'That sign-in attempt expired. Please start again.'
+          : reason === 'discord_provider_unreachable' || reason === 'google_provider_unreachable'
+            ? 'MoonScribe’s account service cannot reach the identity provider right now. Check the server network connection and try again.'
+          : providerCredentialError
+            ? 'The provider credentials or callback URL are not configured correctly on the MoonScribe server.'
+            : reason === 'discord_profile_failed' || reason === 'google_profile_failed'
+              ? 'The provider approved sign-in but did not return a usable profile. Please try again.'
+              : 'The provider approved sign-in, but MoonScribe could not finish the secure account connection. Please try again.')
       }
     })().finally(() => setAccountReady(true))
     syncEngine.listConflicts().then(setConflicts)
   }, [refreshNovels, toast])
+
+  const continueAsGuest = useCallback(async () => {
+    await switchDatabaseProfile('guest')
+    await setMeta('guestMode', true)
+    await setMeta('onboardingDone', true)
+    setGuestMode(true); setOnboardingDone(true); await refreshNovels()
+  }, [refreshNovels])
 
   // Keep the conflict list live as sync surfaces or resolves them.
   useEffect(() => {
@@ -342,7 +439,12 @@ export function AppProvider({ children }) {
     let lastTyped = 0
     const click = (event) => {
       if (!settings.clickSounds || !event.target.closest('button, a, [role="button"], [role="menuitem"], [role="option"]')) return
-      import('../utils/sounds').then(({ playAppSound }) => playAppSound('click', settings.soundVolume))
+      import('../utils/sounds').then(({ playFeedback }) => playFeedback('ui.click', {
+        masterEnabled: settings.soundEnabled,
+        channelEnabled: settings.clickSounds,
+        masterVolume: settings.soundVolume,
+        channelVolume: settings.interfaceSoundVolume,
+      }))
     }
     const type = (event) => {
       if (!settings.typingSounds || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
@@ -350,7 +452,12 @@ export function AppProvider({ children }) {
       const now = performance.now()
       if (now - lastTyped < 38) return
       lastTyped = now
-      import('../utils/sounds').then(({ playAppSound }) => playAppSound(event.key === 'Enter' ? 'return' : 'type', settings.soundVolume))
+      import('../utils/sounds').then(({ playFeedback }) => playFeedback(event.key === 'Enter' ? 'writing.return' : 'writing.key', {
+        masterEnabled: settings.soundEnabled,
+        channelEnabled: settings.typingSounds,
+        masterVolume: settings.soundVolume,
+        channelVolume: settings.writingSoundVolume,
+      }))
     }
     document.addEventListener('click', click, true)
     document.addEventListener('keydown', type, true)
@@ -358,7 +465,7 @@ export function AppProvider({ children }) {
       document.removeEventListener('click', click, true)
       document.removeEventListener('keydown', type, true)
     }
-  }, [settings.soundEnabled, settings.clickSounds, settings.typingSounds, settings.soundVolume])
+  }, [settings.soundEnabled, settings.clickSounds, settings.typingSounds, settings.soundVolume, settings.interfaceSoundVolume, settings.writingSoundVolume])
 
   useEffect(() => {
     let cancelled = false
@@ -373,10 +480,10 @@ export function AppProvider({ children }) {
     import('../utils/sounds').then(({ startAmbientSound, stopAmbientSound }) => {
       if (cancelled) return
       stopAmbient = stopAmbientSound
-      startAmbientSound(settings.soundVolume, settings.ambientMood || 'moonlit')
+      startAmbientSound(settings.ambientSoundVolume, settings.ambientMood || 'moonlit')
       stopOnHide = () => {
         if (document.hidden) stopAmbientSound()
-        else startAmbientSound(settings.soundVolume, settings.ambientMood || 'moonlit')
+        else startAmbientSound(settings.ambientSoundVolume, settings.ambientMood || 'moonlit')
       }
       document.addEventListener('visibilitychange', stopOnHide)
     })
@@ -385,7 +492,7 @@ export function AppProvider({ children }) {
       if (stopOnHide) document.removeEventListener('visibilitychange', stopOnHide)
       if (stopAmbient) stopAmbient()
     }
-  }, [settings.soundEnabled, settings.ambientSound, settings.ambientMood, settings.soundVolume])
+  }, [settings.soundEnabled, settings.ambientSound, settings.ambientMood, settings.ambientSoundVolume])
 
   useEffect(() => {
     const ACCENT_MAP = {
@@ -528,10 +635,22 @@ export function AppProvider({ children }) {
 
   // ---- sync ----
   useEffect(() => {
-    return syncEngine.onStatus(({ status }) => {
-      setSync((s) => ({ ...s, status }))
+    let indicatorTimer: ReturnType<typeof setTimeout> | undefined
+    const unsubscribe = syncEngine.onStatus(({ status }) => {
+      if (indicatorTimer) clearTimeout(indicatorTimer)
+      indicatorTimer = undefined
+      const applyStatus = () => setSync((s) => ({ ...s, status }))
+      if (status === 'syncing' || status === 'connecting') {
+        indicatorTimer = setTimeout(applyStatus, 400)
+      } else {
+        applyStatus()
+      }
       syncEngine.getConfig().then((cfg) => setSync((s) => ({ ...s, server: cfg.server, username: cfg.username })))
     })
+    return () => {
+      if (indicatorTimer) clearTimeout(indicatorTimer)
+      unsubscribe()
+    }
   }, [])
 
   useEffect(() => {
@@ -564,8 +683,8 @@ export function AppProvider({ children }) {
       const status = await response.json().catch(() => ({}))
       if (!response.ok || !status.online) throw new Error('MoonScribe’s account service is not running. Start the app with “npm run dev”, then try again.')
       if (!status.discordAuth) throw new Error('Discord sign-in is not configured yet. Add DISCORD_CLIENT_SECRET to the server environment, or use a MoonScribe account now.')
-      const params = new URLSearchParams({ redirect_to: window.location.origin })
-      window.location.assign(`${server}/auth/discord?${params}`)
+      const params = new URLSearchParams({ redirect_to: authReturnUrl(), client: authReturnUrl().startsWith('moonscribe:') ? 'desktop' : 'web' })
+      await openExternalUrl(`${server}/auth/discord?${params}`)
     } catch (error) {
       toast(error.message || 'Could not reach MoonScribe’s account service.')
     }
@@ -578,10 +697,20 @@ export function AppProvider({ children }) {
       const status = await response.json().catch(() => ({}))
       if (!response.ok || !status.online) throw new Error('MoonScribe’s account service is not running. Start the app with “npm run dev”, then try again.')
       if (!status.googleAuth) throw new Error('Google sign-in needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the server environment.')
-      const params = new URLSearchParams({ redirect_to: window.location.origin })
-      window.location.assign(`${server}/auth/google?${params}`)
+      const params = new URLSearchParams({ redirect_to: authReturnUrl(), client: authReturnUrl().startsWith('moonscribe:') ? 'desktop' : 'web' })
+      await openExternalUrl(`${server}/auth/google?${params}`)
     } catch (error) { toast(error.message || 'Could not start Google sign-in.') }
   }, [toast])
+
+  const sendMagicLink = useCallback(async (email) => {
+    const response = await fetch(`${discordServer()}/api/auth/magic-link`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, redirect_to: authReturnUrl() }),
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(result.error || 'Could not send your sign-in link.')
+    return result
+  }, [])
 
   useEffect(() => {
     const conceal = () => {
@@ -620,34 +749,72 @@ export function AppProvider({ children }) {
     return removed
   }, [toast])
 
-  // Signed-in libraries continuously converge with the server. IndexedDB
-  // remains the immediate write target, so a slow or missing connection never
-  // blocks typing; the next successful pass drains the pending queue.
+  // IndexedDB remains the immediate write target. Remote work is batched after
+  // a short period of inactivity instead of polling the cloud while the author
+  // is typing. Reconnect/focus still reconcile immediately, and failed batches
+  // back off rather than creating a tight retry loop.
   useEffect(() => {
     if (!sync.server) return undefined
     let stopped = false
-    const quietlySync = () => {
-      if (stopped || !navigator.onLine) return
-      syncEngine.sync().catch(() => {})
+    let batchTimer: ReturnType<typeof setTimeout> | undefined
+    let retryTimer: ReturnType<typeof setTimeout> | undefined
+    let failureCount = 0
+    const retryDelays = [2_000, 5_000, 10_000, 30_000, 60_000]
+
+    const clearTimers = () => {
+      if (batchTimer) clearTimeout(batchTimer)
+      if (retryTimer) clearTimeout(retryTimer)
+      batchTimer = undefined
+      retryTimer = undefined
     }
-    const timer = setInterval(quietlySync, 20_000)
-    const onVisible = () => { if (document.visibilityState === 'visible') quietlySync() }
-    window.addEventListener('online', quietlySync)
-    window.addEventListener('focus', quietlySync)
+
+    const runSync = async () => {
+      if (stopped || !navigator.onLine) return
+      if (batchTimer) clearTimeout(batchTimer)
+      batchTimer = undefined
+      try {
+        await syncEngine.sync()
+        failureCount = 0
+      } catch {
+        if (stopped || !navigator.onLine) return
+        const delay = retryDelays[Math.min(failureCount, retryDelays.length - 1)]
+        failureCount += 1
+        retryTimer = setTimeout(runSync, delay)
+      }
+    }
+
+    const scheduleBatch = () => {
+      setSync((current) => ({ ...current, status: navigator.onLine ? 'local' : 'offline' }))
+      if (!navigator.onLine) return
+      if (batchTimer) clearTimeout(batchTimer)
+      batchTimer = setTimeout(runSync, 3_500)
+    }
+    const reconcileNow = () => {
+      failureCount = 0
+      if (retryTimer) clearTimeout(retryTimer)
+      retryTimer = undefined
+      void runSync()
+    }
+    const onVisible = () => { if (document.visibilityState === 'visible') reconcileNow() }
+
+    window.addEventListener('moonscribe:record-written', scheduleBatch)
+    window.addEventListener('online', reconcileNow)
+    window.addEventListener('focus', reconcileNow)
     document.addEventListener('visibilitychange', onVisible)
-    quietlySync()
+    reconcileNow()
     return () => {
       stopped = true
-      clearInterval(timer)
-      window.removeEventListener('online', quietlySync)
-      window.removeEventListener('focus', quietlySync)
+      clearTimers()
+      window.removeEventListener('moonscribe:record-written', scheduleBatch)
+      window.removeEventListener('online', reconcileNow)
+      window.removeEventListener('focus', reconcileNow)
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [sync.server])
 
   const accountRoles = useMemo(() => normalizeRoles(account.roles), [account.roles])
   const hasRole = useCallback((role) => accountRoles.includes(role), [accountRoles])
-  const userRoleLabel = accountRoles.includes('admin') ? 'Admin' : accountRoles.includes('developer') ? 'Developer' : 'User'
+  const userRoleLabel = accountRoles.includes('admin') ? 'Admin' : accountRoles.includes('developer') ? 'Developer' : accountRoles.includes('beta_tester') ? 'Beta Tester' : 'User'
 
   const appValue = useMemo(
     () => ({
@@ -678,7 +845,9 @@ export function AppProvider({ children }) {
       conflicts,
       resolveConflict,
       syncServer: sync.server,
-      syncUsername: sync.username,
+      syncUsername: sync.username || (guestMode ? 'Guest' : null),
+      guestMode,
+      continueAsGuest,
       syncStatus: sync.status,
       syncDiscordAvatar: sync.discordAvatar,
       syncProvider: sync.provider,
@@ -692,6 +861,7 @@ export function AppProvider({ children }) {
       connectSync,
       connectDiscord,
       connectGoogle,
+      sendMagicLink,
       disconnectSync,
       signOutOtherDevices,
       customFonts,
@@ -700,7 +870,7 @@ export function AppProvider({ children }) {
       deleteCustomFont,
       refreshSystemFonts,
     }),
-    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, conflicts, resolveConflict, sync, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts]
+    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, sendMagicLink, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts]
   )
 
   return (

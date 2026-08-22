@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { clearPresence, getConfig, listPresence, subscribePresence, updatePresence } from '../sync/engine'
 import ProfileAvatar from './ProfileAvatar'
 import Icon from './Icon'
@@ -44,12 +44,12 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
   })
   const lastAction = useRef(Date.now())
 
-  const applyPeople = (next) => {
+  const applyPeople = useCallback((next) => {
     allPeopleRef.current = next || []
     const visible = allPeopleRef.current.filter((person) => person?.id && person.id !== accountIdRef.current)
     setPeople(visible)
     onPresenceChange?.(visible)
-  }
+  }, [onPresenceChange])
 
   useEffect(() => {
     const active = () => { lastAction.current = Date.now() }
@@ -105,7 +105,7 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
       document.removeEventListener('input', selectionChanged, true)
       unsubscribe()
     }
-  }, [novelId, chapterId, chapterTitle, workspace, manualStatus, onPresenceChange, onRecord])
+  }, [novelId, chapterId, chapterTitle, workspace, manualStatus, onPresenceChange, onRecord, applyPeople])
 
   useEffect(() => {
     const leavePresence = () => {

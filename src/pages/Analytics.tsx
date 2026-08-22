@@ -58,7 +58,7 @@ export default function Analytics({ embedded }) {
       { label: 'Today’s pace', value: todayWpm === null ? '—' : `${todayWpm} wpm`, sub: todaySessions.minutes > 0.5 ? `${Math.round(todaySessions.minutes)} min writing` : 'write a little to see it' }
     ]
     return { streak, writingDays, best, last7, avg, todayWpm, stats }
-  }, [history, todaySessions, totalWords])
+  }, [history, today, todaySessions, totalWords])
 
   // Only show days from the novel's creation date onward — no phantom zeros before it existed
   const novelCreatedDate = novel?.createdAt ? toISODate(new Date(novel.createdAt)) : null

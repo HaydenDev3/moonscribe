@@ -130,7 +130,7 @@ export function rtfToChapters(rtf) {
   const paras = text
     .replace(/\f/g, '\n\f\n')
     .split('\n')
-    .map((s) => (s === PAGE ? s : s.replace(/[ 	]+/g, " ").trim()))
+    .map((s) => (s === PAGE ? s : s.replace(/[ \t]+/g, ' ').trim()))
 
   const chapters = []
   let cur = null

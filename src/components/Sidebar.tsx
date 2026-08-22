@@ -81,7 +81,7 @@ export default function Sidebar({
   onTitleSave,
 }) {
   const { openContextMenu } = useContextMenu()
-  const { settings, updateSettings, toast } = useApp()
+  const { settings, updateSettings, toast, syncUsername, syncStatus, syncDiscordAvatar, syncProvider, openSettings } = useApp()
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(() => new Set())
   const [navCollapsed, setNavCollapsed] = useState(() => new Set(['World', 'Craft', 'Journal', 'Archive']))
@@ -513,6 +513,42 @@ export default function Sidebar({
 
       {/* ── Footer ── */}
       <div className="sidebar-footer">
+        <div className="sidebar-user-info">
+          <div className={`dashboard-account-card status-${syncStatus || 'offline'}`} onContextMenu={(event) => {
+            event.preventDefault()
+            openContextMenu(event, [
+              { label: syncUsername || 'Local writer', icon: 'fa-solid fa-user', disabled: true },
+              'divider',
+              { label: 'Settings', icon: 'fa-solid fa-gear', onClick: openSettings },
+              { label: 'Sync now', icon: 'fa-solid fa-rotate', onClick: onSyncClick },
+              { label: 'Copy username', icon: 'fa-regular fa-copy', disabled: !syncUsername, onClick: () => syncUsername && navigator.clipboard?.writeText(syncUsername) },
+            ])
+          }}>
+            <button className="dashboard-account-identity" type="button" onClick={(event) => {
+              event.preventDefault()
+              openContextMenu(event, [
+                { label: syncUsername || 'Local writer', icon: 'fa-solid fa-user', disabled: true },
+                'divider',
+                { label: 'Settings', icon: 'fa-solid fa-gear', onClick: openSettings },
+                { label: 'Sync now', icon: 'fa-solid fa-rotate', onClick: onSyncClick },
+              ])
+            }} aria-label="Open account menu">
+              <span className="dashboard-account-avatar">
+                <ProfileAvatar src={syncDiscordAvatar} name={syncUsername || 'MoonScribe writer'} />
+                <i className={`dashboard-account-presence ${syncStatus === 'synced' ? 'online' : syncStatus === 'error' ? 'error' : ''}`} />
+              </span>
+              <span className="dashboard-sidebar-label dashboard-account-copy">
+                <strong>{syncUsername || 'Local writer'}</strong>
+                <small>{syncStatus === 'synced' ? 'Synced' : syncStatus === 'local' ? 'Saved locally · cloud sync queued' : syncStatus === 'syncing' ? 'Syncing…' : syncStatus === 'error' ? 'Sync needs attention' : 'Offline · changes saved locally'}</small>
+              </span>
+            </button>
+            <div className="dashboard-account-actions dashboard-sidebar-label">
+              <button type="button" onClick={onSyncClick} aria-label="Sync now" title="Sync now"><Icon icon="fa-solid fa-rotate" /></button>
+              {syncProvider === 'discord' && <span title="Connected with Discord" aria-label="Connected with Discord"><Icon icon="fa-brands fa-discord" /></span>}
+              <button type="button" onClick={openSettings} aria-label="Open settings" title="Settings"><Icon icon="fa-solid fa-gear" /></button>
+            </div>
+          </div>
+        </div>
         <SyncStatus onClick={onSyncClick} />
       </div>
     </aside>

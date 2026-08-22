@@ -1,90 +1,22 @@
 import { Resend } from 'resend'
 
-const apiKey = process.env.RESEND_API_KEY || ''
-const fromAddress = process.env.RESEND_FROM_EMAIL || 'MoonScribe <noreply@moonscribe.app>'
-const resend = apiKey ? new Resend(apiKey) : null
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null
+const fromAddress = process.env.RESEND_FROM || 'MoonScribe <noreply@moonscribe.cc>'
+const appUrl = String(process.env.PUBLIC_ORIGIN || process.env.APP_ORIGIN || 'https://moonscribe.cc').replace(/\/$/, '')
+const logoUrl = process.env.MOONSCRIBE_EMAIL_LOGO_URL || `${appUrl}/icons/icon-192.png`
+const escapeHtml = (value) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+const paragraph = (value) => `<p style="margin:0 0 16px">${escapeHtml(value)}</p>`
 
-function escapeHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
+function shell({ eyebrow = 'MoonScribe', title, intro, body, cta, security = false }) {
+  const button = cta ? `<p style="margin:28px 0"><a href="${escapeHtml(cta.href)}" style="display:inline-block;background:#b89052;color:#08080b;text-decoration:none;padding:13px 20px;font-weight:700;border-radius:4px">${escapeHtml(cta.label)}</a></p>` : ''
+  const notice = security ? '<div style="border-top:1px solid #2a2925;margin-top:28px;padding-top:16px;color:#9c9ba4;font-size:13px">If you did not request this, you can safely ignore this message.</div>' : ''
+  return `<!doctype html><html><body style="margin:0;background:#050507;color:#eee9dc;font-family:Arial,Helvetica,sans-serif;line-height:1.6"><div style="padding:32px 16px"><div style="max-width:600px;margin:0 auto"><div style="text-align:center;padding:8px 0 24px"><img src="${escapeHtml(logoUrl)}" width="42" height="42" alt="MoonScribe" style="display:inline-block;border:0"><div style="font-family:Georgia,serif;color:#d9b36a;font-size:18px;margin-top:8px">MoonScribe</div></div><main style="background:#0d0d12;border:1px solid #292722;padding:32px 30px"><div style="color:#9b8a68;text-transform:uppercase;letter-spacing:.14em;font-size:11px">${escapeHtml(eyebrow)}</div><h1 style="font-family:Georgia,serif;font-weight:400;font-size:30px;line-height:1.2;margin:10px 0 18px;color:#f4eedf">${escapeHtml(title)}</h1>${intro ? `<p style="color:#b8b5ad;margin:0 0 18px">${escapeHtml(intro)}</p>` : ''}<div style="color:#d6d2c8">${body}</div>${button}${notice}</main><footer style="text-align:center;color:#777681;font-size:12px;padding:22px 0">MoonScribe · Write worlds worth remembering.<br><a href="${escapeHtml(appUrl)}" style="color:#a99a79">moonscribe.cc</a> · <a href="${escapeHtml(appUrl + '/privacy')}" style="color:#a99a79">Privacy</a> · <a href="${escapeHtml(appUrl + '/account')}" style="color:#a99a79">Account</a><br>© ${new Date().getFullYear()} MoonScribe</footer></div></div></body></html>`
 }
-
-export function isEmailConfigured() {
-  return Boolean(resend)
-}
-
-export async function sendTransactionalEmail({ to, subject, text, html }) {
-  if (!resend) {
-    return { ok: false, reason: 'EMAIL_NOT_CONFIGURED' }
-  }
-
-  try {
-    const recipients = Array.isArray(to) ? to : [to]
-    const response = await resend.emails.send({
-      from: fromAddress,
-      to: recipients,
-      subject,
-      text,
-      html: html || text,
-    })
-
-    if (response && response.error) {
-      return { ok: false, error: response.error, reason: 'EMAIL_SEND_FAILED' }
-    }
-
-    return { ok: true, response }
-  } catch (error) {
-    return { ok: false, error, reason: 'EMAIL_SEND_FAILED' }
-  }
-}
-
-export async function sendVerificationCode({ to, username, code, appOrigin }) {
-  const origin = appOrigin || 'https://app.moonscribe.app'
-  const safeName = escapeHtml(username || 'writer')
-  const safeCode = escapeHtml(code)
-  const safeOrigin = escapeHtml(origin)
-  return sendTransactionalEmail({
-    to,
-    subject: 'Verify your MoonScribe account',
-    text: `Hi ${username || 'writer'},\n\nYour MoonScribe verification code is ${code}. Enter it in the app to confirm your email.\n\n${origin}`,
-    html: `<div style="font-family:Inter,Segoe UI,sans-serif;line-height:1.6;color:#0f172a;background:#f8fafc;padding:32px"><div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;padding:28px"><h2 style="margin:0 0 12px;color:#111827">Verify your MoonScribe account</h2><p style="margin:0 0 16px;color:#475569">Hi ${safeName},</p><p style="margin:0 0 18px;color:#475569">Use this code to verify your email and unlock your account:</p><div style="display:inline-block;padding:14px 18px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;font-size:28px;font-weight:700;letter-spacing:0.18em;color:#1d4ed8">${safeCode}</div><p style="margin-top:18px;color:#475569">This code expires soon. If you did not request this, you can ignore it.</p><p style="margin-top:20px;color:#64748b">${safeOrigin}</p></div></div>`,
-  })
-}
-
-export async function sendTwoFactorCode({ to, username, code }) {
-  const safeName = escapeHtml(username || 'writer')
-  const safeCode = escapeHtml(code)
-  return sendTransactionalEmail({
-    to,
-    subject: 'Your MoonScribe security code',
-    text: `Hi ${username || 'writer'},\n\nYour MoonScribe security code is ${code}. Enter it to continue.`,
-    html: `<div style="font-family:Inter,Segoe UI,sans-serif;line-height:1.6;color:#0f172a;background:#f8fafc;padding:32px"><div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;padding:28px"><h2 style="margin:0 0 12px;color:#111827">Your security code</h2><p style="margin:0 0 16px;color:#475569">Hi ${safeName},</p><p style="margin:0 0 18px;color:#475569">Use this code to complete your login:</p><div style="display:inline-block;padding:14px 18px;background:#fef3c7;border:1px solid #fcd34d;border-radius:12px;font-size:28px;font-weight:700;letter-spacing:0.18em;color:#92400e">${safeCode}</div><p style="margin-top:18px;color:#475569">This code expires soon. If you did not request this, review your account security.</p></div></div>`,
-  })
-}
-
-export async function sendAccountUpdateEmail({ to, username, summary }) {
-  const safeName = escapeHtml(username || 'writer')
-  const safeSummary = escapeHtml(summary)
-  return sendTransactionalEmail({
-    to,
-    subject: 'MoonScribe account update',
-    text: `Hi ${username || 'writer'},\n\n${summary}`,
-    html: `<div style="font-family:Inter,Segoe UI,sans-serif;line-height:1.6;color:#0f172a;background:#f8fafc;padding:32px"><div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;padding:28px"><h2 style="margin:0 0 12px;color:#111827">Account update</h2><p style="margin:0 0 14px;color:#475569">Hi ${safeName},</p><p style="margin:0;color:#475569">${safeSummary}</p></div></div>`,
-  })
-}
-
-export async function sendReminderEmail({ to, username, title, message }) {
-  const safeName = escapeHtml(username || 'writer')
-  const safeTitle = escapeHtml(title)
-  const safeMessage = escapeHtml(message)
-  return sendTransactionalEmail({
-    to,
-    subject: title,
-    text: `Hi ${username || 'writer'},\n\n${message}`,
-    html: `<div style="font-family:Inter,Segoe UI,sans-serif;line-height:1.6;color:#0f172a;background:#f8fafc;padding:32px"><div style="max-width:560px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:20px;padding:28px"><h2 style="margin:0 0 12px;color:#111827">${safeTitle}</h2><p style="margin:0;color:#475569">Hi ${safeName},</p><p style="margin-top:16px;color:#475569">${safeMessage}</p></div></div>`,
-  })
-}
+function compose({ to, subject, text, title, intro, body, cta, security, eyebrow }) { return sendTransactionalEmail({ to, subject, text, html: shell({ title, intro, body, cta, security, eyebrow }) }) }
+export function isEmailConfigured() { return Boolean(resend) }
+export async function sendTransactionalEmail({ to, subject, text, html }) { if (!resend) return { ok: false, reason: 'EMAIL_NOT_CONFIGURED' }; try { const response = await resend.emails.send({ from: fromAddress, to: Array.isArray(to) ? to : [to], subject, text, html: html || text }); if (response?.error) return { ok: false, error: response.error, reason: 'EMAIL_SEND_FAILED' }; return { ok: true, response } } catch (error) { return { ok: false, error, reason: 'EMAIL_SEND_FAILED' } } }
+export function sendVerificationCode({ to, username, code, appOrigin, expiresAt }) { const expiry = expiresAt ? new Date(expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'soon'; return compose({ to, subject: 'Verify your MoonScribe account', title: 'Verify your email', intro: 'One small step before your library is ready.', body: paragraph(`Hello ${username || 'writer'},`) + `<p style="font-size:32px;letter-spacing:.18em;color:#d9b36a">${escapeHtml(code)}</p>` + paragraph(`This code expires at ${expiry}.`), text: `MoonScribe verification code: ${code}. It expires at ${expiry}. ${appOrigin || appUrl}`, security: true }) }
+export function sendTwoFactorCode({ to, username, code }) { return compose({ to, subject: 'Your MoonScribe security code', title: 'Your security code', intro: 'Use this code to complete your sign-in.', body: paragraph(`Hello ${username || 'writer'},`) + `<p style="font-size:32px;letter-spacing:.18em;color:#d9b36a">${escapeHtml(code)}</p>`, text: `Your MoonScribe security code is ${code}.`, security: true, eyebrow: 'Account security' }) }
+export function sendMagicLink({ to, username, link }) { return compose({ to, subject: 'Your MoonScribe sign-in link', title: 'Return to your stories', intro: `Hello ${username || 'writer'},`, body: paragraph('Use this secure, one-use link to open your MoonScribe library. It expires in 15 minutes.'), cta: { href: link, label: 'Open MoonScribe' }, text: `Open your MoonScribe sign-in link: ${link}. It expires in 15 minutes.`, security: true }) }
+export function sendAccountUpdateEmail({ to, username, summary }) { return compose({ to, subject: 'MoonScribe account update', title: 'Account update', intro: `Hello ${username || 'writer'},`, body: paragraph(summary), text: `MoonScribe account update: ${summary}`, eyebrow: 'Account' }) }
+export function sendReminderEmail({ to, username, title, message }) { return compose({ to, subject: title, title, intro: `Hello ${username || 'writer'},`, body: paragraph(message), text: `${title}\n\n${message}` }) }

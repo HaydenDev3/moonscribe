@@ -1,0 +1,80 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactElement } from 'react'
+import { useApp } from '../context/AppContext'
+import { accountProfile, getConfig, listSessions, revokeSession } from '../sync/engine'
+import Icon from './Icon'
+
+type Account = { id: string; username: string; email: string | null; provider: 'discord' | 'google' | 'email'; discordUsername?: string | null; discordAvatar?: string | null; emailVerified: boolean; twoFactorEnabled: boolean; createdAt: number; role?: string; roles?: string[] }
+type Session = { id: string; current: boolean; deviceName: string; createdAt: number; lastSeenAt: number }
+type Notice = { id: string; title: string; body: string; category?: string; type?: string; createdAt: number }
+
+const nav = [['overview', 'Overview', 'fa-solid fa-house'], ['profile', 'Profile', 'fa-solid fa-user'], ['email', 'Email & password', 'fa-solid fa-envelope'], ['connections', 'Connections', 'fa-solid fa-link'], ['sessions', 'Sessions', 'fa-solid fa-laptop'], ['security', 'Security activity', 'fa-solid fa-shield-halved']]
+
+function Row({ title, detail, action, onClick, icon = 'fa-solid fa-chevron-right', tone = '', disabled = false }: { title: string; detail: string; action?: string; onClick?: () => void; icon?: string; tone?: string; disabled?: boolean }) {
+  return <div className="account-row"><span className={`account-row-icon ${tone}`}><Icon icon={icon} /></span><span className="account-row-copy"><strong>{title}</strong><small>{detail}</small></span>{action && <button type="button" className="account-row-action" onClick={onClick} disabled={disabled}>{action} <Icon icon="fa-solid fa-arrow-right" /></button>}</div>
+}
+
+const dateTime = (value?: number | null) => value ? new Date(value).toLocaleString() : 'Unknown'
+const relativeTime = (value?: number | null) => { if (!value) return 'Unknown'; const seconds = Math.max(0, Math.floor((Date.now() - value) / 1000)); if (seconds < 60) return 'Active now'; if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`; if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`; return `${Math.floor(seconds / 86400)}d ago` }
+
+export default function AccountCentre({ onClose }: { onClose: () => void }) {
+  const app = useApp() as any
+  const [section, setSection] = useState('overview')
+  const [account, setAccount] = useState<Account | null>(null)
+  const [sessions, setSessions] = useState<Session[]>([])
+  const [notices, setNotices] = useState<Notice[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState('')
+  const [error, setError] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [disableOpen, setDisableOpen] = useState(false)
+  const [disableText, setDisableText] = useState('')
+
+  const load = useCallback(async () => {
+    setLoading(true); setError('')
+    try {
+      const config = await getConfig()
+      if (!config.server || !config.token) throw new Error('Sign in to view account data.')
+      const [profile, activeSessions, noticeResponse] = await Promise.all([accountProfile(config.server, config.token), listSessions(), fetch(`${config.server.replace(/\/$/, '')}/api/notifications`, { headers: { Authorization: `Bearer ${config.token}` } })])
+      const noticeData = await noticeResponse.json().catch(() => ({}))
+      if (!noticeResponse.ok) throw new Error(noticeData.error || 'Could not load security activity.')
+      setAccount(profile); setEmail(profile.email || ''); setSessions(activeSessions); setNotices(noticeData.notifications || [])
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load account data.') }
+    finally { setLoading(false) }
+  }, [])
+  useEffect(() => { void load() }, [load])
+
+  const request = async (path: string, body: object) => { const config = await getConfig(); if (!config.server || !config.token) throw new Error('Sign in first.'); const response = await fetch(`${config.server.replace(/\/$/, '')}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.token}` }, body: JSON.stringify(body) }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || 'The account change could not be saved.'); return data }
+  const run = async (key: string, action: () => Promise<unknown>, success: string) => { setBusy(key); setError(''); try { await action(); app.toast?.(success); await load() } catch (reason) { const message = reason instanceof Error ? reason.message : 'The action failed.'; setError(message); app.toast?.(message) } finally { setBusy('') } }
+  const saveEmail = () => run('email', () => request('/api/auth/update-account', { email }), account?.email === email.trim() ? 'Email is already current.' : 'Email updated. Check your inbox to verify it.')
+  const savePassword = () => run('password', async () => { await request('/api/auth/update-account', { password, notify: 'Your MoonScribe password was changed.' }); setPassword('') }, 'Password updated.')
+  const toggle2fa = () => run('2fa', () => request('/api/auth/enable-2fa', { enable: !account?.twoFactorEnabled }), account?.twoFactorEnabled ? 'Two-factor authentication disabled.' : 'Two-factor authentication enabled. Check your email for the security code.')
+  const disableAccount = async () => {
+    setBusy('disable'); setError('')
+    try {
+      await request('/api/auth/disable-account', { confirmation: disableText })
+      app.toast?.('Your account is disabled and every device has been signed out.')
+      onClose()
+      await app.disconnectSync?.()
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'The account could not be disabled.') }
+    finally { setBusy('') }
+  }
+  const removeSession = (session: Session) => run(`session:${session.id}`, () => revokeSession(session.id), 'Device signed out.')
+  const connect = (name: 'connectDiscord' | 'connectGoogle') => app[name]?.().catch?.((reason: Error) => setError(reason.message))
+  const providerLabel = account?.provider === 'discord' ? 'Discord' : account?.provider === 'google' ? 'Google' : 'Email and password'
+  const accountNotices = useMemo(() => notices.filter((item) => item.category === 'account' || item.type === 'account'), [notices])
+
+  if (loading) return <div className="account-centre-overlay"><div className="account-centre"><div className="account-loading">Loading your live account…</div></div></div>
+
+  const content = {
+    overview: <><div className="account-hero"><div className="account-avatar">{account?.discordAvatar ? <img src={account.discordAvatar} alt="" /> : account?.username?.[0]?.toUpperCase()}</div><div><div className="account-eyebrow">SIGNED IN AS</div><h3>{account?.username || app.syncUsername}</h3><p>{account?.email || 'No email attached'} {account?.email && <span className={account.emailVerified ? 'account-verified' : ''}>{account.emailVerified ? 'Verified' : 'Unverified'}</span>}</p></div></div><div className="account-grid"><div className="account-info"><span>Account ID</span><b>{account?.id || 'Unavailable'}</b></div><div className="account-info"><span>Sync</span><b className={app.syncStatus === 'synced' ? 'account-success' : ''}>● {app.syncStatus || 'Unknown'}</b></div><div className="account-info"><span>Signed-in devices</span><b>{sessions.length}</b></div><div className="account-info"><span>Member since</span><b>{account?.createdAt ? new Date(account.createdAt).toLocaleDateString() : 'Unknown'}</b></div></div><h4>Sign-in and security</h4><Row title={providerLabel} detail="Current account provider" action="Manage" onClick={() => setSection('connections')} icon="fa-solid fa-circle-check" tone="success" /><Row title="Two-factor authentication" detail={account?.twoFactorEnabled ? 'Enabled' : 'Not enabled'} action="Manage" onClick={() => setSection('security')} icon="fa-solid fa-shield-halved" /><Row title="Sessions" detail={`${sessions.length} signed-in device${sessions.length === 1 ? '' : 's'}`} action="Review" onClick={() => setSection('sessions')} icon="fa-solid fa-laptop" /></>,
+    profile: <><div className="account-eyebrow">ACCOUNT</div><h3>Profile</h3><p className="account-lead">Identity currently stored on your MoonScribe account.</p><div className="account-card"><div><span className="account-label">USERNAME</span><strong>{account?.username}</strong><small>Account usernames cannot currently be changed.</small></div></div><div className="account-card"><div><span className="account-label">ACCOUNT ROLE</span><strong>{account?.role || 'user'}</strong><small>{(account?.roles || []).join(', ') || 'user'}</small></div></div><div className="account-card"><div><span className="account-label">CREATED</span><strong>{dateTime(account?.createdAt)}</strong><small>Account ID: {account?.id}</small></div></div></>,
+    email: <><div className="account-eyebrow">ACCOUNT</div><h3>Email &amp; password</h3><p className="account-lead">Changes are written directly to your authenticated account.</p><label className="account-field"><span>Primary email</span><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></label><button className="account-primary" disabled={busy === 'email' || !email.trim()} onClick={saveEmail}>{busy === 'email' ? 'Saving…' : account?.email ? 'Update email' : 'Add email'}</button><div className="account-note"><Icon icon={account?.emailVerified ? 'fa-solid fa-circle-check' : 'fa-solid fa-circle-exclamation'} /><span>{account?.email ? account.emailVerified ? 'This email is verified.' : 'This email still needs verification.' : 'Add and verify an email to use two-factor authentication.'}</span></div><label className="account-field"><span>New password</span><input type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={10} autoComplete="new-password" placeholder="At least 10 characters" /></label><button className="account-secondary" disabled={busy === 'password' || password.length < 10} onClick={savePassword}>{busy === 'password' ? 'Updating…' : 'Change password'}</button></>,
+    connections: <><div className="account-eyebrow">ACCOUNT</div><h3>Connections</h3><p className="account-lead">The provider recorded for this canonical MoonScribe account.</p><Row title="Discord" detail={account?.provider === 'discord' ? `Connected${account.discordUsername ? ` · ${account.discordUsername}` : ''}` : 'Not connected'} action={account?.provider === 'discord' ? undefined : 'Connect'} onClick={() => connect('connectDiscord')} icon="fa-brands fa-discord" tone={account?.provider === 'discord' ? 'success' : ''} /><Row title="Google" detail={account?.provider === 'google' ? `Connected${account.email ? ` · ${account.email}` : ''}` : 'Not connected'} action={account?.provider === 'google' ? undefined : 'Connect'} onClick={() => connect('connectGoogle')} icon="fa-brands fa-google" tone={account?.provider === 'google' ? 'success' : ''} /><Row title="Email and password" detail={account?.email ? `${account.emailVerified ? 'Verified' : 'Unverified'} · ${account.email}` : 'No email attached'} action="Manage" onClick={() => setSection('email')} icon="fa-solid fa-envelope" /><div className="account-note"><Icon icon="fa-solid fa-shield-halved" /><span>Only connections returned by the authenticated account endpoint are shown. Provider unlinking is unavailable until a safe server-side unlink flow exists.</span></div></>,
+    sessions: <><div className="account-eyebrow">PRIVACY</div><h3>Sessions</h3><p className="account-lead">Live server sessions for this account. MoonScribe does not invent location information.</p>{sessions.length ? sessions.map((session) => session.current ? <div className="account-session-current" key={session.id}><span className="account-live" /><div><strong>{session.deviceName}</strong><small>Created {dateTime(session.createdAt)} · {relativeTime(session.lastSeenAt)}</small></div><span className="account-current">THIS DEVICE</span></div> : <Row key={session.id} title={session.deviceName} detail={`Last active ${relativeTime(session.lastSeenAt)} · Created ${dateTime(session.createdAt)}`} action={busy === `session:${session.id}` ? 'Signing out…' : 'Sign out'} disabled={busy === `session:${session.id}`} onClick={() => removeSession(session)} icon="fa-solid fa-laptop" />) : <p className="account-lead">No active sessions were returned.</p>}<button className="account-secondary" disabled={busy === 'others' || sessions.every((item) => item.current)} onClick={() => run('others', () => app.signOutOtherDevices(), 'All other devices were signed out.')}>Sign out all other devices</button></>,
+    security: <><div className="account-eyebrow">PRIVACY</div><h3>Security activity</h3><p className="account-lead">Live account notices and current security controls.</p><div className="account-card"><div><span className="account-label">TWO-FACTOR AUTHENTICATION</span><strong>{account?.twoFactorEnabled ? 'Enabled' : 'Disabled'}</strong><small>{account?.emailVerified ? `Security codes use ${account.email}` : 'A verified email is required.'}</small></div><button className="account-secondary" disabled={busy === '2fa' || (!account?.twoFactorEnabled && !account?.emailVerified)} onClick={toggle2fa}>{busy === '2fa' ? 'Saving…' : account?.twoFactorEnabled ? 'Disable' : 'Enable'}</button></div>{accountNotices.length ? accountNotices.map((notice) => <div className="account-activity" key={notice.id}><span className="account-activity-dot" /><div><strong>{notice.title}</strong><small>{dateTime(notice.createdAt)} · {notice.body}</small></div></div>) : <div className="account-note"><Icon icon="fa-solid fa-circle-check" /><span>No account security notices are currently recorded.</span></div>}<div className="account-danger"><div><span className="account-label">DISABLE ACCOUNT</span><strong>Temporarily deactivate MoonScribe</strong><small>Your manuscripts stay stored, but every session is revoked and sign-in is blocked until an administrator restores the account.</small></div>{!disableOpen ? <button className="account-danger-btn" onClick={() => setDisableOpen(true)}>Disable account</button> : <div className="account-delete-form"><input value={disableText} onChange={(event) => setDisableText(event.target.value)} placeholder={`Type ${account?.username} to confirm`} /><button disabled={disableText.toLowerCase() !== account?.username.toLowerCase() || busy === 'disable'} className="account-danger-btn" onClick={disableAccount}>{busy === 'disable' ? 'Disabling…' : 'Confirm disable'}</button></div>}</div><div className="account-danger"><div><span className="account-label">ACCOUNT DELETION</span><strong>Deletion is not available yet</strong><small>Disabling preserves your writing. Contact support if permanent deletion is required.</small></div></div></>,
+  } as Record<string, ReactElement>
+
+  return <div className="account-centre-overlay"><div className="account-centre"><header className="account-header"><div><div className="account-brand">☾ MoonScribe</div><h2>Your account &amp; security</h2><p>Live information from your signed-in MoonScribe account.</p></div><button className="account-close" onClick={onClose} aria-label="Close"><Icon icon="fa-solid fa-xmark" /></button></header><div className="account-body"><nav className="account-nav"><span className="account-nav-title">ACCOUNT</span>{nav.map(([key, label, icon]) => <button key={key} className={section === key ? 'active' : ''} onClick={() => setSection(key)}><Icon icon={icon} />{label}</button>)}<span className="account-nav-title account-nav-actions">ACCOUNT ACTIONS</span><button onClick={() => app.disconnectSync?.()}><Icon icon="fa-solid fa-arrow-right-from-bracket" />Sign out</button></nav><main className="account-content">{error && <div className="account-note"><Icon icon="fa-solid fa-circle-exclamation" /><span>{error}</span><button type="button" onClick={() => void load()}>Retry</button></div>}{content[section]}</main></div></div></div>
+}

@@ -2,9 +2,12 @@
 // pendingSync; the engine pushes pending records and pulls remote changes
 // with last-writer-wins merge. Deletes travel as tombstones.
 import { getDB, listStores, uid } from '../db/db'
+import { migrateGuestToAccount } from '../db/guestMerge'
 import { getMeta, setMeta } from '../db/meta'
 import { toWire, fromWire } from './serialize'
 import { todayKey, addTodayWords } from '../db/stats'
+import { hasDesktopCredentialVault, readDesktopCredential, writeDesktopCredential } from '../security/credentials'
+import { apiBaseUrl } from '../api/config'
 
 let statusListeners = []
 // Sync requests can arrive together (initial app sync, focus, invite accept).
@@ -27,25 +30,36 @@ function setStatus(status, detail = '') {
 }
 
 export async function getConfig() {
-  let server = await getMeta('syncServer', null)
+  let server = await getMeta('syncServer', null) || apiBaseUrl()
   // Older OAuth responses persisted APP_ORIGIN (often localhost) even when
   // the app was opened through a public tunnel/domain. Heal that configuration
   // to same-origin so API, collaboration, and cover sync remain reachable.
-  if (server && typeof window !== 'undefined' && !import.meta.env.VITE_SYNC_SERVER) {
+  if (server && typeof window !== 'undefined' && !import.meta.env.VITE_API_URL && !import.meta.env.VITE_SYNC_SERVER) {
     try {
       const storedHost = new URL(server).hostname
       const currentHost = window.location.hostname
       const storedIsLocal = storedHost === 'localhost' || storedHost === '127.0.0.1'
       const currentIsLocal = currentHost === 'localhost' || currentHost === '127.0.0.1'
       if (storedIsLocal && !currentIsLocal) {
-        server = window.location.origin
+        server = apiBaseUrl()
         await setMeta('syncServer', server)
       }
     } catch {
       // Invalid legacy values are handled by the normal connection flow.
     }
   }
-  const token = await getMeta('syncToken', null)
+  let token = hasDesktopCredentialVault()
+    ? await readDesktopCredential('sync-token')
+    : await getMeta('syncToken', null)
+  // Migrate older desktop builds away from plaintext browser storage once.
+  if (hasDesktopCredentialVault() && !token) {
+    const legacyToken = await getMeta('syncToken', null)
+    if (legacyToken) {
+      await writeDesktopCredential('sync-token', legacyToken)
+      await setMeta('syncToken', null)
+      token = legacyToken
+    }
+  }
   const username = await getMeta('syncUsername', null)
   const state = (await getMeta('syncState', {})) || {}
   const deviceId = await getMeta('syncDeviceId', null)
@@ -57,7 +71,14 @@ export async function setConfig(patch) {
   const cfg = await getConfig()
   const next = { ...cfg, ...patch }
   if (patch.server !== undefined) await setMeta('syncServer', next.server)
-  if (patch.token !== undefined) await setMeta('syncToken', next.token)
+  if (patch.token !== undefined) {
+    if (hasDesktopCredentialVault()) {
+      await writeDesktopCredential('sync-token', next.token || null)
+      await setMeta('syncToken', null)
+    } else {
+      await setMeta('syncToken', next.token)
+    }
+  }
   if (patch.username !== undefined) await setMeta('syncUsername', next.username)
   if (patch.state !== undefined) await setMeta('syncState', next.state)
   if (patch.accountId !== undefined) await setMeta('syncAccountId', next.accountId)
@@ -425,6 +446,14 @@ async function performSync() {
       pushError = err
     }
     const pulled = await pull()
+    const completedAt = Date.now()
+    const completedConfig = await getConfig()
+    await setConfig({
+      state: {
+        ...(completedConfig.state || {}),
+        lastSuccessfulSync: completedAt
+      }
+    })
     setStatus(pushError ? 'attention' : 'synced', pushError?.message || '')
     if (pulled > 0 || pushed > 0) notifySynced()
     return { pushed, pulled, pushError: pushError?.message || null }
@@ -454,6 +483,7 @@ export async function connect({ url, mode = 'login', username, password, replace
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || 'Could not connect — is the server running?')
+    if (await getMeta('guestMode', false)) await migrateGuestToAccount(data.accountId)
     await bindLocalLibrary(data.accountId, { replaceOwner: replaceLocal })
     await setConfig({ server: base, token: data.token, accountId: data.accountId, username: data.username })
     await sync()
@@ -470,6 +500,7 @@ export async function connectWithToken({ server, token, username }) {
   try {
     const base = server.replace(/\/+$/, '')
     const profile = await accountProfile(base, token)
+    if (await getMeta('guestMode', false)) await migrateGuestToAccount(profile.id)
     await bindLocalLibrary(profile.id)
     await setConfig({ server: base, token, accountId: profile.id, username: profile.username || username })
     await sync()

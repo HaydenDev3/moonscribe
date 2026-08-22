@@ -3,16 +3,26 @@
 // knows what to push. Deletes write tombstones instead of vanishing.
 import { openDB } from 'idb'
 
-const DB_NAME = 'moonscribe'
-const DB_VERSION = 7
+const environment = import.meta.env.VITE_MOONSCRIBE_ENV || (import.meta.env.DEV ? 'development' : 'production')
+const DB_VERSION = 8
 
-const STORES = ['novels', 'chapters', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'glossary', 'annotations', 'branches', 'suggestions', 'tombstones', 'meta', 'snapshots']
+const STORES = ['novels', 'chapters', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'glossary', 'annotations', 'branches', 'suggestions', 'research', 'storyThreads', 'sceneChecklists', 'betaPackages', 'tombstones', 'meta', 'snapshots']
 
 let dbPromise = null
+let activeProfile = typeof localStorage !== 'undefined' ? localStorage.getItem('moonscribe:profile') || 'local' : 'local'
+
+export async function switchDatabaseProfile(profile) {
+  const safeProfile = String(profile || '').replace(/[^a-zA-Z0-9_-]/g, '') || 'local'
+  if (safeProfile === activeProfile) return
+  if (dbPromise) (await dbPromise).close()
+  dbPromise = null
+  activeProfile = safeProfile
+  localStorage.setItem('moonscribe:profile', safeProfile)
+}
 
 export function getDB() {
   if (!dbPromise) {
-    dbPromise = openDB(DB_NAME, DB_VERSION, {
+    dbPromise = openDB(`moonscribe:${environment}:${activeProfile}`, DB_VERSION, {
       upgrade(db) {
         const defs = {
           novels: { keyPath: 'id' },
@@ -27,6 +37,10 @@ export function getDB() {
           annotations: { keyPath: 'id', index: 'by-novel' },
           branches: { keyPath: 'id', index: 'by-novel' },
           suggestions: { keyPath: 'id', index: 'by-novel' },
+          research: { keyPath: 'id', index: 'by-novel' },
+          storyThreads: { keyPath: 'id', index: 'by-novel' },
+          sceneChecklists: { keyPath: 'id', index: 'by-novel' },
+          betaPackages: { keyPath: 'id', index: 'by-novel' },
           tombstones: { keyPath: 'id' },
           meta: { keyPath: 'key' },
           snapshots: { keyPath: 'id', index: 'by-chapter' }
