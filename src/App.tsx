@@ -28,7 +28,6 @@ import './styles/scrollrail.css'
 import './styles/announcements.css'
 import './styles/responsive.css'
 import AnnouncementBanner from './components/AnnouncementBanner'
-import { detectPlatform, isTabletRuntime } from './utils/platform'
 
 const PrintView = lazy(() => import('./pages/PrintView'))
 
@@ -90,18 +89,6 @@ function SplashScreen() {
   )
 }
 
-function MobileCloudPaused() {
-  return (
-    <div className="mobile-cloud-paused">
-      <div className="mobile-cloud-paused-card">
-        <div className="eyebrow">MoonScribe</div>
-        <h1>MoonScribe is made for larger screens</h1>
-        <p>The iPhone layout is temporarily paused so your writing workspace remains comfortable and reliable. Open MoonScribe on iPad, desktop, or a larger tablet.</p>
-      </div>
-    </div>
-  )
-}
-
 export default function App() {
   const appState = useApp() as {
     onboardingDone: boolean | null
@@ -148,14 +135,6 @@ export default function App() {
 
   if (onboardingDone === null) {
     return <SplashScreen />
-  }
-
-  const detectedPlatform = typeof navigator !== 'undefined'
-    ? detectPlatform(navigator.userAgent, navigator.platform, navigator.maxTouchPoints)
-    : 'unknown'
-  const tabletRuntime = typeof navigator !== 'undefined' && isTabletRuntime(navigator.userAgent, navigator.maxTouchPoints, window.innerWidth, window.innerHeight)
-  if (detectedPlatform === 'mobile' && !tabletRuntime) {
-    return <MobileCloudPaused />
   }
 
   const enterStudio = (content: ReactNode) => {
