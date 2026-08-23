@@ -7,6 +7,7 @@ import { makeLock, verifyLock } from '../db/lock'
 import * as syncEngine from '../sync/engine'
 import { apiBaseUrl, authReturnUrl } from '../api/config'
 import { openExternalUrl } from '../api/desktopAuth'
+import { clearOAuthCallback, readOAuthCallback } from '../auth/oauthCallback'
 import {
   detectSystemFonts,
   installCustomFontFromFile,
@@ -143,6 +144,7 @@ export function AppProvider({ children }) {
   const [sync, setSync] = useState(DEFAULT_SYNC)
   const [account, setAccount] = useState(DEFAULT_ACCOUNT)
   const [accountReady, setAccountReady] = useState(false)
+  const [authFlow, setAuthFlow] = useState({ state: 'idle', provider: null, error: null })
   const [guestMode, setGuestMode] = useState(false)
   const [appLock, setAppLockState] = useState(undefined) // undefined = loading, null = none
   const [locked, setLocked] = useState(false)
@@ -244,15 +246,16 @@ export function AppProvider({ children }) {
         provider: authProvider
       })
 
+      const callback = readOAuthCallback(window.location.search)
       const sp = new URLSearchParams(window.location.search)
-      const exchangeCode = sp.get('discord_exchange')
-      const oauthCode = sp.get('oauth_exchange')
-      const oauthProvider = sp.get('provider')
+      const exchangeCode = callback.exchangeCode
+      const oauthCode = window.location.search.includes('oauth_exchange') ? exchangeCode : null
+      const oauthProvider = callback.provider
       const magicToken = sp.get('magic_token')
-      const dError = sp.get('discord_error')
-      const oauthError = sp.get('oauth_error')
+      const dError = window.location.search.includes('discord_error') ? callback.error : null
+      const oauthError = window.location.search.includes('oauth_error') ? callback.error : null
       if (magicToken) {
-        window.history.replaceState({}, '', window.location.pathname + window.location.hash)
+        setAuthFlow({ state: 'processing', provider: 'magic', error: null })
         try {
           const magicServer = discordServer()
           const response = await fetch(`${magicServer}/api/auth/magic-link/consume`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: magicToken }) })
@@ -261,13 +264,15 @@ export function AppProvider({ children }) {
           await setMeta('authProvider', 'magic')
           const res = await syncEngine.connectWithToken({ server: account.server || magicServer, token: account.token, username: account.username })
           if (res.ok) {
+            clearOAuthCallback(window.location)
+            setAuthFlow({ state: 'success', provider: 'magic', error: null })
             setSync({ server: account.server || magicServer, username: account.username, status: 'synced', discordAvatar: null, provider: 'magic' })
             window.location.replace('/dashboard')
             return
           }
         } catch (err) { toast(err.message || 'Could not complete Magic Link sign-in.') }
-      } else if (exchangeCode || oauthCode) {
-        window.history.replaceState({}, '', window.location.pathname + window.location.hash)
+      } else if (exchangeCode) {
+        setAuthFlow({ state: 'processing', provider: callback.provider, error: null })
         try {
           const oauthServer = discordServer()
           const exchangePath = oauthCode ? '/api/auth/oauth/exchange' : '/api/auth/discord/exchange'
@@ -305,6 +310,8 @@ export function AppProvider({ children }) {
               })
             }
             setSync({ server: account.server || oauthServer, username: account.username, status: 'synced', discordAvatar: account.avatar || null, provider: account.provider || oauthProvider || 'discord' })
+            clearOAuthCallback(window.location)
+            setAuthFlow({ state: 'success', provider: account.provider || oauthProvider || 'discord', error: null })
             // OAuth should always finish in the signed-in library. This also
             // heals bookmarks or older callback URLs that still land on `/`.
             if (window.location.pathname !== '/dashboard') {
@@ -314,12 +321,14 @@ export function AppProvider({ children }) {
           }
         } catch (err) {
           console.error('[Discord OAuth]', err)
+          setAuthFlow({ state: 'error', provider: callback.provider, error: err.message || 'Could not finish sign-in.' })
           toast(err.message || 'Sign-in completed, but MoonScribe could not open the account session.')
         }
       } else if (dError || oauthError) {
-        window.history.replaceState({}, '', window.location.pathname + window.location.hash)
         const reason = dError || oauthError
         console.error('[OAuth]', reason)
+        clearOAuthCallback(window.location)
+        setAuthFlow({ state: 'error', provider: callback.provider, error: reason })
         const providerCredentialError = reason === 'discord_credentials_invalid' || reason === 'google_credentials_invalid'
         toast(reason === 'oauth_state_expired'
           ? 'That sign-in attempt expired. Please start again.'
@@ -336,6 +345,15 @@ export function AppProvider({ children }) {
     })().finally(() => setAccountReady(true))
     syncEngine.listConflicts().then(setConflicts)
   }, [refreshNovels, toast])
+
+  // Rotate remembered sessions twice daily. The token remains valid for 30
+  // days, while active writers receive a fresh 30-day window transparently.
+  useEffect(() => {
+    if (!sync.server || !sync.username) return
+    const refresh = () => { void syncEngine.refreshSession().catch((error) => { if (error?.status === 401) console.warn('[Session] expired') }) }
+    const timer = window.setInterval(refresh, 12 * 60 * 60 * 1000)
+    return () => window.clearInterval(timer)
+  }, [sync.server, sync.username])
 
   const continueAsGuest = useCallback(async () => {
     await switchDatabaseProfile('guest')
@@ -690,6 +708,7 @@ export function AppProvider({ children }) {
 
   const connectDiscord = useCallback(async () => {
     const server = discordServer()
+    setAuthFlow({ state: 'redirecting', provider: 'discord', error: null })
     try {
       const current = await syncEngine.getConfig()
       if (current.token) {
@@ -706,12 +725,14 @@ export function AppProvider({ children }) {
       const params = new URLSearchParams({ redirect_to: authReturnUrl(), client: authReturnUrl().startsWith('moonscribe:') ? 'desktop' : 'web' })
       await openExternalUrl(`${server}/auth/discord?${params}`)
     } catch (error) {
+      setAuthFlow({ state: 'error', provider: 'discord', error: error.message || 'Could not reach MoonScribe’s account service.' })
       toast(error.message || 'Could not reach MoonScribe’s account service.')
     }
   }, [toast])
 
   const connectGoogle = useCallback(async () => {
     const server = discordServer()
+    setAuthFlow({ state: 'redirecting', provider: 'google', error: null })
     try {
       const current = await syncEngine.getConfig()
       if (current.token) {
@@ -727,7 +748,10 @@ export function AppProvider({ children }) {
       if (!status.googleAuth) throw new Error('Google sign-in needs GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the server environment.')
       const params = new URLSearchParams({ redirect_to: authReturnUrl(), client: authReturnUrl().startsWith('moonscribe:') ? 'desktop' : 'web' })
       await openExternalUrl(`${server}/auth/google?${params}`)
-    } catch (error) { toast(error.message || 'Could not start Google sign-in.') }
+    } catch (error) {
+      setAuthFlow({ state: 'error', provider: 'google', error: error.message || 'Could not start Google sign-in.' })
+      toast(error.message || 'Could not start Google sign-in.')
+    }
   }, [toast])
 
   const sendMagicLink = useCallback(async (email) => {
@@ -879,6 +903,7 @@ export function AppProvider({ children }) {
       syncStatus: sync.status,
       syncDiscordAvatar: sync.discordAvatar,
       syncProvider: sync.provider,
+      authFlow,
       accountReady,
       accountRoles,
       userRoleLabel,
@@ -898,7 +923,7 @@ export function AppProvider({ children }) {
       deleteCustomFont,
       refreshSystemFonts,
     }),
-    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, sendMagicLink, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts]
+    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, sendMagicLink, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, authFlow]
   )
 
   return (

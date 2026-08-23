@@ -128,6 +128,20 @@ describe('accounts', () => {
     expect(replay.status).toBe(400)
   })
 
+  it('keeps OAuth sessions for 30 days and rotates them without signing out', async () => {
+    const account = await register('oauth-session-writer')
+    const firstExpiry = db.prepare('SELECT expires_at FROM tokens WHERE user_id = ? ORDER BY created_at DESC LIMIT 1').get(account.body.accountId).expires_at
+    expect(firstExpiry - Date.now()).toBeGreaterThan(29 * 24 * 60 * 60 * 1000)
+
+    const refreshed = await post('/api/auth/session/refresh', {}, account.body.token)
+    expect(refreshed.status).toBe(200)
+    const refreshedBody = await refreshed.json()
+    expect(refreshedBody.token).toBeTruthy()
+    expect(refreshedBody.expiresAt - Date.now()).toBeGreaterThan(29 * 24 * 60 * 60 * 1000)
+    expect((await get('/api/auth/me', refreshedBody.token)).status).toBe(200)
+    expect((await get('/api/auth/me', account.body.token)).status).toBe(200)
+  })
+
   it('reports which authentication providers are configured', async () => {
     const response = await get('/api/auth/status')
     expect(response.status).toBe(200)

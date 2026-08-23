@@ -1204,6 +1204,14 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       return
     }
 
+    if (path === '/api/auth/session/refresh' && req.method === 'POST') {
+      const current = database.prepare('SELECT device_id, device_name FROM tokens WHERE token_hash = ?').get(sha((req.headers.authorization || '').replace(/^Bearer\s+/i, '')))
+      if (!current || !userId) return json(res, 401, { error: 'Session expired. Please sign in again.' })
+      const session = issueToken(database, userId, { deviceId: current.device_id, deviceName: current.device_name || 'Unknown device' })
+      json(res, 200, { ok: true, token: session.token, expiresAt: session.expiresAt, sessionId: session.sessionId })
+      return
+    }
+
     if (path === '/api/notifications' && req.method === 'GET') {
       const now = Date.now()
       const rows = database.prepare('SELECT id, type, category, priority, title, body, action_url, read_at, created_at, metadata FROM notifications WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?) ORDER BY created_at DESC LIMIT 50').all(userId, now)

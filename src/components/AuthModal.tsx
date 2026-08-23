@@ -420,6 +420,7 @@ export default function AuthModal({
 
     signOutOtherDevices,
     toast,
+    authFlow,
   } = app
 
   // Optional new auth functions.
@@ -1186,6 +1187,17 @@ export default function AuthModal({
               disabled={busy}
             />
           </div>
+
+          {authFlow?.state === 'processing' && (
+            <p className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-[10px] text-amber-200">
+              Finishing {authFlow.provider === 'google' ? 'Google' : 'Discord'} sign-in…
+            </p>
+          )}
+          {authFlow?.state === 'error' && (
+            <p className="mt-3 rounded-lg border border-rose-400/20 bg-rose-400/[0.06] px-3 py-2 text-[10px] text-rose-200">
+              {authFlow.error || 'Sign-in could not be completed. Please try again.'}
+            </p>
+          )}
         </div>
 
         <div className="my-5 flex items-center gap-3">

@@ -184,7 +184,11 @@ export async function accountProfile(server, token) {
   const base = String(server || '').replace(/\/+$/, '')
   const res = await fetch(`${base}/api/auth/me`, { headers: { Authorization: `Bearer ${token}`, ...(await deviceHeaders()) } })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok || !data.account?.id) throw new Error(data.error || 'Could not verify this account.')
+  if (!res.ok || !data.account?.id) {
+    const error = new Error(data.error || 'Could not verify this account.')
+    error.status = res.status
+    throw error
+  }
   return data.account
 }
 
@@ -197,9 +201,25 @@ export async function validateSession() {
     await setConfig({ accountId: profile.id, username: profile.username || cfg.username })
     return profile
   } catch (error) {
-    await clearAuth()
+    // Preserve the remembered session during temporary Railway/API outages.
+    // Only an explicit auth rejection means the 30-day session is invalid.
+    if (error?.status === 401 || error?.status === 403) await clearAuth()
     throw error
   }
+}
+
+export async function refreshSession() {
+  const cfg = await getConfig()
+  if (!cfg.server || !cfg.token) return { ok: false, reason: 'NO_SESSION' }
+  const res = await fetch(`${apiBase(cfg)}/api/auth/session/refresh`, { method: 'POST', headers: { Authorization: `Bearer ${cfg.token}` } })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    const error = new Error(data.error || 'Session refresh failed.')
+    error.status = res.status
+    throw error
+  }
+  await setConfig({ token: data.token })
+  return { ok: true, expiresAt: data.expiresAt }
 }
 
 function notifySynced() {
