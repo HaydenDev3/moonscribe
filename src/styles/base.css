@@ -44,6 +44,11 @@ html.paper-texture body {
   background-image: none;
 }
 
+html[data-custom-gradient='true'] body {
+  background-image: var(--custom-app-gradient);
+  background-attachment: fixed;
+}
+
 html.paper-texture[data-theme='dark'],
 html.paper-texture[data-theme='amoled'] {
   --paper-opacity: .1;

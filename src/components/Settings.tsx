@@ -584,6 +584,17 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
         {themes.map(([value, label, bg, ink]) => <button key={value} className={`theme-choice ${(settings.theme || 'light') === value ? 'active' : ''}`} onClick={() => updateSettings({ theme: value })} aria-pressed={(settings.theme || 'light') === value}><span className="theme-choice-preview" style={{ background: bg, color: ink }}><i /><i /><i /></span><span>{label}</span>{(settings.theme || 'light') === value && <Icon icon="fa-solid fa-check" />}</button>)}
       </div>
 
+      <div className="settings-subheading">Custom gradient</div>
+      <p className="settings-row-sub">Build a personal studio atmosphere. The live preview updates as you choose each colour.</p>
+      <div className="custom-gradient-card">
+        <div className="custom-gradient-preview" style={{ background: `linear-gradient(135deg, ${settings.customGradientStart || '#17161c'}, ${settings.customGradientEnd || '#3b2b22'})` }}><span>MoonScribe</span><small>Custom studio preview</small></div>
+        <div className="custom-gradient-controls">
+          <label>Start<input type="color" value={settings.customGradientStart || '#17161c'} onChange={(event) => updateSettings({ customGradientStart: event.target.value })} /></label>
+          <label>End<input type="color" value={settings.customGradientEnd || '#3b2b22'} onChange={(event) => updateSettings({ customGradientEnd: event.target.value })} /></label>
+          <button type="button" className="button button-secondary" onClick={() => updateSettings({ customGradientStart: '', customGradientEnd: '' })}>Reset</button>
+        </div>
+      </div>
+
       <div className="settings-row">
         <div>
           <div className="settings-row-title">Accent colour</div>

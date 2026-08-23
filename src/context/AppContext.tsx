@@ -396,6 +396,16 @@ export function AppProvider({ children }) {
   }, [resolvedTheme])
 
   useEffect(() => {
+    const root = document.documentElement
+    const start = settings.customGradientStart || ''
+    const end = settings.customGradientEnd || ''
+    root.style.setProperty('--custom-app-gradient', start && end ? `linear-gradient(135deg, ${start}, ${end})` : '')
+    root.style.setProperty('--custom-app-start', start)
+    root.style.setProperty('--custom-app-end', end)
+    root.dataset.customGradient = start && end ? 'true' : 'false'
+  }, [settings.customGradientStart, settings.customGradientEnd])
+
+  useEffect(() => {
     document.documentElement.classList.toggle('paper-texture', settings.paperTexture)
   }, [settings.paperTexture])
 
