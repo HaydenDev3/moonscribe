@@ -133,6 +133,11 @@ export default function CoverMockup3D(props) {
     const key = new THREE.DirectionalLight('#fff0dc', 3.1); key.position.set(-3, 5, 6); key.castShadow = true; scene.add(key); const rim = new THREE.DirectionalLight('#9fb5ff', 1.8); rim.position.set(4, 1, -4); scene.add(rim); const ambient = new THREE.AmbientLight('#90a0c5', 1.35); scene.add(ambient); const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 20), new THREE.ShadowMaterial({ opacity: .32 })); floor.rotation.x = -Math.PI / 2; floor.position.y = -2.45; floor.receiveShadow = true; scene.add(floor)
     const refresh = () => { const settings = propsRef.current; const swap = (mesh, map, materialIndex = null) => { const target = materialIndex === null ? mesh.material : mesh.material[materialIndex]; const old = target.map; target.map = map; target.needsUpdate = true; if (old !== pages) old?.dispose() }; swap(front, frontTexture(settings), 4); swap(back, backTexture(settings), 4); swap(spine, spineTexture(settings, (depth + .04) / (height + .09)), 1) }
     let down = false, lastX = 0, lastY = 0, yaw = -.46, pitch = .08, frame, previous = performance.now()
+    let zoomLevel = 1
+    let fitCameraDistance = camera.position.z
+    const pointers = new Map<number, { x: number; y: number }>()
+    let pinchDistance = 0
+    const applyZoom = () => { camera.position.z = fitCameraDistance / zoomLevel; camera.updateProjectionMatrix() }
     const focusSurface = surface => { yaw = surface === 'back' ? Math.PI : surface === 'spine' ? Math.PI / 2 : -.08; pitch = .04 }
     const applyEnvironment = () => {
       const environment = propsRef.current.environment || 'studio'
@@ -156,22 +161,26 @@ export default function CoverMockup3D(props) {
       const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect)
       const fitHeight = (height + .45) / (2 * Math.tan(verticalFov / 2))
       const fitWidth = (width + depth + .7) / (2 * Math.tan(horizontalFov / 2))
-      camera.position.z = Math.max(fitHeight, fitWidth) * 1.12
-      camera.updateProjectionMatrix()
+      fitCameraDistance = Math.max(fitHeight, fitWidth) * 1.12
+      applyZoom()
     }; const observer = new ResizeObserver(resize); observer.observe(mount); resize()
     const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); let travel = 0
     const surfaceAt = event => { const rect = renderer.domElement.getBoundingClientRect(); pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1); raycaster.setFromCamera(pointer, camera); return raycaster.intersectObjects([front, spine, back], false)[0]?.object?.userData?.surface }
-    const onDown = event => { down = true; travel = 0; lastX = event.clientX; lastY = event.clientY; mount.setPointerCapture?.(event.pointerId); mount.style.cursor = 'grabbing' }
-    const onMove = event => { if (!down) return; const dx = event.clientX - lastX; const dy = event.clientY - lastY; travel += Math.abs(dx) + Math.abs(dy); yaw += dx * .009; pitch = Math.max(-.45, Math.min(.45, pitch - dy * .006)); lastX = event.clientX; lastY = event.clientY }
-    const onUp = event => { if (down && travel < 7) { const surface = surfaceAt(event); if (surface) propsRef.current.onSurfaceSelect?.(surface) } down = false; mount.style.cursor = 'grab' }
+    const setZoom = (next: number) => { zoomLevel = Math.max(.72, Math.min(1.55, next)); applyZoom() }
+    const onZoomStep = (event: any) => setZoom(zoomLevel + Number(event.detail || 0))
+    const onDown = event => { pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.size === 2) { const points = [...pointers.values()]; pinchDistance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); down = false; return } down = true; travel = 0; lastX = event.clientX; lastY = event.clientY; mount.setPointerCapture?.(event.pointerId); mount.style.cursor = 'grabbing' }
+    const onMove = event => { if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.size === 2) { const points = [...pointers.values()]; const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); if (pinchDistance > 0) setZoom(zoomLevel * (distance / pinchDistance)); pinchDistance = distance; return } if (!down) return; const dx = event.clientX - lastX; const dy = event.clientY - lastY; travel += Math.abs(dx) + Math.abs(dy); yaw += dx * .009; pitch = Math.max(-.45, Math.min(.45, pitch - dy * .006)); lastX = event.clientX; lastY = event.clientY }
+    const onUp = event => { pointers.delete(event.pointerId); if (pointers.size < 2) pinchDistance = 0; if (down && travel < 7) { const surface = surfaceAt(event); if (surface) propsRef.current.onSurfaceSelect?.(surface) } down = false; mount.style.cursor = 'grab' }
+    const onWheel = event => { event.preventDefault(); setZoom(zoomLevel * (event.deltaY < 0 ? 1.08 : .92)) }
     const onDouble = () => { yaw = -.46; pitch = .08 }
     const onContext = event => { const surface = surfaceAt(event); if (!surface) return; event.preventDefault(); propsRef.current.onSurfaceContext?.(event, surface) }
-    mount.addEventListener('pointerdown', onDown); mount.addEventListener('pointermove', onMove); mount.addEventListener('pointerup', onUp); mount.addEventListener('pointercancel', onUp); mount.addEventListener('dblclick', onDouble); mount.addEventListener('contextmenu', onContext)
+    mount.addEventListener('pointerdown', onDown); mount.addEventListener('pointermove', onMove); mount.addEventListener('pointerup', onUp); mount.addEventListener('pointercancel', onUp); mount.addEventListener('wheel', onWheel, { passive: false }); mount.addEventListener('moonscribe:designer-zoom-step', onZoomStep); mount.addEventListener('dblclick', onDouble); mount.addEventListener('contextmenu', onContext)
     const draw = now => { const elapsed = now - previous; previous = now; if (!down && propsRef.current.autoSpin) yaw += elapsed * .00032; book.rotation.set(pitch, yaw, 0); renderer.render(scene, camera); frame = requestAnimationFrame(draw) }; frame = requestAnimationFrame(draw)
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); mount.removeEventListener('pointerdown', onDown); mount.removeEventListener('pointermove', onMove); mount.removeEventListener('pointerup', onUp); mount.removeEventListener('pointercancel', onUp); mount.removeEventListener('dblclick', onDouble); mount.removeEventListener('contextmenu', onContext); mount.replaceChildren(); renderer.dispose(); pages.dispose(); board.dispose(); block.geometry.dispose(); boardGeometry.dispose(); frontMaterials.forEach((entry) => entry.dispose()); backMaterials.forEach((entry) => entry.dispose()); spine.geometry.dispose(); spineMaterials.forEach((entry) => entry.dispose()); headband.geometry.dispose(); floor.geometry.dispose() }
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); mount.removeEventListener('pointerdown', onDown); mount.removeEventListener('pointermove', onMove); mount.removeEventListener('pointerup', onUp); mount.removeEventListener('pointercancel', onUp); mount.removeEventListener('wheel', onWheel); mount.removeEventListener('moonscribe:designer-zoom-step', onZoomStep); mount.removeEventListener('dblclick', onDouble); mount.removeEventListener('contextmenu', onContext); mount.replaceChildren(); renderer.dispose(); pages.dispose(); board.dispose(); block.geometry.dispose(); boardGeometry.dispose(); frontMaterials.forEach((entry) => entry.dispose()); backMaterials.forEach((entry) => entry.dispose()); spine.geometry.dispose(); spineMaterials.forEach((entry) => entry.dispose()); headband.geometry.dispose(); floor.geometry.dispose() }
   }, [])
   useEffect(() => { sceneRef.current?.refresh() }, [props.title, props.subtitle, props.byline, props.coverStyle, props.gradient, props.coverImage, props.frontCrop, props.backImage, props.backCrop, props.spineImage, props.spineCrop, props.ornament, props.titleColor, props.titleFont, props.titleSize, props.titleWeight, props.titleSpacing, props.titleTransform, props.showText, props.showBackText, props.showSpineText])
   useEffect(() => { sceneRef.current?.focusSurface(props.activeSurface) }, [props.activeSurface])
   useEffect(() => { sceneRef.current?.applyEnvironment() }, [props.environment])
-  return <div ref={mountRef} className={`cover-mockup-3d cover-mockup-webgl environment-${props.environment || 'studio'}`} style={{ cursor: 'grab' }}><span className="cover-mockup-3d-hint">drag to inspect · double-click to reset</span></div>
+  const stepZoom = (amount: number) => mountRef.current?.dispatchEvent(new CustomEvent('moonscribe:designer-zoom-step', { detail: amount }))
+  return <div ref={mountRef} className={`cover-mockup-3d cover-mockup-webgl environment-${props.environment || 'studio'}`} style={{ cursor: 'grab' }}><div className="cover-mockup-zoom" aria-label="Designer zoom controls"><button type="button" onClick={() => stepZoom(.1)} aria-label="Zoom in">+</button><button type="button" onClick={() => stepZoom(-.1)} aria-label="Zoom out">−</button></div><span className="cover-mockup-3d-hint">drag to inspect · pinch or wheel to zoom · double-click to reset</span></div>
 }

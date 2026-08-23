@@ -69,6 +69,7 @@ const APP_ORIGIN = (process.env.APP_ORIGIN || (IS_PRODUCTION ? 'https://moonscri
 // send unusable localhost links through Resend.
 const MAGIC_LINK_ORIGIN = 'https://moonscribe.cc'
 const BOOTSTRAP_ADMIN_DISCORD_ID = process.env.MOONSCRIBE_ADMIN_DISCORD_ID || '622903645268344835'
+const BOOTSTRAP_ADMIN_EMAIL = String(process.env.MOONSCRIBE_ADMIN_EMAIL || '').trim().toLowerCase()
 // OAuth providers must always return to the hosted API. The final browser
 // destination may instead be the web app or the desktop custom URI scheme.
 const API_ORIGIN = (process.env.API_ORIGIN || APP_ORIGIN).replace(/\/+$/, '')
@@ -583,6 +584,9 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
   // It makes the owner's existing Discord account an admin on every restart.
   if (/^\d{17,20}$/.test(BOOTSTRAP_ADMIN_DISCORD_ID)) {
     database.prepare("UPDATE users SET role = 'admin', roles = 'user,admin' WHERE discord_id = ?").run(BOOTSTRAP_ADMIN_DISCORD_ID)
+  }
+  if (BOOTSTRAP_ADMIN_EMAIL) {
+    database.prepare("UPDATE users SET role = 'admin', roles = 'user,admin' WHERE lower(email) = ?").run(BOOTSTRAP_ADMIN_EMAIL)
   }
 
   const opts = rateLimit === false ? { max: Number.MAX_SAFE_INTEGER, windowMs: 1 } : { ...(rateLimit || {}) }
