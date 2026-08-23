@@ -5838,7 +5838,9 @@ body::after {
 .editor-canvas-paged .editor-head,
 .editor-canvas-paged .prose {
   background: var(--design-page-bg, #e8e2d8) !important;
-  color: var(--design-page-text, #1a1a1a) !important;
+  /* Keep this inheritable: selected text may carry an inline colour from the
+     editor toolbar and must be allowed to override the design default. */
+  color: var(--design-page-text, #1a1a1a);
 }
 .workspace.design-moonlight { --design-page-bg: #f2f7fc; --design-page-text: #3a4f66; --design-page-border: #cfdfee; }
 .workspace.design-ember { --design-page-bg: #fdf3ec; --design-page-text: #6b4a3a; --design-page-border: #ecd4c4; }
@@ -5862,7 +5864,7 @@ body::after {
   box-sizing: border-box;
   min-height: calc(var(--pg-height) - var(--page-margin-top));
   overflow: visible;
-  color: var(--design-page-text, #1a1a1a) !important;
+  color: var(--design-page-text, #1a1a1a);
 }
 
 .editor-canvas-paged .prose img,

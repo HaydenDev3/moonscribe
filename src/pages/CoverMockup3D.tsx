@@ -54,7 +54,7 @@ function frontTexture(settings: any) {
       const lineHeight = size * 1.2; const top = h * .48 - (lines.length - 1) * lineHeight / 2; lines.forEach((entry, index) => ctx.fillText(entry, w / 2, top + index * lineHeight)); ctx.shadowBlur = 0
       if (settings.subtitle) { ctx.globalAlpha = .78; ctx.font = `30px ${FONT_MAP.cormorant}`; ctx.fillText(settings.subtitle, w / 2, top + lines.length * lineHeight + 18); ctx.globalAlpha = 1 }
       if (settings.ornament) { ctx.globalAlpha = .68; ctx.font = `42px ${typeface}`; ctx.fillText(settings.ornament, w / 2, top + lines.length * lineHeight + 38); ctx.globalAlpha = 1 }
-      ctx.globalAlpha = .78; ctx.font = `italic 27px ${FONT_MAP.cormorant}`; ctx.fillText(settings.byline || 'for Storm', w / 2, h - 118); ctx.globalAlpha = 1
+      ctx.globalAlpha = .78; ctx.font = `italic 27px ${FONT_MAP.cormorant}`; ctx.fillText(settings.byline || 'for Storm Tattersall', w / 2, h - 118); ctx.globalAlpha = 1
     }
     loadTextureImage(settings.coverImage, map, draw)
   })

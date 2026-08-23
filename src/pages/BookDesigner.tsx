@@ -733,7 +733,7 @@ function CoverTab({ cover, updateCover }) {
   return (
     <>
       <Field label="Subtitle"><input value={cover.subtitle || ''} onChange={(e) => updateCover({ subtitle: e.target.value })} placeholder="A novel" /></Field>
-      <Field label="Byline"><input value={cover.byline || ''} onChange={(e) => updateCover({ byline: e.target.value })} placeholder="for Storm" /></Field>
+      <Field label="Byline"><input value={cover.byline || ''} onChange={(e) => updateCover({ byline: e.target.value })} placeholder="for Storm Tattersall" /></Field>
       <Field label="Title colour">
         <div className="ds-swatch-row">
           {TITLE_COLORS.map((c) => (
@@ -1030,7 +1030,7 @@ function TitleTab({ layout, update }) {
       </Field>
       <SectionDivider>Dedication</SectionDivider>
       <Field label="Text">
-        <textarea value={layout.dedication || ''} onChange={(e) => update({ dedication: e.target.value })} placeholder={'for Storm,\nwith every word.'} rows={3} style={{ fontFamily: 'var(--font-heading)', fontStyle: 'italic', fontSize: '0.9rem', resize: 'vertical' }} />
+        <textarea value={layout.dedication || ''} onChange={(e) => update({ dedication: e.target.value })} placeholder={'for Storm Tattersall,\nwith every word.'} rows={3} style={{ fontFamily: 'var(--font-heading)', fontStyle: 'italic', fontSize: '0.9rem', resize: 'vertical' }} />
       </Field>
       <Field label="Position">
         <Select ariaLabel="Dedication position" width="100%" value={layout.dedicationPos || 'recto'} onChange={(v) => update({ dedicationPos: v })} options={[{ value: 'recto', label: 'Right page (recto)' }, { value: 'verso', label: 'Left page (verso)' }, { value: 'none', label: 'Hide' }]} />
@@ -1043,7 +1043,7 @@ function SignatureTab({ sig, update }: { sig: any; update: (next: any) => void }
   return (
     <>
       <p className="ds-hint">Sign the title page like a real copy.</p>
-      <Field label="Your name"><input value={sig.text || ''} onChange={(e) => update({ signature: { ...sig, text: e.target.value } })} placeholder="e.g. Storm Delacroix" /></Field>
+        <Field label="Your name"><input value={sig.text || ''} onChange={(e) => update({ signature: { ...sig, text: e.target.value } })} placeholder="e.g. Storm Tattersall" /></Field>
       <Field label="Hand">
         <div className="ds-sig-choices">
           {SIGNATURE_FONTS.map((f) => (
@@ -1432,7 +1432,7 @@ function exportCoverPng(novel: any, cover: any, designerFontOptions: DesignerFon
     ctx.font = `${W * 0.05}px ${fontFamily}`
     ctx.fillText('ornament' in (cover || {}) ? cover.ornament || '' : '❦', W / 2, y + 40)
     ctx.font = `italic ${W * 0.036}px ${fontFamily}`
-    ctx.fillText(cover.byline || 'for Storm', W / 2, H * 0.78)
+    ctx.fillText(cover.byline || 'for Storm Tattersall', W / 2, H * 0.78)
     canvas.toBlob((blob) => {
       if (!blob) return
       const name = (novel.title || 'cover').replace(/[^\p{L}\p{N} _-]/gu, '').replace(/\s+/g, '_').slice(0, 40) || 'cover'

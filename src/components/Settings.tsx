@@ -158,7 +158,7 @@ export default function Settings() {
           {!query && cat === 'about' && (
             <section className="settings-panel">
               <h2>MoonScribe</h2>
-              <p className="muted">A quiet, private place to write — made with love, for Storm. Every word stays on your device by default; nothing is ever counted against you.</p>
+              <p className="muted">A quiet, private place to write — made with love, for Storm Tattersall. Every word stays on your device by default; nothing is ever counted against you.</p>
               <p className="muted small">Online across your devices · offline-safe · yours.</p>
               <div className="settings-row" style={{ marginTop: 'var(--space-5)' }}>
                 <div><div className="settings-row-title">Version</div><div className="settings-row-sub">0.1.0 — Parchment</div></div>

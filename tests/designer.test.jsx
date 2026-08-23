@@ -114,7 +114,7 @@ describe('Book designer (cover studio)', () => {
   it('offers the signature hand on the Signature section', async () => {
     await renderDesigner()
     await clickSection('Signature')
-    expect(container.querySelector('input[placeholder*="Storm Delacroix"]')).not.toBeNull()
+    expect(container.querySelector('input[placeholder*="Storm Tattersall"]')).not.toBeNull()
   })
 
   it('opens the unified print preview from the action bar', async () => {

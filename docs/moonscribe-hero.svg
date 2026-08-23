@@ -56,7 +56,7 @@
       <rect x="35" y="35" width="350" height="360" rx="18" fill="#0e1323" opacity="0.2"/>
       <text x="210" y="160" fill="url(#textGrad)" font-family="Georgia, serif" font-size="58" font-weight="700" text-anchor="middle">Moon</text>
       <text x="210" y="225" fill="url(#textGrad)" font-family="Georgia, serif" font-size="56" font-weight="700" text-anchor="middle">Whisper</text>
-      <text x="210" y="285" fill="#f8f0ff" font-size="20" font-family="Arial, sans-serif" letter-spacing="3" text-anchor="middle">FOR STORM</text>
+      <text x="210" y="285" fill="#f8f0ff" font-size="20" font-family="Arial, sans-serif" letter-spacing="3" text-anchor="middle">FOR STORM TATTERSALL</text>
       <circle cx="210" cy="330" r="18" fill="#f7dca3" opacity="0.9"/>
       <path d="M175 325 C 193 310, 227 310, 245 325" stroke="#fbe8c5" stroke-width="5" fill="none" stroke-linecap="round"/>
     </g>

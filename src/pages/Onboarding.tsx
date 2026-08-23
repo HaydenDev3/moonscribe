@@ -33,7 +33,7 @@ export default function Onboarding() {
           <MoonMark />
         </div>
         <h1>MoonScribe</h1>
-        <div className="dedication">made with love, for Storm</div>
+        <div className="dedication">made with love, for Storm Tattersall</div>
         <p className="lead">
           A quiet, private place for your stories. Everything you write stays on this device —
           no accounts, no paywalls, no limits.

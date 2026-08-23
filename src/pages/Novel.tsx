@@ -833,7 +833,7 @@ export default function Novel() {
       const numbers = computeNumbers(ordered)
       const display = ordered.map((c) => ({ ...c, title: titleFor(c, numbers) }))
       if (kind === 'markdown') {
-        let md = `# ${n.title}\n\n*for Storm*\n\n`
+        let md = `# ${n.title}\n\n*for Storm Tattersall*\n\n`
         for (const c of display) {
           if (isContainer(c)) md += `\n# ${c.title}\n\n`
           md += `## ${c.title}\n\n${htmlToMarkdown(c.content)}\n\n`
@@ -841,7 +841,7 @@ export default function Novel() {
         downloadText(md, `${safeName(n.title)}.md`)
         toast('Markdown downloaded.')
       } else if (kind === 'txt') {
-        let txt = `${n.title}\nfor Storm\n\n`
+        let txt = `${n.title}\nfor Storm Tattersall\n\n`
         for (const c of display) {
           txt += `\n${c.title}\n${'-'.repeat(Math.min(c.title.length, 30))}\n\n${htmlToText(c.content)}\n`
         }
