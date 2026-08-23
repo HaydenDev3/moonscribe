@@ -2509,6 +2509,7 @@ body::after {
 .ds-surface-switch button.active, .ds-surface-tabs button.active { color: var(--charcoal); background: var(--surface-elev); box-shadow: var(--shadow-sm); }
 .ds-surface-tabs { width: 100%; margin-bottom: 10px; }
 .ds-surface-tabs button { flex: 1; }
+.ds-surface-tabs-label { align-self: center; padding: 0 6px 0 3px; color: var(--grey-soft); font: 650 .63rem var(--font-ui); white-space: nowrap; }
 
 /* Canvas — the main preview area */
 .ds-canvas {

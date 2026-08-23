@@ -47,7 +47,7 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
 .media-dropzone.is-dragging { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .media-library-privacy-blur > *:not(.media-privacy-notice) { filter: blur(18px); pointer-events: none; user-select: none; }
 .media-privacy-notice { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: rgba(8,8,10,.82); color: var(--charcoal); font: 600 .85rem var(--font-ui); letter-spacing: .06em; }
-.media-context-menu { position: fixed; z-index: 260; display: grid; min-width: 170px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-elev); box-shadow: 0 16px 40px rgba(0,0,0,.28); }
+.media-context-menu { position: fixed !important; z-index: 260; display: grid; min-width: 170px; padding: 6px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-elev); box-shadow: 0 16px 40px rgba(0,0,0,.28); }
 .media-context-menu button { display: flex; gap: 9px; align-items: center; padding: 9px 11px; color: var(--charcoal); text-align: left; border-radius: 6px; }
 .media-context-menu button:hover { background: var(--hover-bg); }
 .media-context-menu .danger { color: var(--rose); }

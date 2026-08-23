@@ -602,6 +602,13 @@ export default function BookDesigner({
           onDragLeave={() => { overTimer.current = setTimeout(() => setStageOver(false), 120) }}
           onDrop={(e) => {
             e.preventDefault(); setStageOver(false)
+            const mediaImage = e.dataTransfer.getData('application/x-moonscribe-media')
+            if (mediaImage && stageView === 'cover') {
+              const imageKey = `${coverSurface}Image`
+              const cropKey = `${coverSurface}Crop`
+              updateCover({ [imageKey]: mediaImage, [cropKey]: { zoom: 1, x: 50, y: 50 }, showImage: true })
+              return
+            }
             const d = designById(e.dataTransfer.getData(DESIGN_MIME))
             if (!d) return
             if (stageView === 'cover') applyCoverDesign(d.id)
@@ -707,7 +714,7 @@ function renderSection(section, { cover, novel, layout, sig, updateCover, update
     case 'palette':   return <PaletteTab cover={cover} updateCover={updateCover} />
     case 'effects':   return <EffectsTab cover={cover} updateCover={updateCover} designerFontOptions={designerFontOptions} />
     case 'image':     return <ImageTab novel={novel} cover={cover} updateCover={updateCover} surface={coverSurface} setSurface={setCoverSurface} />
-    case 'media':     return <MediaDesignerTab images={libraryImages} cover={cover} updateCover={updateCover} surface={coverSurface} />
+    case 'media':     return <MediaDesignerTab images={libraryImages} cover={cover} updateCover={updateCover} surface={coverSurface} setSurface={setCoverSurface} />
     case 'shapes':    return <ShapesTab cover={cover} layout={layout} updateCover={updateCover} update={update} />
     case 'atmosphere': return <AtmosphereTab layout={layout} update={update} toast={toast} />
     case 'body':      return <BodyTab layout={layout} update={update} designerFontOptions={designerFontOptions} />
@@ -910,14 +917,14 @@ function ImageTab({ novel, cover, updateCover, surface, setSurface }) {
   )
 }
 
-function MediaDesignerTab({ images = [], cover, updateCover, surface }) {
+function MediaDesignerTab({ images = [], cover, updateCover, surface, setSurface }) {
   const imageKey = `${surface}Image`
   const cropKey = `${surface}Crop`
   const choose = (image) => updateCover({ [imageKey]: image, [cropKey]: { zoom: 1, x: 50, y: 50 }, showImage: true })
   return <>
     <p className="ds-hint">Choose an image from this novel’s Media Library for the {surface} cover.</p>
-    <div className="ds-surface-tabs">{['front', 'spine', 'back'].map((item) => <span key={item} className={surface === item ? 'active' : ''}>{item}</span>)}</div>
-    {images.length ? <div className="ds-media-grid">{images.map((item) => <button type="button" key={item.id} className={`ds-media-pick ${cover[imageKey] === item.image ? 'active' : ''}`} onClick={() => choose(item.image)}><img src={item.image} alt={item.text || 'Media Library image'} /><strong>{item.text || 'Untitled image'}</strong></button>)}</div> : <div className="ds-surface-empty"><Icon icon="fa-regular fa-images" /> No images in Media Library yet.</div>}
+    <div className="ds-surface-tabs" role="tablist" aria-label="Cover surface"><span className="ds-surface-tabs-label">Place on</span>{['front', 'spine', 'back'].map((item) => <button type="button" role="tab" aria-selected={surface === item} key={item} className={surface === item ? 'active' : ''} onClick={() => setSurface?.(item)}>{item}</button>)}</div>
+    {images.length ? <div className="ds-media-grid">{images.map((item) => <button type="button" draggable key={item.id} className={`ds-media-pick ${cover[imageKey] === item.image ? 'active' : ''}`} onDragStart={(event) => { event.dataTransfer.setData('application/x-moonscribe-media', item.image); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => choose(item.image)}><img src={item.image} alt={item.text || 'Media Library image'} /><strong>{item.text || 'Untitled image'}</strong></button>)}</div> : <div className="ds-surface-empty"><Icon icon="fa-regular fa-images" /> No images in Media Library yet.</div>}
   </>
 }
 
@@ -1331,6 +1338,7 @@ function Cover3D({ novel, cover, autoSpin, immersive, surface, environment, meas
     <Comp
       key={`${measurements.trimWidthMm}-${measurements.trimHeightMm}-${measurements.spineMm}`}
       title={novel.title}
+      subtitle={cover.subtitle || ''}
       byline={cover.byline || novel.byline || ''}
       coverStyle={novel.coverStyle || 'moonstone'}
       gradient={cover.gradient || null}

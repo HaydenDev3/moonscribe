@@ -61,7 +61,7 @@ export default function MediaLibrary({ novelId, embedded = false }) {
   const coverItems = [
     ['frontImage', 'Cover front'], ['backImage', 'Cover back'], ['spineImage', 'Cover spine']
   ].filter(([key]) => cover[key]).map(([key, label]) => ({ id: `cover-${key}`, image: cover[key], text: label, cover: true }))
-  const openMenu = (event, item) => { event.preventDefault(); setContextMenu({ x: event.clientX, y: event.clientY, item }) }
+  const openMenu = (event, item) => { event.preventDefault(); const width = 190; const height = 150; setContextMenu({ x: Math.max(8, Math.min(event.clientX, window.innerWidth - width - 8)), y: Math.max(8, Math.min(event.clientY, window.innerHeight - height - 8)), item }) }
   const rename = async (item) => { const name = window.prompt('Rename image', item.text || 'Untitled image')?.trim(); if (name && name !== item.text) { await updateTile(item.id, { text: name }); await load(); toast('Image renamed.') } setContextMenu(null) }
 
   return <section className={`media-library ${embedded ? 'media-library-embedded' : ''} ${privacyBlur ? 'media-library-privacy-blur' : ''}`} onClick={() => setContextMenu(null)}>
