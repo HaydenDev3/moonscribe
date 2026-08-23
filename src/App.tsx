@@ -7,7 +7,6 @@ import Landing from './pages/Landing'
 import DesktopGateway from './components/DesktopGateway'
 import { isDesktopRuntime } from './api/config'
 import { capabilities } from './platform/capabilities'
-import { detectPlatform } from './utils/platform'
 import { checkForDesktopUpdate } from './platform/updater'
 import Toasts from './components/Toasts'
 import CommandPalette from './components/CommandPalette'
@@ -38,10 +37,6 @@ function Loading() {
       <span style={{ fontFamily: 'var(--font-heading)', fontStyle: 'italic' }}>gathering the light…</span>
     </div>
   )
-}
-
-function MobileCloudPaused() {
-  return <main className="mobile-cloud-paused"><div className="mobile-cloud-paused-card"><span className="settings-panel-kicker">MoonScribe</span><h1>Mobile cloud is temporarily paused</h1><p>We’re tuning the tablet and phone experience before reopening the writing studio. Your local desktop library is safe and unchanged.</p><a className="button button-secondary" href="/">Return to MoonScribe</a></div></main>
 }
 
 function SplashScreen() {
@@ -105,7 +100,6 @@ export default function App() {
     guestMode?: boolean
   }
   const { onboardingDone, appLock, locked, unlockApp, syncUsername, accountReady, guestMode } = appState
-  const mobileCloudPaused = detectPlatform(globalThis.navigator?.userAgent, globalThis.navigator?.platform, globalThis.navigator?.maxTouchPoints) === 'mobile'
 
   useEffect(() => {
     registerSW({ immediate: true })
@@ -145,7 +139,6 @@ export default function App() {
 
   const enterStudio = (content: ReactNode) => {
     if (!accountReady) return <SplashScreen />
-    if (mobileCloudPaused) return <MobileCloudPaused />
     // OAuth providers return to /dashboard with a one-time exchange query.
     // Let AppContext mount and consume it before the account gate redirects
     // back to the sign-in modal; otherwise no exchange request is made.

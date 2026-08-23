@@ -116,6 +116,19 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
   .ds-canvas .cover-mockup-3d { width: min(54vw, 520px); height: min(72dvh, 620px); }
 }
 
+/* iPad and other touch tablets: keep the full studio available while giving
+   the designer enough room for touch targets and safe-area insets. */
+@media (pointer: coarse) and (min-width: 701px) and (max-width: 1180px) {
+  body { overscroll-behavior-x: none; }
+  button, a, input, select { min-height: 42px; }
+  .designer-workspace { height: calc(100dvh - 58px); padding: 12px; gap: 12px; }
+  .designer-controls { width: 264px; }
+  .designer-preview { min-height: 0; height: 100%; }
+  .designer-preview .ds-stage, .designer-preview .ds-canvas { min-height: 0; height: 100%; }
+  .ds-canvas .cover-mockup-3d { width: min(56vw, 620px); height: min(76dvh, 720px); }
+  .cover-mockup-zoom button { min-height: 42px; min-width: 42px; }
+}
+
 @media (max-width: 480px) {
   .settings-content { padding-inline: 14px; }
   .settings-detail-grid { grid-template-columns: 1fr; }
