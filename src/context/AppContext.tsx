@@ -301,6 +301,7 @@ export function AppProvider({ children }) {
           await setMeta('authProvider', account.provider || oauthProvider || 'discord')
           const existing = await syncEngine.getConfig()
           const res = await withTimeout(syncEngine.connectWithToken({ server: account.server || oauthServer, token: account.linked && existing.token ? existing.token : account.token, username: account.username }), 'Saving your account session')
+          if (!res?.ok) throw new Error(res?.error || 'MoonScribe could not save the account session.')
           if (res.ok) {
             const profile = await withTimeout(syncEngine.validateSession(), 'Loading your account profile').catch(() => null)
             if (profile) {
