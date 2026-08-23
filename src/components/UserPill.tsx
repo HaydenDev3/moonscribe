@@ -5,7 +5,7 @@ import Icon from './Icon'
 import ProfileAvatar from './ProfileAvatar'
 
 export default function UserPill({ onConnectClick }) {
-  const { syncUsername, syncServer, syncStatus, syncDiscordAvatar, syncProvider, disconnectSync, openSettings, toast } = useApp()
+  const { syncUsername, syncServer, syncStatus, syncDiscordAvatar, syncProvider, disconnectSync, syncNow, openSettings, toast } = useApp()
   const [open, setOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 16, width: 220 })
   const ref = useRef(null)
@@ -45,9 +45,15 @@ export default function UserPill({ onConnectClick }) {
   }
 
   const signOut = async () => {
-    await disconnectSync()
-    toast('Signed out.')
+    try {
+      await disconnectSync()
+      toast('Signed out.')
+    } finally { setOpen(false) }
+  }
+
+  const sync = async () => {
     setOpen(false)
+    try { await syncNow?.(); toast('Synced.') } catch { toast('Sync needs attention.') }
   }
 
   if (!syncUsername) {
@@ -99,7 +105,7 @@ export default function UserPill({ onConnectClick }) {
           <button className="user-pill-item" onClick={() => { openSettings(); setOpen(false) }}>
             <Icon icon="fa-solid fa-gear" /> Settings
           </button>
-          <button className="user-pill-item" onClick={() => { onConnectClick?.(); setOpen(false) }}>
+          <button className="user-pill-item" onClick={sync}>
             <Icon icon="fa-solid fa-rotate" /> Sync now
           </button>
           {isDiscord && (

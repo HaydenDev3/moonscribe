@@ -595,6 +595,8 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
   const limiter = createRateLimiter(opts)
   const allowedOrigins = new Set((corsOrigins || [
     APP_ORIGIN,
+    'https://moonscribe.cc',
+    'https://www.moonscribe.cc',
     `http://localhost:${PORT}`,
     'http://localhost:5173',
     'http://127.0.0.1:5173',
@@ -608,7 +610,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
   const isAllowedOrigin = (origin) => {
     try {
       const parsed = new URL(origin)
-      return allowedOrigins.has(parsed.origin) || parsed.origin === CANONICAL_WEB_ORIGIN || (ALLOW_DEV_TUNNELS && parsed.protocol === 'https:' && DEV_TUNNEL_HOST.test(parsed.hostname))
+      return allowedOrigins.has(parsed.origin) || parsed.origin === CANONICAL_WEB_ORIGIN || parsed.origin === 'https://www.moonscribe.cc' || (ALLOW_DEV_TUNNELS && parsed.protocol === 'https:' && DEV_TUNNEL_HOST.test(parsed.hostname))
     } catch { return false }
   }
 
