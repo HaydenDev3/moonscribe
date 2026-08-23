@@ -233,7 +233,8 @@ function claimLegacyRecords(db, userId) {
 // the destination account is preserved unless it is currently empty.
 function mergeAccountRecords(db, sourceId, destinationId) {
   if (!sourceId || !destinationId || sourceId === destinationId) return
-  const transaction = db.transaction(() => {
+  db.exec('BEGIN')
+  try {
     db.prepare('UPDATE records SET user_id = ? WHERE user_id = ?').run(destinationId, sourceId)
     db.prepare('UPDATE tokens SET user_id = ? WHERE user_id = ?').run(destinationId, sourceId)
     db.prepare('UPDATE notifications SET user_id = ? WHERE user_id = ?').run(destinationId, sourceId)
@@ -244,8 +245,11 @@ function mergeAccountRecords(db, sourceId, destinationId) {
     db.prepare('UPDATE share_rooms SET owner_user_id = ? WHERE owner_user_id = ?').run(destinationId, sourceId)
     db.prepare('DELETE FROM oauth_exchanges WHERE user_id = ?').run(sourceId)
     db.prepare('DELETE FROM users WHERE id = ?').run(sourceId)
-  })
-  transaction()
+    db.exec('COMMIT')
+  } catch (error) {
+    try { db.exec('ROLLBACK') } catch { /* preserve the original merge error */ }
+    throw error
+  }
 }
 
 // ---- schema (with migrations for pre-account databases) ----
