@@ -2481,6 +2481,17 @@ export default function Editor({
     )
   }, [applyStyle])
 
+  const handleTextColorChange = useCallback((value) => {
+    if (typographyTarget === 'title') {
+      const chapterTitleStyle = { ...(typography?.chapterTitleStyle || {}) }
+      if (value) chapterTitleStyle.color = value
+      else delete chapterTitleStyle.color
+      onTypographyChange({ chapterTitleStyle })
+      return
+    }
+    applyStyle('color', value)
+  }, [applyStyle, onTypographyChange, typography, typographyTarget])
+
   const handleLineSpacingChange = useCallback((val) => {
     setLineSpacing(val)
     onLineSpacingChange?.(val)
@@ -2888,10 +2899,7 @@ export default function Editor({
                           saveSelection()
                         }}
                         onClick={() => {
-                          applyStyle(
-                            'color',
-                            c,
-                          )
+                          handleTextColorChange(c)
 
                           setColorPop(
                             null,
@@ -2911,10 +2919,7 @@ export default function Editor({
                     e.preventDefault()
                   }
                   onClick={() => {
-                    applyStyle(
-                      'color',
-                      '',
-                    )
+                    handleTextColorChange('')
 
                     setColorPop(
                       null,
@@ -3424,6 +3429,7 @@ export default function Editor({
                     className="chapter-edit-title"
                     style={{
                       fontFamily: titleFontFamily,
+                      color: typography?.chapterTitleStyle?.color,
                     }}
                     value={title}
                     rows={1}

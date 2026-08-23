@@ -1003,6 +1003,10 @@ function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLib
             <button type="button" onClick={onSettings} aria-label="Open settings" title="Settings"><Icon icon="fa-solid fa-gear" /></button>
           </div>
         </div>
+        {!collapsed && <div className="moonscribe-legal-footer">
+          <span>Developed with Love by Hayden Ford</span>
+          <a href="https://abr.business.gov.au/ABN/View?abn=47600241842" target="_blank" rel="noreferrer">ABN 47 600 241 842</a>
+        </div>}
       </div>
     </aside>
   )

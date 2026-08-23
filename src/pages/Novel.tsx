@@ -801,16 +801,22 @@ export default function Novel() {
 
   // ---- premade designs ----
   const applyEditorDesign = useCallback((dId) => {
+    const persistDesign = (layoutPatch) => {
+      const layout = { ...(novelRef.current?.layout || {}), ...layoutPatch }
+      novelRef.current = { ...novelRef.current, layout }
+      setNovel((current) => current ? { ...current, layout } : current)
+      updateNovel(id, { layout })
+    }
     if (dId === 'custom') {
       setEditorDesign('custom')
-      updateNovel(id, { layout: { ...(novelRef.current?.layout || {}), editorDesign: 'custom', customPageBg: customDesignBg, customPageText: customDesignText } })
+      persistDesign({ editorDesign: 'custom', customPageBg: customDesignBg, customPageText: customDesignText })
       setDesignsOpen(false)
       return
     }
     const d = designById(dId)
     if (!d) return
     setEditorDesign(d.id)
-    updateNovel(id, { layout: { ...(novelRef.current?.layout || {}), editorDesign: d.id } })
+    persistDesign({ editorDesign: d.id })
     toast(`${d.name} across the page.`)
     setDesignsOpen(false)
   }, [id, toast, customDesignBg, customDesignText])

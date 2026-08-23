@@ -550,6 +550,10 @@ export default function Sidebar({
           </div>
         </div>
         <SyncStatus onClick={onSyncClick} />
+        <div className="moonscribe-legal-footer">
+          <span>Developed with Love by Hayden Ford</span>
+          <a href="https://abr.business.gov.au/ABN/View?abn=47600241842" target="_blank" rel="noreferrer">ABN 47 600 241 842</a>
+        </div>
       </div>
     </aside>
   )
