@@ -13,6 +13,15 @@ function requirePersistence() {
   return supabasePersistence
 }
 
+export async function mirrorUserProfile(db, userId) {
+  if (!supabasePersistence) return
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
+  if (!user) return
+  const provider = user.discord_id ? 'discord' : user.google_id ? 'google' : 'password'
+  const { error } = await supabasePersistence.from('moonscribe_users').upsert({ id: String(user.id), email: user.email || null, username: user.username || null, password_hash: user.password_hash || null, display_name: user.username || null, provider, provider_subject: user.discord_id || user.google_id || null, avatar_url: user.discord_avatar || user.google_avatar || null, email_verified: Boolean(user.email_verified), disabled_at: user.disabled_at ? new Date(user.disabled_at).toISOString() : null, created_at: new Date(user.created_at || Date.now()).toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'id' })
+  if (error) throw error
+}
+
 // One-way, idempotent migration. Nothing is deleted from Supabase and every
 // record uses the newest timestamp, so a restart cannot erase production work.
 export async function migrateSqliteToSupabase(db) {
@@ -99,16 +108,7 @@ export async function mirrorRecords(records) {
 
 export async function mirrorUserAndSession(db, userId, session) {
   if (!supabasePersistence) return
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
-  if (!user) return
-  const provider = user.discord_id ? 'discord' : user.google_id ? 'google' : 'password'
-  const { error: userError } = await supabasePersistence.from('moonscribe_users').upsert({
-    id: String(user.id), email: user.email || null, username: user.username || null, password_hash: user.password_hash || null,
-    display_name: user.username || null, provider, provider_subject: user.discord_id || user.google_id || null,
-    avatar_url: user.discord_avatar || user.google_avatar || null, email_verified: Boolean(user.email_verified),
-    disabled_at: user.disabled_at ? new Date(user.disabled_at).toISOString() : null, created_at: new Date(user.created_at || Date.now()).toISOString(), updated_at: new Date().toISOString()
-  }, { onConflict: 'id' })
-  if (userError) throw userError
+  await mirrorUserProfile(db, userId)
   const { error: sessionError } = await supabasePersistence.from('moonscribe_sessions').upsert({
     token_hash: shaToken(session.token), user_id: String(userId), device_id: session.deviceId || null, device_name: session.deviceName || 'Unknown device',
     session_id: session.sessionId, created_at: new Date().toISOString(), expires_at: new Date(session.expiresAt).toISOString(), last_seen_at: new Date().toISOString()

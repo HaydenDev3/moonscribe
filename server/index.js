@@ -23,7 +23,7 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import { DatabaseSync } from 'node:sqlite'
 import { WebSocketServer } from 'ws'
 import { isEmailConfigured, sendAccountUpdateEmail, sendMagicLink, sendReminderEmail, sendTwoFactorCode, sendVerificationCode } from './email.js'
-import { migrateSqliteToSupabase, restoreSupabaseToSqlite, supabasePersistenceEnabled, mirrorRecords, mirrorUserAndSession, mirrorOauthExchange, consumeSupabaseOauthExchange } from './supabasePersistence.js'
+import { migrateSqliteToSupabase, restoreSupabaseToSqlite, supabasePersistenceEnabled, mirrorRecords, mirrorUserProfile, mirrorUserAndSession, mirrorOauthExchange, consumeSupabaseOauthExchange } from './supabasePersistence.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = join(ROOT, 'dist')
@@ -152,7 +152,7 @@ function issueToken(db, userId, { deviceId = null, deviceName = 'Unknown device'
   db.prepare('INSERT INTO tokens (token_hash, user_id, created_at, expires_at, device_id, device_name, last_seen_at, session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
     sha(token), userId, Date.now(), expiresAt, deviceId, deviceName.slice(0, 120), Date.now(), sessionId
   )
-  if (supabasePersistenceEnabled) mirrorUserAndSession(db, userId, { token: sha(token), expiresAt, sessionId, deviceId, deviceName: deviceName.slice(0, 120) }).catch((error) => console.error('[supabase] session mirror failed', String(error)))
+  if (supabasePersistenceEnabled) mirrorUserAndSession(db, userId, { token: sha(token), expiresAt, sessionId, deviceId, deviceName: deviceName.slice(0, 120) }).catch((error) => console.error('[supabase] session mirror failed', JSON.stringify(error)))
   return { token, expiresAt, sessionId }
 }
 
@@ -737,7 +737,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         const exchange = randomBytes(24).toString('base64url')
         database.prepare('INSERT OR REPLACE INTO oauth_exchanges (code, user_id, username, avatar, provider, server_origin, expires_at, created_at, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .run(exchange, user.id, user.username, avatarUrl, 'discord', oauthCallbackOrigin(req), Date.now() + 2 * 60 * 1000, Date.now(), stateData.mode || 'login')
-        if (supabasePersistenceEnabled) mirrorOauthExchange({ code: exchange, userId: user.id, username: user.username, avatar: avatarUrl, provider: 'discord', serverOrigin: oauthCallbackOrigin(req), expiresAt: Date.now() + 2 * 60 * 1000, mode: stateData.mode || 'login' }).catch((error) => console.error('[supabase] Discord exchange mirror failed', String(error)))
+        if (supabasePersistenceEnabled) mirrorUserProfile(database, user.id).then(() => mirrorOauthExchange({ code: exchange, userId: user.id, username: user.username, avatar: avatarUrl, provider: 'discord', serverOrigin: oauthCallbackOrigin(req), expiresAt: Date.now() + 2 * 60 * 1000, mode: stateData.mode || 'login' })).catch((error) => console.error('[supabase] Discord exchange mirror failed', JSON.stringify(error)))
         const params = new URLSearchParams({ discord_exchange: exchange, ...(stateData.mode === 'link' ? { linked: '1' } : {}) })
         res.writeHead(302, { Location: oauthResultLocation(stateData.redirectTo, params), 'Cache-Control': 'no-store' })
         res.end()
@@ -811,7 +811,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         const exchange = randomBytes(24).toString('base64url')
         database.prepare('INSERT OR REPLACE INTO oauth_exchanges (code, user_id, username, avatar, provider, server_origin, expires_at, created_at, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .run(exchange, user.id, user.username, profile.picture || '', 'google', oauthCallbackOrigin(req), Date.now() + 2 * 60 * 1000, Date.now(), stateData.mode || 'login')
-        if (supabasePersistenceEnabled) mirrorOauthExchange({ code: exchange, userId: user.id, username: user.username, avatar: profile.picture || '', provider: 'google', serverOrigin: oauthCallbackOrigin(req), expiresAt: Date.now() + 2 * 60 * 1000, mode: stateData.mode || 'login' }).catch((error) => console.error('[supabase] Google exchange mirror failed', String(error)))
+        if (supabasePersistenceEnabled) mirrorUserProfile(database, user.id).then(() => mirrorOauthExchange({ code: exchange, userId: user.id, username: user.username, avatar: profile.picture || '', provider: 'google', serverOrigin: oauthCallbackOrigin(req), expiresAt: Date.now() + 2 * 60 * 1000, mode: stateData.mode || 'login' })).catch((error) => console.error('[supabase] Google exchange mirror failed', JSON.stringify(error)))
         res.writeHead(302, { Location: oauthResultLocation(stateData.redirectTo, new URLSearchParams({ oauth_exchange: exchange, provider: 'google', ...(stateData.mode === 'link' ? { linked: '1' } : {}) })), 'Cache-Control': 'no-store' })
         res.end()
       })().catch((error) => {
