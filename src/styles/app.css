@@ -4,6 +4,13 @@
 
 /* ---------- App shell ---------- */
 .app { min-height: 100%; display: flex; flex-direction: column; }
+/* Appearance gradients belong to the studio chrome, not the manuscript page. */
+html[data-custom-gradient='true'] .app,
+html[data-custom-gradient='true'] .dashboard-app,
+html[data-custom-gradient='true'] .settings-shell {
+  background-image: var(--custom-app-gradient);
+  background-attachment: fixed;
+}
 
 .feature-disabled-state {
   min-height: 40vh;
@@ -5821,8 +5828,8 @@ body::after {
   min-height: var(--pg-height) !important;
   margin: 36px auto 80px;
   padding: 0 !important;
-  background: #e8e2d8 !important;
-  color: #1a1a1a !important;
+  background: var(--design-page-bg, #e8e2d8) !important;
+  color: var(--design-page-text, #1a1a1a) !important;
   border: 1px solid rgba(74, 61, 43, .20);
   border-radius: 4px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, .24), 0 2px 10px rgba(0, 0, 0, .14);
@@ -5830,19 +5837,32 @@ body::after {
 
 .editor-canvas-paged .editor-head,
 .editor-canvas-paged .prose {
-  background: #e8e2d8 !important;
-  color: #1a1a1a !important;
+  background: var(--design-page-bg, #e8e2d8) !important;
+  color: var(--design-page-text, #1a1a1a) !important;
 }
-.workspace.design-parchment .editor-canvas-paged,
-.workspace.design-parchment .editor-canvas-paged .editor-head,
-.workspace.design-parchment .editor-canvas-paged .prose { background: #f5ecd0 !important; color: #4a3d28 !important; border-color: #ddc99a; }
+.workspace.design-moonlight { --design-page-bg: #f2f7fc; --design-page-text: #3a4f66; --design-page-border: #cfdfee; }
+.workspace.design-ember { --design-page-bg: #fdf3ec; --design-page-text: #6b4a3a; --design-page-border: #ecd4c4; }
+.workspace.design-moss { --design-page-bg: #f1f6ef; --design-page-text: #43594a; --design-page-border: #d3e0d0; }
+.workspace.design-sand { --design-page-bg: #faf4e8; --design-page-text: #6f5b41; --design-page-border: #e6d9c0; }
+.workspace.design-midnight { --design-page-bg: #232a33; --design-page-text: #e8e4dc; --design-page-border: #3a4657; }
+.workspace.design-parchment { --design-page-bg: #f5ecd0; --design-page-text: #4a3d28; --design-page-border: #ddc99a; }
+.workspace.design-crimson { --design-page-bg: #fdf0ef; --design-page-text: #5a1e1e; --design-page-border: #e8c4c2; }
+.workspace.design-forest { --design-page-bg: #f0f5ee; --design-page-text: #1f3a26; --design-page-border: #c8d9c0; }
+.workspace.design-slate { --design-page-bg: #f2f4f6; --design-page-text: #38475a; --design-page-border: #cdd5dd; }
+.workspace.design-lavender { --design-page-bg: #f4f2f8; --design-page-text: #4a3a6a; --design-page-border: #d8d0ec; }
+.workspace.design-noir { --design-page-bg: #1a1a1a; --design-page-text: #e8e8e0; --design-page-border: #333; }
+.workspace.design-ivory { --design-page-bg: #fafaf6; --design-page-text: #2a2a28; --design-page-border: #e8e8e0; }
+.workspace.design-copper { --design-page-bg: #faf4ee; --design-page-text: #5a3820; --design-page-border: #e0c8b0; }
+.workspace.design-dusk { --design-page-bg: #f8f0f8; --design-page-text: #4a2860; --design-page-border: #e0c8e4; }
+.workspace.design-custom { --design-page-bg: var(--design-custom-bg, #fff); --design-page-text: var(--design-custom-text, #1a1a18); }
+.editor-canvas-paged { border-color: var(--design-page-border, rgba(74, 61, 43, .20)); }
 
 .editor-canvas-paged .editor-head { box-sizing: border-box; }
 .editor-canvas-paged .prose {
   box-sizing: border-box;
   min-height: calc(var(--pg-height) - var(--page-margin-top));
   overflow: visible;
-  color: #1a1a1a !important;
+  color: var(--design-page-text, #1a1a1a) !important;
 }
 
 .editor-canvas-paged .prose img,
