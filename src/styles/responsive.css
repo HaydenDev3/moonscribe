@@ -179,6 +179,37 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
   .tl-part { max-width: 100%; }
   .continuity-stats { flex-wrap: wrap; gap: 8px; }
   .continuity-row { align-items: flex-start; gap: 12px; }
+
+  /* Tablet modal system: both settings surfaces use the entire iPad viewport
+     without becoming a desktop dialog that clips behind Safari chrome. */
+  .settings-overlay,
+  .account-centre-overlay {
+    align-items: stretch;
+    justify-content: stretch;
+    padding: max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  }
+  .settings-shell {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    border-radius: 20px;
+    grid-template-columns: 238px minmax(0, 1fr);
+  }
+  .settings-rail { width: 238px; padding: 18px 12px; }
+  .settings-rail-item { min-height: 44px; padding: 10px 11px; }
+  .settings-content { padding: 56px clamp(24px, 5vw, 70px) calc(34px + env(safe-area-inset-bottom)); }
+  .settings-panel { width: min(100%, 760px); margin-inline: auto; }
+  .settings-close { top: 14px; right: 14px; min-width: 42px; min-height: 42px; }
+
+  .account-centre { width: 100%; height: 100%; max-height: none; border-radius: 20px; }
+  .account-header { padding: 20px 24px 18px; }
+  .account-body { grid-template-columns: 220px minmax(0, 1fr); }
+  .account-nav { padding: 18px 12px; overflow-y: auto; }
+  .account-nav button { min-height: 44px; padding: 11px 12px; }
+  .account-content { padding: 28px clamp(22px, 5vw, 64px) calc(30px + env(safe-area-inset-bottom)); }
+  .account-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .account-close { min-width: 42px; min-height: 42px; }
 }
 
 @media (max-width: 480px) {
