@@ -584,21 +584,6 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
         {themes.map(([value, label, bg, ink]) => <button key={value} className={`theme-choice ${(settings.theme || 'light') === value ? 'active' : ''}`} onClick={() => updateSettings({ theme: value })} aria-pressed={(settings.theme || 'light') === value}><span className="theme-choice-preview" style={{ background: bg, color: ink }}><i /><i /><i /></span><span>{label}</span>{(settings.theme || 'light') === value && <Icon icon="fa-solid fa-check" />}</button>)}
       </div>
 
-      <div className="settings-subheading">Your brand</div>
-      <p className="settings-row-sub">Describe the creative identity behind MoonScribe. These details are saved with your settings and can guide future personalized content.</p>
-      <div className="brand-profile-card">
-        <div className="brand-profile-preview" style={{ background: `linear-gradient(135deg, ${settings.brandColor || '#b68235'}, ${settings.customGradientEnd || '#17161c'})` }}>
-          <span className="brand-profile-mark">☾</span>
-          <strong>MoonScribe</strong>
-          <small>{settings.brandDescription || 'Stories, quietly written.'}</small>
-        </div>
-        <div className="brand-profile-fields">
-          <label className="settings-field-label">Brand colour<input type="color" value={settings.brandColor || '#b68235'} onChange={(event) => updateSettings({ brandColor: event.target.value })} /></label>
-          <label className="settings-field-label">Brand description<textarea rows={3} value={settings.brandDescription || ''} onChange={(event) => updateSettings({ brandDescription: event.target.value })} placeholder="A quiet, private home for stories still becoming." /></label>
-          <label className="settings-field-label">Example article URL<span className="settings-field-hint">Optional reference for your writing style and tone.</span><input type="url" value={settings.brandExampleUrl || ''} onChange={(event) => updateSettings({ brandExampleUrl: event.target.value })} placeholder="https://yourwebsite.com/article-title" /></label>
-        </div>
-      </div>
-
       <div className="settings-subheading">Custom gradient</div>
       <p className="settings-row-sub">Build a personal studio atmosphere. The live preview updates as you choose each colour.</p>
       <div className="custom-gradient-card">
