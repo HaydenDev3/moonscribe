@@ -24,6 +24,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { WebSocketServer } from 'ws'
 import { isEmailConfigured, sendAccountUpdateEmail, sendMagicLink, sendReminderEmail, sendTwoFactorCode, sendVerificationCode } from './email.js'
 import { migrateSqliteToSupabase, restoreSupabaseToSqlite, supabasePersistenceEnabled, mirrorRecords, mirrorUserProfile, mirrorUserAndSession, mirrorOauthExchange, consumeSupabaseOauthExchange, mergeSupabaseUser } from './supabasePersistence.js'
+import { loadBabyLoveGrowthArticles, startBabyLoveGrowthSync } from './babylovegrowth.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = join(ROOT, 'dist')
@@ -573,6 +574,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     return new DatabaseSync(join(dir, 'moonscribe.db'))
   })()
   setupSchema(database)
+  const stopBabyLoveGrowthSync = dir === ':memory:' ? () => {} : startBabyLoveGrowthSync(dir)
   const defaultFlags = [
     ['realtime_collaboration', 'Realtime Collaboration', 1, 100],
     ['desktop_beta', 'Experimental Desktop', 0, 0],
@@ -694,6 +696,11 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       } catch {
         json(res, 503, { status: 'error', database: 'unavailable' })
       }
+      return
+    }
+
+    if (path === '/api/articles' && req.method === 'GET') {
+      json(res, 200, { articles: loadBabyLoveGrowthArticles(dir) })
       return
     }
 
@@ -1964,7 +1971,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     ws.on('close', () => untrack())
   })
 
-  return { server, db: database, limiter }
+  return { server, db: database, limiter, stopBabyLoveGrowthSync }
 }
 
 function safeJson(raw) {
@@ -1979,7 +1986,7 @@ function safeJson(raw) {
 // ---- entrypoint: `node server/index.js` ----
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
 if (isMain) {
-  const { server, db, limiter } = createMoonScribeServer()
+  const { server, db, limiter, stopBabyLoveGrowthSync } = createMoonScribeServer()
   const startServer = () => server.listen(PORT, () => {
     console.log(`🌙 MoonScribe server listening on http://localhost:${PORT}`)
     console.log('   Accounts: sign in or create one in the app (Settings → Sign in).')
@@ -1995,6 +2002,7 @@ if (isMain) {
   } else startServer()
   const shutdown = () => {
     limiter.dispose()
+    stopBabyLoveGrowthSync()
     server.close(() => process.exit(0))
   }
   process.on('SIGINT', shutdown)
