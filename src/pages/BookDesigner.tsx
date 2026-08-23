@@ -614,7 +614,7 @@ export default function BookDesigner({
               <button className={`ds-stage-tab ${stageView === 'cover' ? 'active' : ''}`} onClick={() => setStageView('cover')}>
                 <Icon icon="fa-solid fa-book" /> Cover
               </button>
-              <button className={`ds-stage-tab ${stageView === 'page' ? 'active' : ''}`} onClick={() => navigate(`/novel/${id}/design/print`)}>
+              <button className={`ds-stage-tab ${stageView === 'page' ? 'active' : ''}`} onClick={() => { window.location.hash = `#/novel/${id}/design/print`; navigate(`/novel/${id}/design/print`) }}>
                 <Icon icon="fa-solid fa-file-lines" /> Print preview
               </button>
             </div>
@@ -689,7 +689,7 @@ export default function BookDesigner({
           {/* Footer */}
           <div className="ds-stage-footer">
             <span className="small muted">{measurements.trimWidthMm.toFixed(1)} × {measurements.trimHeightMm.toFixed(1)} mm · {measurements.spineMm.toFixed(1)} mm spine · ~{measurements.pages} pages</span>
-            <button className="button button-primary" onClick={() => navigate(`/novel/${id}/design/print`)}>
+            <button className="button button-primary" onClick={() => { window.location.hash = `#/novel/${id}/design/print`; navigate(`/novel/${id}/design/print`) }}>
               Open print view →
             </button>
           </div>

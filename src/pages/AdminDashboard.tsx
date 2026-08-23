@@ -5,9 +5,11 @@ import { useApp } from '../context/AppContext'
 import * as syncEngine from '../sync/engine'
 import Select from '../components/Select'
 import { useContextMenu } from '../components/ContextMenu'
+import { markdownToAnnouncementHtml, sanitizeAnnouncementHtml } from '../utils/announcementMarkup'
 import '../styles/admin.css'
 import '../styles/admin-audit.css'
 import '../styles/admin-flags.css'
+import '../styles/admin-rich.css'
 
 type AdminUser = { id: string; username: string; email?: string | null; roles: string[]; disabledAt?: number | null }
 type Health = { online?: boolean; emailDelivery?: boolean }
@@ -46,6 +48,7 @@ export default function AdminDashboard() {
   const [auditFilter, setAuditFilter] = useState('all')
   const [announcementTitle, setAnnouncementTitle] = useState('')
   const [announcementBody, setAnnouncementBody] = useState('')
+  const [announcementMode, setAnnouncementMode] = useState<'visual' | 'markdown' | 'html'>('visual')
   const [announcementSeverity, setAnnouncementSeverity] = useState('info')
   const [publishingAnnouncement, setPublishingAnnouncement] = useState(false)
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
@@ -172,12 +175,13 @@ export default function AdminDashboard() {
       const response = await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/announcements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
-        body: JSON.stringify({ title: announcementTitle, body: announcementBody, severity: announcementSeverity }),
+        body: JSON.stringify({ title: announcementTitle, body: sanitizeAnnouncementHtml(announcementMode === 'markdown' ? markdownToAnnouncementHtml(announcementBody) : announcementBody), severity: announcementSeverity }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'Could not publish announcement.')
       setAnnouncementTitle('')
       setAnnouncementBody('')
+      setAnnouncementMode('visual')
       setAnnouncementSeverity('info')
       setMessage('Announcement published.')
       setSection('Dashboard')
@@ -455,7 +459,21 @@ export default function AdminDashboard() {
             <p>Post a server-backed message for signed-in MoonScribe writers.</p>
             <form className="admin-announcement-form" onSubmit={publishAnnouncement}>
               <label>Title<input value={announcementTitle} onChange={(event) => setAnnouncementTitle(event.target.value)} maxLength={160} required placeholder="A short update for writers" /></label>
-              <label>Message<textarea value={announcementBody} onChange={(event) => setAnnouncementBody(event.target.value)} maxLength={4000} required rows={6} placeholder="Explain what changed…" /></label>
+              <div className="admin-rich-editor">
+                <div className="admin-rich-tabs" role="tablist" aria-label="Announcement editor mode">
+                  {(['visual', 'markdown', 'html'] as const).map((mode) => <button type="button" key={mode} className={announcementMode === mode ? 'active' : ''} onClick={() => setAnnouncementMode(mode)}>{mode === 'visual' ? 'Visual' : mode === 'markdown' ? 'Markdown' : 'HTML'}</button>)}
+                </div>
+                {announcementMode === 'visual' ? <>
+                  <div className="admin-rich-toolbar" aria-label="Formatting tools">
+                    <button type="button" onClick={() => setAnnouncementBody((value) => `${value}<strong>Bold text</strong>`)}><b>B</b></button>
+                    <button type="button" onClick={() => setAnnouncementBody((value) => `${value}<em>Italic text</em>`)}><i>I</i></button>
+                    <button type="button" onClick={() => setAnnouncementBody((value) => `${value}<h2>Heading</h2>`)}>H2</button>
+                    <button type="button" onClick={() => setAnnouncementBody((value) => `${value}<p>New paragraph</p>`)}>¶</button>
+                  </div>
+                  <div className="admin-rich-surface" contentEditable suppressContentEditableWarning onInput={(event) => setAnnouncementBody(event.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: announcementBody }} data-placeholder="Write your announcement…" />
+                </> : <textarea value={announcementBody} onChange={(event) => setAnnouncementBody(event.target.value)} maxLength={4000} required rows={8} placeholder={announcementMode === 'markdown' ? '# What changed?\n\nUse **bold**, *italic*, and headings.' : '<p>Write your announcement in HTML</p>'} />}
+                <div className="admin-rich-preview"><span>Live preview</span><div dangerouslySetInnerHTML={{ __html: sanitizeAnnouncementHtml(announcementMode === 'markdown' ? markdownToAnnouncementHtml(announcementBody) : announcementBody) }} /></div>
+              </div>
               <label>Severity<Select value={announcementSeverity} onChange={setAnnouncementSeverity} ariaLabel="Announcement severity" width={190} options={[{ value: 'info', label: 'Information' }, { value: 'success', label: 'Success' }, { value: 'warning', label: 'Warning' }, { value: 'critical', label: 'Critical' }]} /></label>
               <button className="button button-primary" disabled={publishingAnnouncement}>{publishingAnnouncement ? 'Publishing…' : 'Publish announcement'}</button>
             </form>

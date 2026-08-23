@@ -23,6 +23,7 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import { DatabaseSync } from 'node:sqlite'
 import { WebSocketServer } from 'ws'
 import { isEmailConfigured, sendAccountUpdateEmail, sendMagicLink, sendReminderEmail, sendTwoFactorCode, sendVerificationCode } from './email.js'
+import { migrateSqliteToSupabase, supabasePersistenceEnabled, mirrorRecords } from './supabasePersistence.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = join(ROOT, 'dist')
@@ -1266,7 +1267,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       if (!userRoleInfo(user).isAdmin) return json(res, 403, { error: 'Admin access required.' })
       readBody(req, 16 * 1024).then(({ title, body, severity = 'info' }) => {
         const cleanTitle = String(title || '').trim()
-        const cleanBody = String(body || '').trim()
+        const cleanBody = String(body || '').trim().replace(/<script[\s\S]*?<\/script>/gi, '').replace(/\son\w+\s*=\s*(["']).*?\1/gi, '')
         if (!cleanTitle || !cleanBody) throw new Error('Title and body are required.')
         if (cleanTitle.length > 160 || cleanBody.length > 4000) throw new Error('Announcement is too long.')
         const allowedSeverity = ['info', 'success', 'warning', 'critical'].includes(severity) ? severity : 'info'
@@ -1656,6 +1657,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
             if (records.length > 2000) throw new Error('Too many records in one sync batch.')
             const serverNow = Date.now()
             const accepted = []
+            const cloudRecords = []
             const rejected = []
             for (const r of records) {
               const key = r?.store && r?.id ? `${r.store}:${r.id}` : null
@@ -1688,8 +1690,15 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
                 r.deleted ? 1 : 0
               )
               accepted.push(key)
+              cloudRecords.push({ userId: targetUserId, store: r.store, id: String(r.id), novelId: r.novelId ? String(r.novelId) : null, payload: r.deleted ? null : (r.payload ?? null), updatedAt: Math.max(0, Math.min(r.updatedAt, serverNow + 5 * 60 * 1000)), deleted: Boolean(r.deleted) })
             }
             database.exec('COMMIT')
+            if (supabasePersistenceEnabled && cloudRecords.length) {
+              // Cloud mirroring is deliberately after the local commit: a
+              // transient Supabase outage must never discard an offline-safe
+              // local write. The next startup migration repairs any gap.
+              mirrorRecords(cloudRecords).catch((error) => console.error('[supabase] record mirror failed', String(error)))
+            }
             json(res, 200, { ok: true, serverTime: Date.now(), accepted, rejected })
           } catch (err) {
             database.exec('ROLLBACK')
@@ -1885,12 +1894,15 @@ function safeJson(raw) {
 // ---- entrypoint: `node server/index.js` ----
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
 if (isMain) {
-  const { server, limiter } = createMoonScribeServer()
+  const { server, db, limiter } = createMoonScribeServer()
   server.listen(PORT, () => {
     console.log(`🌙 MoonScribe server listening on http://localhost:${PORT}`)
     console.log('   Accounts: sign in or create one in the app (Settings → Sign in).')
     if (!existsSync(DIST)) {
       console.log('   (no dist/ yet — run `npm run build` to serve the app here)')
+    }
+    if (process.env.SUPABASE_MIGRATE_ON_STARTUP === 'true') {
+      migrateSqliteToSupabase(db).then((summary) => console.log('[supabase] migration complete:', summary)).catch((error) => console.error('[supabase] migration failed:', String(error)))
     }
   })
   const shutdown = () => {

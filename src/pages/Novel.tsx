@@ -1096,7 +1096,7 @@ export default function Novel() {
           </div>
         ) : activeSection === 'media' ? (
           <div className="mode-body"><MediaLibrary novelId={id} embedded /></div>
-        ) : activeSection === 'analytics' ? (
+          ) : activeSection === 'analytics' ? (
           <div className="mode-body">
             <Analytics embedded />
           </div>

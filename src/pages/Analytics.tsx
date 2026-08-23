@@ -49,7 +49,7 @@ export default function Analytics({ embedded }) {
     const avg = writingDays ? Math.round(history.reduce((s, d) => s + d.words, 0) / Math.max(1, writingDays)) : 0
     const todayWpm = todaySessions.minutes > 0.5 ? wordsPerMinute(todaySessions.words, todaySessions.minutes * 60000) : null
     const stats = [
-      { label: 'Total words', value: formatWords(totalWords), sub: 'across every chapter' },
+              { label: 'Total words', value: formatWords(totalWords), sub: 'across every chapter' },
       { label: 'Words today', value: formatWords(today), sub: 'this page counts this device' },
       { label: 'This week', value: formatWords(last7), sub: 'last seven days' },
       { label: 'Best day', value: formatWords(best.words), sub: best.date ? prettyDate(best.date) : 'no words yet' },
@@ -87,6 +87,10 @@ export default function Analytics({ embedded }) {
             <p>A quiet, useful picture of your manuscript—not a scoreboard.</p>
           </div>
           <button className="button button-quiet analytics-refresh" onClick={() => { load(); toast('Refreshed.') }}>↻ Refresh</button>
+        </div>
+
+        <div className="analytics-empty-summary" aria-label="Total words">
+          <strong>Total words</strong><span>{formatWords(totalWords)}</span>
         </div>
 
         {totalWords === 0 && history.every((d) => d.words === 0) ? (

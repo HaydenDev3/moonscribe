@@ -51,6 +51,13 @@ export async function getConfig() {
   let token = hasDesktopCredentialVault()
     ? await readDesktopCredential('sync-token')
     : await getMeta('syncToken', null)
+  // Keep a small web-session recovery copy so a browser profile/database
+  // migration during a redeploy does not strand an otherwise valid OAuth
+  // session. This contains only the opaque bearer token; passwords are never
+  // stored here. IndexedDB remains the primary web store.
+  if (!hasDesktopCredentialVault() && !token && typeof localStorage !== 'undefined') {
+    token = localStorage.getItem('moonscribe:session:token') || null
+  }
   // Migrate older desktop builds away from plaintext browser storage once.
   if (hasDesktopCredentialVault() && !token) {
     const legacyToken = await getMeta('syncToken', null)
@@ -77,6 +84,10 @@ export async function setConfig(patch) {
       await setMeta('syncToken', null)
     } else {
       await setMeta('syncToken', next.token)
+      if (typeof localStorage !== 'undefined') {
+        if (next.token) localStorage.setItem('moonscribe:session:token', next.token)
+        else localStorage.removeItem('moonscribe:session:token')
+      }
     }
   }
   if (patch.username !== undefined) await setMeta('syncUsername', next.username)
