@@ -146,7 +146,12 @@ export default function App() {
   const enterStudio = (content: ReactNode) => {
     if (!accountReady) return <SplashScreen />
     if (mobileCloudPaused) return <MobileCloudPaused />
-    if (!syncUsername) return <Navigate to="/?signin=1" replace />
+    // OAuth providers return to /dashboard with a one-time exchange query.
+    // Let AppContext mount and consume it before the account gate redirects
+    // back to the sign-in modal; otherwise no exchange request is made.
+    const oauthCallback = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('oauth_exchange')
+    const discordCallback = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('discord_exchange')
+    if (!syncUsername && !oauthCallback && !discordCallback) return <Navigate to="/?signin=1" replace />
     if (!onboardingDone) return <Onboarding />
     return content
   }

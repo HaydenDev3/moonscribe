@@ -270,13 +270,22 @@ export function AppProvider({ children }) {
         window.history.replaceState({}, '', window.location.pathname + window.location.hash)
         try {
           const oauthServer = discordServer()
-          const response = await fetch(`${oauthServer}${oauthCode ? '/api/auth/oauth/exchange' : '/api/auth/discord/exchange'}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: oauthCode || exchangeCode })
-          })
-          const account = await response.json()
-          if (!response.ok) throw new Error(account.error || 'Could not finish Discord sign-in.')
+          const exchangePath = oauthCode ? '/api/auth/oauth/exchange' : '/api/auth/discord/exchange'
+          const exchangeCodeValue = oauthCode || exchangeCode
+          const exchangeOrigins = [...new Set([oauthServer, typeof window !== 'undefined' ? window.location.origin : ''].filter(Boolean))]
+          let response = null
+          let account = null
+          let lastError = null
+          for (const origin of exchangeOrigins) {
+            try {
+              const candidate = await fetch(`${origin}${exchangePath}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: exchangeCodeValue }) })
+              const payload = await candidate.json().catch(() => ({}))
+              if (candidate.ok) { response = candidate; account = payload; break }
+              lastError = new Error(payload.error || `OAuth exchange failed at ${origin}.`)
+              if (candidate.status !== 404 && candidate.status !== 502 && candidate.status !== 503) break
+            } catch (error) { lastError = error }
+          }
+          if (!response || !account) throw lastError || new Error('Could not finish OAuth sign-in.')
           await setMeta('discordAvatar', account.avatar || null)
           await setMeta('discordUsername', account.username)
           await setMeta('authProvider', account.provider || oauthProvider || 'discord')
