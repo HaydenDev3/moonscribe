@@ -775,6 +775,21 @@ export function AppProvider({ children }) {
     return result
   }, [])
 
+  const completeTwoFactorSignIn = useCallback(async ({ server, userId, code, username }) => {
+    const base = (server || discordServer()).replace(/\/+$/, '')
+    const response = await fetch(`${base}/api/auth/verify-2fa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, code }),
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(result.error || 'That security code could not be confirmed.')
+    const connected = await syncEngine.connectWithToken({ server: base, token: result.token, username: result.username || username })
+    if (!connected.ok) throw new Error(connected.error || 'MoonScribe could not save the account session.')
+    setSync({ server: base, username: connected.username || result.username || username, status: 'synced', discordAvatar: null, provider: 'email' })
+    return { ok: true, username: connected.username || result.username || username }
+  }, [])
+
   useEffect(() => {
     const conceal = () => {
       if (settings.privacyBlur) document.documentElement.classList.add('privacy-hidden')
@@ -926,6 +941,7 @@ export function AppProvider({ children }) {
       connectDiscord,
       connectGoogle,
       sendMagicLink,
+      completeTwoFactorSignIn,
       disconnectSync,
       signOutOtherDevices,
       customFonts,
@@ -934,7 +950,7 @@ export function AppProvider({ children }) {
       deleteCustomFont,
       refreshSystemFonts,
     }),
-    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, sendMagicLink, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, authFlow]
+    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, sendMagicLink, completeTwoFactorSignIn, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, authFlow]
   )
 
   return (

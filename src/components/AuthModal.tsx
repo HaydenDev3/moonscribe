@@ -416,6 +416,7 @@ export default function AuthModal({
     connectDiscord,
     connectGoogle,
     connectSync,
+    completeTwoFactorSignIn,
     disconnectSync,
 
     signOutOtherDevices,
@@ -439,6 +440,11 @@ export default function AuthModal({
   const [magicEmail, setMagicEmail] = useState('')
   const [sentMagicEmail, setSentMagicEmail] = useState('')
   const [resetEmail, setResetEmail] = useState('')
+  const [resetCode, setResetCode] = useState('')
+  const [resetPassword, setResetPassword] = useState('')
+  const [resetSent, setResetSent] = useState(false)
+  const [twoFactor, setTwoFactor] = useState(null)
+  const [twoFactorCode, setTwoFactorCode] = useState('')
 
   const [busy, setBusy] = useState(false)
   const [busyProvider, setBusyProvider] = useState(null)
@@ -671,6 +677,13 @@ export default function AuthModal({
         password,
       })
 
+      if (result.requires2fa) {
+        setTwoFactor({ userId: result.userId, username: result.username || username, email: result.email || null })
+        setTwoFactorCode('')
+        toast?.('Enter the security code from your email.')
+        return
+      }
+
       if (result.ok) {
         setLibraryConflict(false)
 
@@ -698,6 +711,90 @@ export default function AuthModal({
         error?.message ||
         'Could not sign in.',
       )
+    } finally {
+      setBusy(false)
+      setBusyProvider(null)
+    }
+  }
+
+  const verifyTwoFactor = async (event) => {
+    event.preventDefault()
+    if (!twoFactor?.userId) {
+      toast?.('Start sign in again to request a fresh code.')
+      return
+    }
+    setBusy(true)
+    setBusyProvider('2fa')
+    try {
+      await completeTwoFactorSignIn({
+        server: apiBaseUrl(),
+        userId: twoFactor.userId,
+        code: twoFactorCode.trim(),
+        username: twoFactor.username,
+      })
+      setTwoFactor(null)
+      setTwoFactorCode('')
+      toast?.('Welcome back.')
+      onClose?.()
+    } catch (error) {
+      toast?.(error?.message || 'That security code could not be confirmed.')
+    } finally {
+      setBusy(false)
+      setBusyProvider(null)
+    }
+  }
+
+  const requestPasswordReset = async () => {
+    const email = resetEmail.trim().toLowerCase()
+    if (!email) {
+      toast?.('Enter your account email first.')
+      return
+    }
+    setBusy(true)
+    setBusyProvider('reset')
+    try {
+      const response = await fetch(`${apiBaseUrl()}/api/auth/request-password-reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Could not request a reset code.')
+      setResetEmail(result.email || email)
+      setResetSent(true)
+      toast?.('Reset code sent. Check your email.')
+    } catch (error) {
+      toast?.(error?.message || 'Could not request a reset code.')
+    } finally {
+      setBusy(false)
+      setBusyProvider(null)
+    }
+  }
+
+  const submitPasswordReset = async (event) => {
+    event.preventDefault()
+    setBusy(true)
+    setBusyProvider('reset-submit')
+    try {
+      const response = await fetch(`${apiBaseUrl()}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: resetEmail.trim().toLowerCase(),
+          code: resetCode.trim(),
+          password: resetPassword,
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Could not reset your password.')
+      setPassword(resetPassword)
+      setUsername(resetEmail.trim().toLowerCase())
+      setResetCode('')
+      setResetPassword('')
+      setResetSent(false)
+      toast?.('Password reset. You can sign in now.')
+    } catch (error) {
+      toast?.(error?.message || 'Could not reset your password.')
     } finally {
       setBusy(false)
       setBusyProvider(null)
@@ -1566,6 +1663,55 @@ export default function AuthModal({
           Use your MoonScribe email, username and password.
         </p>
 
+        {twoFactor && (
+          <form
+            onSubmit={verifyTwoFactor}
+            className="mt-6 rounded-[20px] border border-amber-400/20 bg-amber-400/[0.05] p-4"
+          >
+            <div className="mb-3 flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/10 text-amber-400">
+                <Icon icon="fa-solid fa-shield-halved" />
+              </span>
+              <div>
+                <strong className="block text-[11px] text-zinc-200">Security code required</strong>
+                <p className="mt-1 text-[9px] leading-relaxed text-zinc-600">
+                  Enter the 6-digit code sent to {twoFactor.email || 'your account email'}.
+                </p>
+              </div>
+            </div>
+            <AuthInput
+              label="Security code"
+              icon="fa-solid fa-key"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={twoFactorCode}
+              onChange={(event) => setTwoFactorCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="123456"
+              required
+              minLength={6}
+            />
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2 text-[9px] text-zinc-500"
+                onClick={() => {
+                  setTwoFactor(null)
+                  setTwoFactorCode('')
+                }}
+              >
+                Back
+              </button>
+              <button
+                type="submit"
+                disabled={busy || twoFactorCode.trim().length < 6}
+                className="rounded-lg bg-[#eee9df] px-3 py-2 text-[9px] font-semibold text-zinc-950 disabled:opacity-50"
+              >
+                {busyProvider === '2fa' ? 'Checking code…' : 'Verify & sign in'}
+              </button>
+            </div>
+          </form>
+        )}
+
         <form
           onSubmit={nativeAuth}
           className="
@@ -1679,9 +1825,17 @@ export default function AuthModal({
             <div className="mb-2 text-[10px] font-semibold text-zinc-300">Forgot your password?</div>
             <div className="flex gap-2">
               <input className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="Account email" />
-              <button type="button" className="rounded-lg bg-white/[0.08] px-3 py-2 text-[10px] text-zinc-200" onClick={async () => { try { const response = await fetch(`${apiBaseUrl()}/api/auth/request-password-reset`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: resetEmail }) }); const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || 'Could not request a reset code.'); toast?.('Reset code sent. Check your email.'); } catch (error) { toast?.(error?.message || 'Could not request a reset code.') } }}>Send code</button>
+              <button type="button" className="rounded-lg bg-white/[0.08] px-3 py-2 text-[10px] text-zinc-200 disabled:opacity-50" disabled={busyProvider === 'reset'} onClick={requestPasswordReset}>{resetSent ? 'Send again' : 'Send code'}</button>
             </div>
-            <p className="mt-2 text-[10px] text-zinc-600">We’ll send a short-lived verification code to your account email.</p>
+            {resetSent ? (
+              <form onSubmit={submitPasswordReset} className="mt-3 grid gap-3">
+                <input className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white" inputMode="numeric" autoComplete="one-time-code" value={resetCode} onChange={(event) => setResetCode(event.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="Reset code" required minLength={6} />
+                <input className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white" type="password" autoComplete="new-password" value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} placeholder="New password" required minLength={10} />
+                <button type="submit" className="rounded-lg bg-[#eee9df] px-3 py-2 text-[10px] font-semibold text-zinc-950 disabled:opacity-50" disabled={busyProvider === 'reset-submit' || resetCode.length < 6 || resetPassword.length < 10}>{busyProvider === 'reset-submit' ? 'Resetting…' : 'Reset password'}</button>
+              </form>
+            ) : (
+              <p className="mt-2 text-[10px] text-zinc-600">We’ll send a short-lived verification code to your account email.</p>
+            )}
           </div>
         )}
 

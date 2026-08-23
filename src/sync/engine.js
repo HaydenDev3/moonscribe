@@ -522,6 +522,10 @@ export async function connect({ url, mode = 'login', username, password, replace
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || 'Could not connect — is the server running?')
+    if (data.requires2fa) {
+      setStatus('attention', 'Security code required.')
+      return { ok: false, requires2fa: true, userId: data.userId, username: data.username, email: data.email || null }
+    }
     if (await getMeta('guestMode', false)) await migrateGuestToAccount(data.accountId)
     await bindLocalLibrary(data.accountId, { replaceOwner: replaceLocal })
     await setConfig({ server: base, token: data.token, accountId: data.accountId, username: data.username })
