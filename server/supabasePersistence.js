@@ -18,7 +18,24 @@ export async function mirrorUserProfile(db, userId) {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
   if (!user) return
   const provider = user.discord_id ? 'discord' : user.google_id ? 'google' : 'password'
-  const { error } = await supabasePersistence.from('moonscribe_users').upsert({ id: String(user.id), email: user.email || null, username: user.username || null, password_hash: user.password_hash || null, display_name: user.username || null, provider, provider_subject: user.discord_id || user.google_id || null, avatar_url: user.discord_avatar || user.google_avatar || null, email_verified: Boolean(user.email_verified), disabled_at: user.disabled_at ? new Date(user.disabled_at).toISOString() : null, created_at: new Date(user.created_at || Date.now()).toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'id' })
+  const providerSubject = user.discord_id || user.google_id || null
+  // SQLite is the active identity source, but Supabase can retain a row from
+  // an older deployment or a previous local database. Reconcile by identity
+  // before upserting by id, otherwise a unique provider/email constraint turns
+  // a successful OAuth login into a 500 response.
+  const identityMatches = []
+  if (providerSubject) {
+    const { data, error } = await supabasePersistence.from('moonscribe_users').select('id').eq('provider', provider).eq('provider_subject', providerSubject).maybeSingle()
+    if (error) throw error
+    if (data?.id && String(data.id) !== String(user.id)) identityMatches.push(String(data.id))
+  }
+  if (user.email) {
+    const { data, error } = await supabasePersistence.from('moonscribe_users').select('id').eq('email', user.email).maybeSingle()
+    if (error) throw error
+    if (data?.id && String(data.id) !== String(user.id)) identityMatches.push(String(data.id))
+  }
+  for (const sourceId of [...new Set(identityMatches)]) await mergeSupabaseUser(sourceId, user.id)
+  const { error } = await supabasePersistence.from('moonscribe_users').upsert({ id: String(user.id), email: user.email || null, username: user.username || null, password_hash: user.password_hash || null, display_name: user.username || null, provider, provider_subject: providerSubject, avatar_url: user.discord_avatar || user.google_avatar || null, email_verified: Boolean(user.email_verified), disabled_at: user.disabled_at ? new Date(user.disabled_at).toISOString() : null, created_at: new Date(user.created_at || Date.now()).toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'id' })
   if (error) throw error
 }
 

@@ -18,7 +18,7 @@ beforeEach(async () => {
 describe('searchAll', () => {
   it('returns an empty grouped shape for an empty query', async () => {
     const res = await searchAll('   ')
-    expect(res).toEqual({ novels: [], chapters: [], characters: [], notes: [], world: [], relationships: [], glossary: [] })
+    expect(res).toEqual({ novels: [], chapters: [], characters: [], notes: [], world: [], relationships: [], glossary: [], media: [] })
   })
 
   it('groups results across every store', async () => {

@@ -29,6 +29,19 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = join(ROOT, 'dist')
 const PORT = Number(process.env.PORT || 3001)
 const notificationSockets = new Map()
+
+function describeSupabaseError(error) {
+  if (!error) return 'Unknown Supabase error'
+  if (typeof error === 'string') return error
+  return JSON.stringify({
+    name: error.name,
+    message: error.message,
+    code: error.code,
+    details: error.details,
+    hint: error.hint,
+    status: error.status,
+  })
+}
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID)
 const CANONICAL_WEB_ORIGIN = 'https://moonscribe.cc'
 
@@ -152,7 +165,7 @@ function issueToken(db, userId, { deviceId = null, deviceName = 'Unknown device'
   db.prepare('INSERT INTO tokens (token_hash, user_id, created_at, expires_at, device_id, device_name, last_seen_at, session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
     sha(token), userId, Date.now(), expiresAt, deviceId, deviceName.slice(0, 120), Date.now(), sessionId
   )
-  if (supabasePersistenceEnabled) mirrorUserAndSession(db, userId, { token: sha(token), expiresAt, sessionId, deviceId, deviceName: deviceName.slice(0, 120) }).catch((error) => console.error('[supabase] session mirror failed', JSON.stringify(error)))
+  if (supabasePersistenceEnabled) mirrorUserAndSession(db, userId, { token: sha(token), expiresAt, sessionId, deviceId, deviceName: deviceName.slice(0, 120) }).catch((error) => console.error('[supabase] session mirror failed', describeSupabaseError(error)))
   return { token, expiresAt, sessionId }
 }
 
@@ -1456,10 +1469,11 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     if (path === '/api/auth/sessions' && req.method === 'GET') {
       const currentHash = sha((req.headers.authorization || '').replace(/^Bearer\s+/i, ''))
       const sessions = database.prepare(
-        'SELECT token_hash, session_id, created_at, expires_at, device_name, last_seen_at FROM tokens WHERE user_id = ? ORDER BY last_seen_at DESC'
+        'SELECT token_hash, session_id, device_id, created_at, expires_at, device_name, last_seen_at FROM tokens WHERE user_id = ? ORDER BY last_seen_at DESC'
       ).all(userId).map((row) => ({
         current: row.token_hash === currentHash,
         id: row.session_id,
+        deviceId: row.device_id || null,
         createdAt: row.created_at,
         expiresAt: row.expires_at,
         deviceName: row.device_name || 'Unknown device',
@@ -1761,7 +1775,10 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
               // Cloud mirroring is deliberately after the local commit: a
               // transient Supabase outage must never discard an offline-safe
               // local write. The next startup migration repairs any gap.
-              mirrorRecords(cloudRecords).catch((error) => console.error('[supabase] record mirror failed', String(error)))
+              mirrorRecords(cloudRecords).catch((error) => console.error('[supabase] record mirror failed', describeSupabaseError(error), {
+                count: cloudRecords.length,
+                stores: [...new Set(cloudRecords.map((record) => record.store).filter(Boolean))],
+              }))
             }
             json(res, 200, { ok: true, serverTime: Date.now(), accepted, rejected })
           } catch (err) {

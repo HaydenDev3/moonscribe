@@ -25,6 +25,7 @@ import { searchAll } from '../db/search'
 import { acceptShareInvite } from '../sync/engine'
 import DashboardHome from '../dashboard/DashboardHome'
 import ProfileAvatar from '../components/ProfileAvatar'
+import GlobalMedia from '../dashboard/GlobalMedia'
 
 const COVER_STYLES = [
   { key: 'moonstone', label: 'Moonstone' },
@@ -46,6 +47,7 @@ const COLLECTIONS = [
 ]
 
 const DEFAULT_DASHBOARD_WIDGETS = ['today', 'pulse', 'recent', 'progress']
+const MAX_NOVELS_PER_USER = 15
 const DASHBOARD_WIDGETS = ['today', 'recent', 'pulse', 'progress', 'editing', 'health', 'quickCapture']
 
 const WRITING_QUOTES = [
@@ -333,7 +335,7 @@ export default function Dashboard() {
     }
   })
   const libraryRef = useRef<HTMLDivElement | null>(null)
-  const [dashboardView, setDashboardView] = useState<'home' | 'library' | 'journal' | 'insights'>('home')
+  const [dashboardView, setDashboardView] = useState<'home' | 'library' | 'media' | 'journal' | 'insights'>('home')
   const dashboardWidgetsKey = `dashboardWidgets:${syncUsername || 'local'}`
 
   useEffect(() => {
@@ -560,6 +562,10 @@ export default function Dashboard() {
   }
 
   const handleCreate = async ({ title, blurb, coverStyle, genres, series, template }) => {
+    if (novels.filter((novel) => !novel.archived).length >= MAX_NOVELS_PER_USER) {
+      toast(`MoonScribe supports up to ${MAX_NOVELS_PER_USER} active novels per user. Archive one before creating another.`)
+      return
+    }
     const novel = await createNovel({ title, blurb, coverStyle, genres, series })
     const tpl = NOVEL_TEMPLATES.find((t) => t.key === template) || NOVEL_TEMPLATES[0]
     for (const c of tpl.chapters) {
@@ -658,6 +664,7 @@ export default function Dashboard() {
         onHome={() => setDashboardView('home')}
         onContinue={openResume}
         onLibrary={() => setDashboardView('library')}
+        onMedia={() => setDashboardView('media')}
         onJournal={() => setDashboardView('journal')}
         onInsights={() => setDashboardView('insights')}
         onSearch={openSearch}
@@ -875,6 +882,7 @@ export default function Dashboard() {
         )}
         </section>
         }
+        {dashboardView === 'media' && <GlobalMedia novels={novels} onOpenNovel={(novelId) => navigate(`/novel/${novelId}/media`)} />}
         {dashboardView === 'journal' && <DashboardJournal novel={resumeNovel} analytics={analytics} onOpen={() => resumeNovel && navigate(`/novel/${resumeNovel.id}/writing-journal`)} />}
         {dashboardView === 'insights' && <DashboardInsights analytics={analytics} data={dashboardData} onOpen={() => resumeNovel && navigate(`/novel/${resumeNovel.id}/analytics`)} />}
         </div>
@@ -933,7 +941,7 @@ function HeroCard({ novel, chapter, counts, todayWords, streak, onOpen, onOpenCh
   )
 }
 
-function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLibrary, onJournal, onInsights, onSearch, onNew, onOpenChapter, onSettings, onAdmin, syncUsername, syncStatus, syncAvatar, syncProvider, onSync, resumeChapter, recent, showCurrentStory = true }) {
+function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLibrary, onMedia, onJournal, onInsights, onSearch, onNew, onOpenChapter, onSettings, onAdmin, syncUsername, syncStatus, syncAvatar, syncProvider, onSync, resumeChapter, recent, showCurrentStory = true }) {
   const { openContextMenu } = useContextMenu()
   const openProfileMenu = (event) => {
     event.preventDefault()
@@ -960,6 +968,7 @@ function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLib
       <nav className="dashboard-sidebar-nav" aria-label="Dashboard navigation">
         {item('home', 'Home', 'fa-solid fa-house', onHome)}
         {item('library', 'Library', 'fa-solid fa-book', onLibrary)}
+        {item('media', 'Media Library', 'fa-regular fa-images', onMedia)}
         {item('journal', 'Writing journal', 'fa-solid fa-feather-pointed', onJournal)}
         {item('insights', 'Insights', 'fa-solid fa-chart-line', onInsights)}
         <button className="dashboard-sidebar-item" onClick={onSearch} title={collapsed ? 'Search MoonScribe' : undefined}><Icon icon="fa-solid fa-magnifying-glass" /><span className="dashboard-sidebar-label">Search</span></button>

@@ -1,4 +1,5 @@
 import { getDB } from './db'
+import { listMoodboard } from './moodboard'
 
 // Offline, structure-aware search across every novel. Grouped results feed
 // the command palette (Ctrl+K). A simple lowercase substring match over the
@@ -6,7 +7,7 @@ import { getDB } from './db'
 // long-manuscript phase adds a proper inverted index.
 export async function searchAll(query) {
   const q = (query || '').trim().toLowerCase()
-  const empty = { novels: [], chapters: [], characters: [], notes: [], world: [], relationships: [], glossary: [] }
+  const empty = { novels: [], chapters: [], characters: [], notes: [], world: [], relationships: [], glossary: [], media: [] }
   if (!q) return empty
 
   const db = await getDB()
@@ -83,6 +84,14 @@ export async function searchAll(query) {
     }
   }
 
+  const media = []
+  for (const novel of novels) {
+    for (const item of (await listMoodboard(novel.id)).filter((tile) => tile.kind === 'image' && tile.image)) {
+      const title = item.text || 'Untitled image'
+      if (matches(`${title} ${novel.title}`)) media.push({ id: item.id, novelId: novel.id, title, subtitle: novel.title, score: rank(title) })
+    }
+  }
+
   return {
     novels: novelResults,
     chapters: sortTop(chapters),
@@ -90,6 +99,7 @@ export async function searchAll(query) {
     notes: sortTop(notes),
     world: sortTop(world),
     relationships: sortTop(relationships),
-    glossary: sortTop(glossary)
+    glossary: sortTop(glossary),
+    media: sortTop(media)
   }
 }

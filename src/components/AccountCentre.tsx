@@ -5,7 +5,7 @@ import { accountProfile, getConfig, listSessions, revokeSession, setConfig } fro
 import Icon from './Icon'
 
 type Account = { id: string; username: string; email: string | null; provider: 'discord' | 'google' | 'email'; discordUsername?: string | null; discordAvatar?: string | null; emailVerified: boolean; twoFactorEnabled: boolean; createdAt: number; role?: string; roles?: string[]; linkedProviders?: { discord?: boolean; google?: boolean; password?: boolean } }
-type Session = { id: string; current: boolean; deviceName: string; createdAt: number; lastSeenAt: number }
+type Session = { id: string; deviceId?: string | null; current: boolean; deviceName: string; createdAt: number; lastSeenAt: number }
 type Notice = { id: string; title: string; body: string; category?: string; type?: string; createdAt: number }
 
 const nav = [['overview', 'Overview', 'fa-solid fa-house'], ['profile', 'Profile', 'fa-solid fa-user'], ['email', 'Email & password', 'fa-solid fa-envelope'], ['connections', 'Connections', 'fa-solid fa-link'], ['sessions', 'Sessions', 'fa-solid fa-laptop'], ['security', 'Security activity', 'fa-solid fa-shield-halved']]
@@ -44,7 +44,8 @@ export default function AccountCentre({ onClose }: { onClose: () => void }) {
       const [profile, activeSessions, noticeResponse] = await Promise.all([accountProfile(config.server, config.token), listSessions(), fetch(`${config.server.replace(/\/$/, '')}/api/notifications`, { headers: { Authorization: `Bearer ${config.token}` } })])
       const noticeData = await noticeResponse.json().catch(() => ({}))
       if (!noticeResponse.ok) throw new Error(noticeData.error || 'Could not load security activity.')
-      setAccount(profile); setEmail(profile.email || ''); setUsername(profile.username || ''); setProfileDraft({ displayName: app.settings?.displayName || '', writerName: app.settings?.writerName || '', profileBio: app.settings?.profileBio || '', timezone: app.settings?.timezone || 'UTC', language: app.settings?.language || 'en-AU' }); setSessions(activeSessions); setNotices(noticeData.notifications || [])
+      const uniqueSessions = activeSessions.filter((session, index, list) => !session.deviceId || list.findIndex((candidate) => candidate.deviceId === session.deviceId) === index)
+      setAccount(profile); setEmail(profile.email || ''); setUsername(profile.username || ''); setProfileDraft({ displayName: app.settings?.displayName || '', writerName: app.settings?.writerName || '', profileBio: app.settings?.profileBio || '', timezone: app.settings?.timezone || 'UTC', language: app.settings?.language || 'en-AU' }); setSessions(uniqueSessions); setNotices(noticeData.notifications || [])
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load account data.') }
     finally { setLoading(false) }
   }, [])

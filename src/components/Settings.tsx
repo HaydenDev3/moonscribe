@@ -17,6 +17,7 @@ import { NOVEL_NAV } from '../nav'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { capabilities } from '../platform/capabilities'
 import UpdateSettings from './UpdateSettings'
+import { DEFAULT_KEYBINDS, KEYBIND_LABELS, formatKeybind, keybindConflicts, keybindFromEvent, keybindsWithDefaults } from '../utils/keybinds'
 
 const IDLE_OPTIONS = [
   { value: '0', label: 'Never' },
@@ -64,8 +65,8 @@ export default function Settings() {
 
   useEffect(() => {
     const onKey = (e) => {
-      const mod = e.ctrlKey || e.metaKey
-      if (mod && (e.key === 'p' || e.key === 'P')) {
+      const shortcut = settings.keybinds?.settings || 'Mod+P'
+      if (keybindFromEvent(e) === shortcut) {
         e.preventDefault()
         if (settingsOpen) closeSettings()
         else openSettings()
@@ -75,7 +76,7 @@ export default function Settings() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [settingsOpen, connectOpen, openSettings, closeSettings])
+  }, [settings.keybinds, settingsOpen, connectOpen, openSettings, closeSettings])
 
   useEffect(() => {
     const search = (event) => setQuery(event.detail || '')
@@ -133,7 +134,7 @@ export default function Settings() {
           {!query && cat === 'performance' && <Performance settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'updates' && capabilities.nativeUpdater && <UpdateSettings />}
           {!query && cat === 'accessibility' && <Accessibility settings={settings} updateSettings={updateSettings} />}
-          {!query && cat === 'keybinds' && <Keybinds />}
+          {!query && cat === 'keybinds' && <Keybinds settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'lock' && (
             <LockSecurity appLock={appLock} enableAppLock={enableAppLock} updateAppLock={updateAppLock} disableAppLock={disableAppLock} lockNow={lockNow} toast={toast} settings={settings} updateSettings={updateSettings} />
           )}
@@ -407,10 +408,10 @@ function AccountSessions() {
 
   return (
     <div className="settings-section-card">
-      <div className="settings-section-head"><span className="settings-section-icon"><Icon icon="fa-solid fa-shield-halved" /></span><div><strong>Security &amp; signed-in devices</strong><small>Discord verifies your identity; MoonScribe keeps a separate revocable session for each device.</small></div><span className="settings-status-pill safe">Protected</span></div>
-      {profile && <div className="settings-detail-grid"><span><small>Account</small><b>{profile.username}</b></span><span><small>Provider</small><b>{profile.provider === 'discord' ? 'Discord OAuth' : 'MoonScribe'}</b></span><span><small>Member since</small><b>{new Date(profile.createdAt).toLocaleDateString()}</b></span></div>}
+      {profile && <div className="settings-section-head"><span className="settings-section-icon"><Icon icon="fa-solid fa-shield-halved" /></span><div><strong>Security &amp; signed-in devices</strong><small>{profile.emailVerified ? 'Your identity is verified; review devices you no longer use.' : 'Verify your email to strengthen account recovery and enable two-factor authentication.'}</small></div><span className={`settings-status-pill ${profile.emailVerified && profile.twoFactorEnabled ? 'safe' : 'warn'}`}>{profile.emailVerified && profile.twoFactorEnabled ? 'Protected' : 'Needs attention'}</span></div>}
+      {profile && <div className="settings-detail-grid"><span><small>Account</small><b>{profile.username}</b></span><span><small>Provider</small><b>{profile.provider === 'discord' ? 'Discord OAuth' : profile.provider === 'google' ? 'Google OAuth' : 'MoonScribe'}</b></span><span><small>Email</small><b>{profile.emailVerified ? 'Verified' : 'Unverified'}</b></span><span><small>Member since</small><b>{new Date(profile.createdAt).toLocaleDateString()}</b></span></div>}
       <div className="settings-subheading">Active sessions</div>
-      {loading && !sessions.length ? <p className="muted small">Checking devices…</p> : sessions.map((session) => (
+      {loading && !sessions.length ? <p className="muted small">Checking devices…</p> : !sessions.length ? <p className="muted small">No active sessions were returned. Try refreshing.</p> : sessions.map((session) => (
         <div className="settings-row" key={session.id}>
           <div><div className="settings-row-title">{session.deviceName || 'Unknown device'} {session.current ? <span className="settings-status-pill safe">This device</span> : null}</div><div className="settings-row-sub">Last active {new Date(session.lastSeenAt).toLocaleString()}</div></div>
           {!session.current && <button className="button button-secondary" onClick={() => revoke(session.id)}>Revoke</button>}
@@ -842,16 +843,12 @@ function Performance({ settings, updateSettings }) {
   )
 }
 
-const KEYBINDS = [
-  ['Ctrl K', 'Search and jump anywhere'], ['Ctrl P', 'Open Settings'], ['Ctrl S', 'Save now'],
-  ['Ctrl Z / Ctrl Y', 'Undo / redo'], ['Ctrl B / I / U', 'Bold / italic / underline'],
-  ['Ctrl K in editor', 'Insert link'], ['Ctrl Shift E', 'Insert scene break'],
-  ['Ctrl Shift P', 'Insert page break'], ['Ctrl Shift H', 'Remove highlighting'],
-  ['Ctrl 1 / Ctrl 2', 'Heading levels'], ['Esc', 'Close the active panel or modal'],
-]
-
-function Keybinds() {
-  return <section className="settings-panel"><h2>Keybinds</h2><p className="muted">A familiar writing workflow without reaching for the mouse.</p><div className="keybind-grid">{KEYBINDS.map(([keys, action]) => <div className="keybind-row" key={keys}><span>{action}</span><kbd>{keys}</kbd></div>)}</div></section>
+function Keybinds({ settings, updateSettings }) {
+  const bindings = keybindsWithDefaults(settings.keybinds)
+  const conflicts = keybindConflicts(bindings)
+  const [recording, setRecording] = useState('')
+  const setBinding = (id, value) => updateSettings({ keybinds: { ...bindings, [id]: value } })
+  return <section className="settings-panel"><h2>Keybinds</h2><p className="muted">Choose shortcuts that fit your hands. Click a shortcut, then press the keys you want to use.</p><div className="keybind-grid">{Object.entries(KEYBIND_LABELS).map(([id, action]) => <div className={`keybind-row ${conflicts.has(id) ? 'keybind-conflict' : ''}`} key={id}><span><strong>{action}</strong>{conflicts.has(id) && <small>Shortcut conflicts with another action.</small>}</span><button type="button" className="keybind-editor" onClick={() => setRecording(id)}>{recording === id ? 'Press keys…' : formatKeybind(bindings[id])}</button>{recording === id && <input autoFocus className="keybind-capture" aria-label={`New shortcut for ${action}`} onKeyDown={(event) => { event.preventDefault(); if (event.key === 'Escape') { setRecording(''); return } const value = event.key === 'Backspace' ? '' : keybindFromEvent(event); if (value) { setBinding(id, value); setRecording('') } }} />}</div>)}</div><div className="keybind-actions"><button className="button button-secondary" type="button" onClick={() => updateSettings({ keybinds: { ...DEFAULT_KEYBINDS } })}>Restore defaults</button><span className="muted small">Shortcuts use Ctrl on Windows/Linux and Command on macOS.</span></div></section>
 }
 
 function Accessibility({ settings, updateSettings }) {

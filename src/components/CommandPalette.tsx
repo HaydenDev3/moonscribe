@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { searchAll } from '../db/search'
 import Icon from './Icon'
 import { useApp } from '../context/AppContext'
+import { keybindFromEvent } from '../utils/keybinds'
 
 // Command palette / smart search. Opened with Ctrl+K or Ctrl+Shift+P.
 // Results are grouped by Chapters, Characters, Notes, Worldbuilding,
@@ -16,6 +17,7 @@ const GROUPS = [
   { key: 'glossary', label: 'Glossary', icon: 'fa-solid fa-book-open' },
   { key: 'relationships', label: 'Relationships', icon: 'fa-regular fa-heart' },
   { key: 'novels', label: 'Novels', icon: 'fa-solid fa-book' }
+  ,{ key: 'media', label: 'Media', icon: 'fa-regular fa-images' }
   ,{ key: 'settings', label: 'Settings', icon: 'fa-solid fa-sliders' }
 ]
 const SETTING_RESULTS = [
@@ -32,13 +34,13 @@ export default function CommandPalette() {
   const [active, setActive] = useState(0)
   const inputRef = useRef(null)
   const navigate = useNavigate()
-  const { openSettings } = useApp()
+  const { openSettings, settings } = useApp()
 
   // Global shortcuts: Ctrl+K / Ctrl+Shift+P toggles, Esc closes.
   useEffect(() => {
     const onKey = (e) => {
-      const mod = e.ctrlKey || e.metaKey
-      if (mod && (e.key === 'k' || e.key === 'K')) {
+      const shortcut = settings.keybinds?.commandPalette || 'Mod+K'
+      if (keybindFromEvent(e) === shortcut) {
         e.preventDefault()
         setOpen((o) => !o)
       } else if (e.key === 'Escape') {
@@ -47,7 +49,7 @@ export default function CommandPalette() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [settings.keybinds])
 
   useEffect(() => {
     if (!open) return
@@ -100,6 +102,10 @@ export default function CommandPalette() {
       }
       if (group === 'chapters') {
         navigate(`/novel/${r.novelId}`, { state: { chapterId: r.id } })
+        return
+      }
+      if (group === 'media') {
+        navigate(`/novel/${r.novelId}/media`)
         return
       }
       navigate(`/novel/${r.novelId}/${SECTION_FOR[group]}`)

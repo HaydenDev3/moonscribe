@@ -256,6 +256,18 @@
 .dashboard-sidebar-item.active { color: var(--accent-fg); border-left: 2px solid var(--moon); border-radius: 0 7px 7px 0; background: linear-gradient(90deg, color-mix(in srgb, var(--moon) 12%, transparent), color-mix(in srgb, var(--moon) 3%, transparent), transparent); }
 .dashboard-sidebar-item i { text-align: center; font-size: .72rem; }
 .dashboard-sidebar-item small { color: var(--grey-soft); font-size: .64rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.global-media-page { min-height: 100%; padding: clamp(20px, 4vw, 52px) clamp(12px, 3vw, 36px) 42px; }
+.global-media-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; max-width: 1120px; margin: 0 auto 28px; }
+.global-media-heading h1 { margin: 5px 0 4px; font: 600 clamp(1.8rem, 3vw, 2.7rem) var(--font-heading); letter-spacing: -.04em; }
+.global-media-heading p { margin: 0; color: var(--grey); }
+.global-media-count { display: grid; grid-template-columns: auto auto; align-items: center; column-gap: 8px; padding: 14px 18px; border: 1px solid var(--border-soft); border-radius: 14px; background: var(--surface); color: var(--grey); }
+.global-media-count i { grid-row: span 2; color: var(--moon); font-size: 1.1rem; }.global-media-count strong { color: var(--charcoal); font: 600 1.1rem var(--font-heading); }.global-media-count span { font-size: .68rem; }
+.global-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 16px; max-width: 1120px; margin: 0 auto; }
+.global-media-card { overflow: hidden; padding: 0; border: 1px solid var(--border-soft); border-radius: 14px; background: var(--surface); color: var(--charcoal); text-align: left; cursor: pointer; box-shadow: var(--shadow-sm); transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+.global-media-card:hover { transform: translateY(-3px); border-color: var(--moon); box-shadow: var(--shadow-md); }.global-media-card img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--surface-warm); }.global-media-card span { display: grid; gap: 3px; padding: 11px 12px 13px; }.global-media-card strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .78rem; }.global-media-card small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--grey-soft); font-size: .68rem; }
+.global-media-empty { display: grid; place-items: center; min-height: 300px; max-width: 1120px; margin: 0 auto; border: 1px dashed var(--border); border-radius: 18px; color: var(--grey); text-align: center; }.global-media-empty i { color: var(--moon); font-size: 1.5rem; }.global-media-empty h2 { margin: 12px 0 4px; color: var(--charcoal); font: 600 1.2rem var(--font-heading); }.global-media-empty p { margin: 0; }
+.global-media-toolbar { display: flex; gap: 10px; max-width: 1120px; margin: 0 auto 12px; }.global-media-toolbar label:not(.global-media-upload) { display: flex; align-items: center; gap: 8px; flex: 1; padding: 9px 12px; border: 1px solid var(--border-soft); border-radius: 10px; background: var(--surface); color: var(--grey-soft); }.global-media-toolbar input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--charcoal); }.global-media-toolbar select { border: 1px solid var(--border-soft); border-radius: 10px; background: var(--surface); color: var(--charcoal); padding: 0 12px; }.global-media-upload { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--moon); border-radius: 10px; background: var(--moon); color: var(--accent-fg); padding: 0 14px; cursor: pointer; font-size: .76rem; font-weight: 600; }.global-media-dropzone { display: flex; justify-content: center; align-items: center; gap: 9px; max-width: 1120px; min-height: 44px; margin: 0 auto 20px; border: 1px dashed var(--border); border-radius: 12px; color: var(--grey-soft); font-size: .72rem; }.global-media-dropzone.is-dragging { border-color: var(--moon); background: var(--accent-soft); color: var(--charcoal); }.global-media-card { position: relative; display: block; width: 100%; }.global-media-context { position: fixed; z-index: 1200; }.global-media-card > span small { display: block; }
+@media (max-width: 700px) { .global-media-toolbar { flex-wrap: wrap; }.global-media-toolbar label:not(.global-media-upload) { flex-basis: 100%; min-height: 38px; }.global-media-toolbar select, .global-media-upload { min-height: 38px; } }
 .dashboard-sidebar-bottom { margin-top: auto; display: grid; gap: 2px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--border) 64%, transparent); }
 .dashboard-sidebar-account { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--grey); padding: 9px 8px; cursor: pointer; text-align: left; }
 .dashboard-sidebar-account small { display: block; color: var(--grey-soft); font-size: .63rem; margin-top: 2px; }
@@ -1599,6 +1611,28 @@
   font-size: 1.55rem; font-weight: 500; font-style: italic;
   margin: 1.6em 0 0.6em; letter-spacing: -0.01em;
 }
+
+/* Quiet writing surface: a readable page with a restrained desk and a compact
+   toolbar. The existing editor keeps its document model and pagination while
+   this layer makes long sessions feel less like a form. */
+.editor-shell { background: var(--surface); }
+.editor-toolbar { position: relative; z-index: 20; box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 55%, transparent); }
+.editor-wrap { background: radial-gradient(circle at 50% 0, color-mix(in srgb, var(--accent) 7%, transparent), transparent 42%), var(--surface-soft); }
+.editor-desk { padding: clamp(28px, 5vw, 64px) clamp(16px, 4vw, 56px) 120px; }
+.editor-canvas { max-width: min(820px, 100%); border-radius: 10px; box-shadow: 0 18px 55px rgba(0,0,0,.18), 0 1px 3px rgba(0,0,0,.16); --canvas-pad-h: clamp(42px, 9vw, 112px); --canvas-pad-v: clamp(48px, 8vw, 92px); }
+.editor-canvas .prose, .editor-canvas [contenteditable] { max-width: 68ch; margin-inline: auto; font-size: clamp(.98rem, 1.1vw, 1.08rem); line-height: 1.82; }
+.editor-canvas [contenteditable]:empty::before { color: #7e7b75; }
+.editor-head { max-width: 68ch; margin-inline: auto; }
+.keybind-row { align-items: center; gap: 14px; }
+.keybind-row > span { min-width: 0; flex: 1; display: grid; gap: 4px; }
+.keybind-row > span strong { font-weight: 600; }
+.keybind-row > span small { color: var(--rose-deep); font-size: .72rem; }
+.keybind-editor { min-width: 132px; padding: 7px 11px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-soft); color: var(--charcoal); font: 600 .75rem var(--font-ui); cursor: pointer; }
+.keybind-editor:hover, .keybind-editor:focus-visible { border-color: var(--accent); color: var(--accent); }
+.keybind-capture { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.keybind-conflict .keybind-editor { border-color: var(--rose); color: var(--rose-deep); }
+.keybind-actions { display: flex; align-items: center; gap: 14px; margin-top: 18px; }
+@media (max-width: 680px) { .editor-canvas { border-radius: 0; box-shadow: none; } .editor-desk { padding-inline: 0; } .keybind-row { align-items: flex-start; flex-direction: column; } .keybind-editor { width: 100%; } .keybind-actions { align-items: flex-start; flex-direction: column; } }
 .editor-canvas [contenteditable] h3 {
   font-family: var(--font-chapter);
   font-size: 1.2rem; font-weight: 400; font-style: italic;
@@ -5758,6 +5792,104 @@ body::after {
                    background: none; box-shadow: none; }
   .pg-break::before, .pg-break::after { display: none; }
   .pg-auto-break > * { display: none; }
+}
+
+/* Paged mode must remain a paper surface inside the dark writing desk. */
+.editor-wrap:has(.editor-canvas-paged) {
+  overflow-x: auto;
+  overflow-y: scroll;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 50% 0, rgba(218, 185, 120, .08), transparent 34%),
+    linear-gradient(180deg, #303033 0%, #38383b 48%, #303033 100%);
+}
+
+.editor-canvas-paged {
+  flex: 0 0 var(--pg-width);
+  box-sizing: border-box;
+  width: var(--pg-width) !important;
+  max-width: none !important;
+  min-height: var(--pg-height) !important;
+  margin: 36px auto 80px;
+  padding: 0 !important;
+  background: #e8e2d8 !important;
+  color: #1a1a1a !important;
+  border: 1px solid rgba(74, 61, 43, .20);
+  border-radius: 4px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .24), 0 2px 10px rgba(0, 0, 0, .14);
+}
+
+.editor-canvas-paged .editor-head,
+.editor-canvas-paged .prose {
+  background: #e8e2d8 !important;
+  color: #1a1a1a !important;
+}
+
+.editor-canvas-paged .editor-head { box-sizing: border-box; }
+.editor-canvas-paged .prose {
+  box-sizing: border-box;
+  min-height: calc(var(--pg-height) - var(--page-margin-top));
+  overflow: visible;
+  color: #1a1a1a !important;
+}
+
+.editor-canvas-paged .prose img,
+.editor-canvas-paged .prose video,
+.editor-canvas-paged .prose canvas,
+.editor-canvas-paged .prose iframe,
+.editor-canvas-paged .prose table,
+.editor-canvas-paged .prose pre,
+.editor-canvas-paged .prose figure {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+.editor-canvas-paged .prose img,
+.editor-canvas-paged .prose video,
+.editor-canvas-paged .prose canvas { height: auto; }
+.editor-canvas-paged .prose pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.editor-canvas-paged .pg-auto-break,
+.editor-canvas-paged .pg-break {
+  width: calc(100% + var(--page-margin-left) + var(--page-margin-right)) !important;
+  margin-left: calc(-1 * var(--page-margin-left)) !important;
+  margin-right: calc(-1 * var(--page-margin-right)) !important;
+  background: transparent !important;
+  border: 0;
+  box-shadow: none;
+}
+
+.editor-canvas-paged .pg-auto-break::before,
+.editor-canvas-paged .pg-break::before {
+  top: calc(100% - 28px);
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: linear-gradient(180deg, rgba(48, 48, 51, .98), rgba(58, 58, 61, .98));
+  box-shadow: inset 0 1px rgba(255,255,255,.045), inset 0 -1px rgba(0,0,0,.2);
+}
+
+.editor-canvas-paged .pg-auto-break::after,
+.editor-canvas-paged .pg-break::after {
+  left: 50%;
+  right: auto;
+  width: max-content;
+  min-width: 0;
+  transform: translateX(-50%);
+  top: calc(100% - 22px);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(239, 211, 163, .72);
+  letter-spacing: .16em;
+  box-shadow: none;
+}
+
+.editor-canvas-paged .pg-break::after { content: 'page break'; }
+
+@media (max-width: 760px) {
+  .editor-wrap:has(.editor-canvas-paged) { justify-content: flex-start; }
+  .editor-canvas-paged { margin-left: 16px; margin-right: 16px; }
 }
 
 .editor-page-status {

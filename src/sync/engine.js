@@ -219,7 +219,7 @@ export async function validateSession() {
 export async function refreshSession() {
   const cfg = await getConfig()
   if (!cfg.server || !cfg.token) return { ok: false, reason: 'NO_SESSION' }
-  const res = await fetch(`${apiBase(cfg)}/api/auth/session/refresh`, { method: 'POST', headers: { Authorization: `Bearer ${cfg.token}` } })
+  const res = await fetch(`${apiBase(cfg)}/api/auth/session/refresh`, { method: 'POST', headers: { Authorization: `Bearer ${cfg.token}`, ...(await deviceHeaders()) } })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     const error = new Error(data.error || 'Session refresh failed.')
@@ -573,7 +573,7 @@ export async function signOutOtherDevices() {
   const cfg = await getConfig()
   if (!cfg.server || !cfg.token) throw new Error('Sign in first.')
   const res = await fetch(`${apiBase(cfg)}/api/auth/logout-others`, {
-    method: 'POST', headers: { Authorization: `Bearer ${cfg.token}` }
+    method: 'POST', headers: { Authorization: `Bearer ${cfg.token}`, ...(await deviceHeaders()) }
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Could not sign out other devices.')
@@ -583,7 +583,7 @@ export async function signOutOtherDevices() {
 export async function listSessions() {
   const cfg = await getConfig()
   if (!cfg.server || !cfg.token) return []
-  const res = await fetch(`${apiBase(cfg)}/api/auth/sessions`, { headers: { Authorization: `Bearer ${cfg.token}` } })
+  const res = await fetch(`${apiBase(cfg)}/api/auth/sessions`, { headers: { Authorization: `Bearer ${cfg.token}`, ...(await deviceHeaders()) } })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Could not load signed-in devices.')
   return data.sessions || []
@@ -593,7 +593,7 @@ export async function revokeSession(sessionId) {
   const cfg = await getConfig()
   if (!cfg.server || !cfg.token) throw new Error('Sign in first.')
   const res = await fetch(`${apiBase(cfg)}/api/auth/sessions/revoke`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` }, body: JSON.stringify({ sessionId })
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}`, ...(await deviceHeaders()) }, body: JSON.stringify({ sessionId })
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Could not revoke that device.')
