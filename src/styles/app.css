@@ -5876,6 +5876,45 @@ body::after {
   color: var(--design-page-text, #1a1a1a);
 }
 
+/* Design text is theme-driven, not hard-coded per selector.  These selectors
+   intentionally match the older design rules above so the active theme wins;
+   inline colours on selected manuscript text still win because they are on
+   the text node itself. */
+.workspace[class*="design-"] .editor-canvas [contenteditable],
+.workspace[class*="design-"] .editor-canvas .prose,
+.workspace[class*="design-"] .editor-canvas .preview-prose {
+  color: var(--design-page-text, inherit);
+}
+.workspace[class*="design-"] .editor-head .chapter-edit-title {
+  color: var(--design-page-text, inherit);
+}
+
+/* Manuscript pages share one calm paper surface. Parchment is the deliberate
+   exception; it gets its warmer paper tint without forcing fixed text colour. */
+.workspace.design-moonlight,
+.workspace.design-ember,
+.workspace.design-moss,
+.workspace.design-sand,
+.workspace.design-midnight,
+.workspace.design-crimson,
+.workspace.design-forest,
+.workspace.design-slate,
+.workspace.design-lavender,
+.workspace.design-noir,
+.workspace.design-ivory,
+.workspace.design-copper,
+.workspace.design-dusk,
+.workspace.design-custom {
+  --design-page-bg: #f4f1eb;
+}
+.workspace.design-parchment { --design-page-bg: #f5ecd0; }
+[data-theme] .workspace[class*="design-"] .editor-canvas [contenteditable],
+[data-theme] .workspace[class*="design-"] .editor-canvas .prose,
+[data-theme] .workspace[class*="design-"] .editor-canvas .preview-prose,
+[data-theme] .workspace[class*="design-"] .editor-head .chapter-edit-title {
+  color: var(--design-page-text, inherit);
+}
+
 .editor-canvas-paged .prose img,
 .editor-canvas-paged .prose video,
 .editor-canvas-paged .prose canvas,
