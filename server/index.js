@@ -23,7 +23,7 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import { DatabaseSync } from 'node:sqlite'
 import { WebSocketServer } from 'ws'
 import { isEmailConfigured, sendAccountUpdateEmail, sendMagicLink, sendReminderEmail, sendTwoFactorCode, sendVerificationCode } from './email.js'
-import { migrateSqliteToSupabase, restoreSupabaseToSqlite, supabasePersistenceEnabled, mirrorRecords, mirrorUserProfile, mirrorUserAndSession, mirrorOauthExchange, consumeSupabaseOauthExchange } from './supabasePersistence.js'
+import { migrateSqliteToSupabase, restoreSupabaseToSqlite, supabasePersistenceEnabled, mirrorRecords, mirrorUserProfile, mirrorUserAndSession, mirrorOauthExchange, consumeSupabaseOauthExchange, mergeSupabaseUser } from './supabasePersistence.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = join(ROOT, 'dist')
@@ -226,6 +226,26 @@ function verifyEmailCode(db, userId, purpose, code) {
 function claimLegacyRecords(db, userId) {
   if (process.env.CLAIM_LEGACY_RECORDS_ON_FIRST_ACCOUNT !== 'true') return
   db.prepare("UPDATE records SET user_id = ? WHERE user_id IS NULL OR user_id = ''").run(userId)
+}
+
+// Merge an already-existing provider account into the account that initiated
+// linking. Records are reassigned in one SQLite transaction; provider data on
+// the destination account is preserved unless it is currently empty.
+function mergeAccountRecords(db, sourceId, destinationId) {
+  if (!sourceId || !destinationId || sourceId === destinationId) return
+  const transaction = db.transaction(() => {
+    db.prepare('UPDATE records SET user_id = ? WHERE user_id = ?').run(destinationId, sourceId)
+    db.prepare('UPDATE tokens SET user_id = ? WHERE user_id = ?').run(destinationId, sourceId)
+    db.prepare('UPDATE notifications SET user_id = ? WHERE user_id = ?').run(destinationId, sourceId)
+    db.prepare('UPDATE email_tokens SET user_id = ? WHERE user_id = ?').run(destinationId, sourceId)
+    db.prepare('UPDATE novel_members SET member_user_id = ? WHERE member_user_id = ?').run(destinationId, sourceId)
+    db.prepare('UPDATE share_presence SET user_id = ? WHERE user_id = ?').run(destinationId, sourceId)
+    db.prepare('UPDATE share_invites SET owner_user_id = ? WHERE owner_user_id = ?').run(destinationId, sourceId)
+    db.prepare('UPDATE share_rooms SET owner_user_id = ? WHERE owner_user_id = ?').run(destinationId, sourceId)
+    db.prepare('DELETE FROM oauth_exchanges WHERE user_id = ?').run(sourceId)
+    db.prepare('DELETE FROM users WHERE id = ?').run(sourceId)
+  })
+  transaction()
 }
 
 // ---- schema (with migrations for pre-account databases) ----
@@ -696,7 +716,10 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           headers: { Authorization: `Bearer ${tokenData.access_token}` }
         })
         const discordUser = await meRes.json()
-        if (!discordUser.id) throw new Error('Could not retrieve Discord user')
+        if (!meRes.ok || !discordUser.id) {
+          const detail = discordUser?.message || discordUser?.error || `Discord profile request returned ${meRes.status}`
+          throw new Error(`Discord profile request failed: ${detail}`)
+        }
 
         // Linking never creates or switches the MoonScribe account.
         let user = stateData.mode === 'link'
@@ -755,7 +778,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           ? 'discord_provider_unreachable'
           : /token exchange|invalid_client|invalid.*secret|unauthorized/i.test(message)
           ? 'discord_credentials_invalid'
-          : /user|profile|retrieve Discord/i.test(message)
+          : /user|profile|retrieve Discord|Discord profile request/i.test(message)
             ? 'discord_profile_failed'
             : 'sign_in_failed'
         const errUrl = oauthResultLocation(stateData.redirectTo, new URLSearchParams({ discord_error: failure }))
@@ -799,7 +822,15 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           ? database.prepare('SELECT * FROM users WHERE id = ?').get(stateData.linkUserId)
           : database.prepare('SELECT * FROM users WHERE google_id = ? OR email = ?').get(profile.sub, email)
         const owner = database.prepare('SELECT id FROM users WHERE google_id = ? OR (email = ? AND email_verified = 1)').get(profile.sub, email)
-        if (stateData.mode === 'link' && owner && owner.id !== stateData.linkUserId) throw new Error('This Google account already belongs to another MoonScribe account')
+        if (stateData.mode === 'link' && owner && owner.id !== stateData.linkUserId) {
+          // Linking from Account Centre is an explicit merge request. Move
+          // the existing Google account's library into the current account
+          // before attaching the Google identity.
+          const sourceUserId = owner.id
+          mergeAccountRecords(database, sourceUserId, stateData.linkUserId)
+          if (supabasePersistenceEnabled) await mergeSupabaseUser(sourceUserId, stateData.linkUserId)
+          user = database.prepare('SELECT * FROM users WHERE id = ?').get(stateData.linkUserId)
+        }
         if (stateData.mode === 'link' && !user) throw new Error('The current MoonScribe session is no longer valid.')
         if (!user) {
           const userId = randomBytes(12).toString('hex')

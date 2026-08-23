@@ -29,7 +29,7 @@ const IDLE_OPTIONS = [
 
 const CATEGORIES = [
   { key: 'overview', label: 'Overview', icon: 'fa-solid fa-sliders', group: 'General', terms: 'home start screen preferences settings' },
-  { key: 'profile', label: 'Profile', icon: 'fa-solid fa-user', group: 'Account', terms: 'name pen name language timezone identity' },
+  { key: 'accountCentre', label: 'Account Centre', icon: 'fa-solid fa-user-shield', group: 'Account', terms: 'account authentication connections profile security username email' },
   { key: 'appearance', label: 'Appearance', icon: 'fa-solid fa-palette', group: 'Experience', terms: 'theme colour paper custom motion' },
   { key: 'editor', label: 'Editor', icon: 'fa-solid fa-pen-nib', group: 'Experience', terms: 'writing font spelling autocorrect page' },
   { key: 'writing', label: 'Writing experience', icon: 'fa-solid fa-feather-pointed', group: 'Experience', terms: 'autosave typewriter focus writing session' },
@@ -91,12 +91,11 @@ export default function Settings() {
         <nav className="settings-rail">
           <div className="settings-profile"><span className="settings-profile-mark"><Icon icon="fa-solid fa-moon" /></span><span><strong>MoonScribe</strong><small>Make the studio yours</small></span></div>
           <label className="settings-search"><Icon icon="fa-solid fa-magnifying-glass" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
-          <button className="settings-account-centre-button" onClick={() => setConnectOpen(true)}><span className="settings-rail-icon"><Icon icon="fa-solid fa-user-shield" /></span><span>Account Centre</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></button>
           {[...new Set(CATEGORIES.map((item) => item.group))].map((group) => {
             const items = CATEGORIES.filter((item) => item.group === group && `${item.label} ${item.terms}`.toLowerCase().includes(query.trim().toLowerCase()))
             if (!items.length) return null
             return <div className="settings-rail-group" key={group}><div className="settings-rail-group-label">{group}</div>{items.map((c) => (
-              <button key={c.key} className={`settings-rail-item ${cat === c.key ? 'active' : ''}`} onClick={() => setCat(c.key)}><span className="settings-rail-icon"><Icon icon={c.icon} /></span>{c.label}<Icon icon="fa-solid fa-chevron-right" className="settings-rail-chevron" /></button>
+              <button key={c.key} className={`settings-rail-item ${cat === c.key ? 'active' : ''}`} onClick={() => c.key === 'accountCentre' ? setConnectOpen(true) : setCat(c.key)}><span className="settings-rail-icon"><Icon icon={c.icon} /></span>{c.label}<Icon icon={c.key === 'accountCentre' ? 'fa-solid fa-arrow-up-right-from-square' : 'fa-solid fa-chevron-right'} className="settings-rail-chevron" /></button>
             ))}</div>
           })}
           <div className="settings-rail-foot">
@@ -109,7 +108,7 @@ export default function Settings() {
             <Icon icon="fa-solid fa-xmark" />
           </button>
 
-          {query && <SettingsSearchResults query={query} settings={settings} updateSettings={updateSettings} onOpenCategory={(key) => { setCat(key); setQuery('') }} />}
+          {query && <SettingsSearchResults query={query} settings={settings} updateSettings={updateSettings} onOpenCategory={(key) => { if (key === 'accountCentre') setConnectOpen(true); else setCat(key); setQuery('') }} />}
           {!query && cat === 'appearance' && (
             <Appearance
               settings={settings}
@@ -126,8 +125,7 @@ export default function Settings() {
             />
           )}
           {!query && cat === 'editor' && <EditorSettings settings={settings} updateSettings={updateSettings} />}
-          {!query && cat === 'overview' && <SettingsOverview onOpenCategory={setCat} />}
-          {!query && cat === 'profile' && <Profile settings={settings} updateSettings={updateSettings} />}
+          {!query && cat === 'overview' && <SettingsOverview onOpenCategory={setCat} onOpenAccountCentre={() => setConnectOpen(true)} />}
           {!query && cat === 'writing' && <WritingExperience settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'sounds' && <SoundsFeedback settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'notifications' && <NotificationPreferences settings={settings} updateSettings={updateSettings} />}
@@ -193,12 +191,12 @@ function SettingsSearchResults({ query, settings, updateSettings, onOpenCategory
   return <section className="settings-panel"><div className="settings-panel-kicker">Smart settings search</div><h2>Results for “{query}”</h2><p className="muted">Change common settings directly, or open the full category for more detail.</p><div className="settings-search-results">{matches.map((item) => <div className="settings-row" key={item.label}><button className="settings-search-result-label" onClick={() => onOpenCategory(item.category)}><strong>{item.label}</strong><small>Open {CATEGORIES.find((category) => category.key === item.category)?.label}</small></button>{item.control}</div>)}{categories.map((item) => <button className="settings-search-category" key={item.key} onClick={() => onOpenCategory(item.key)}><Icon icon={item.icon}/><span><strong>{item.label}</strong><small>View every {item.label.toLowerCase()} option</small></span><Icon icon="fa-solid fa-arrow-right"/></button>)}{!matches.length && !categories.length && <div className="palette-hint">No setting matches “{query}”. Try theme, font, layout, security or motion.</div>}</div></section>
 }
 
-function SettingsOverview({ onOpenCategory }) {
+function SettingsOverview({ onOpenCategory, onOpenAccountCentre }) {
   const shortcuts = [
     ['appearance', 'Appearance', 'Theme, typography and atmosphere', 'fa-solid fa-palette'],
     ['writing', 'Writing experience', 'Autosave, focus and session comfort', 'fa-solid fa-feather-pointed'],
     ['dashboard', 'Dashboard', 'Home, library and sidebar preferences', 'fa-solid fa-house'],
-    ['authentication', 'Authentication', 'Choose how you sign in to MoonScribe', 'fa-solid fa-shield-halved'],
+    ['accountCentre', 'Account Centre', 'Profile, connections and account security', 'fa-solid fa-user-shield'],
   ]
   return (
     <section className="settings-panel">
@@ -207,7 +205,7 @@ function SettingsOverview({ onOpenCategory }) {
       <p className="muted">Account preferences follow your MoonScribe identity. Device-specific controls stay local to this browser.</p>
       <div className="settings-overview-grid">
         {shortcuts.map(([key, title, description, icon]) => (
-          <button key={key} className="settings-overview-card" onClick={() => onOpenCategory(key)}>
+          <button key={key} className="settings-overview-card" onClick={() => key === 'accountCentre' ? onOpenAccountCentre() : onOpenCategory(key)}>
             <Icon icon={icon} />
             <span><strong>{title}</strong><small>{description}</small></span>
             <Icon icon="fa-solid fa-arrow-right" />

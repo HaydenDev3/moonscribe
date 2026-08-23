@@ -22,6 +22,24 @@ export async function mirrorUserProfile(db, userId) {
   if (error) throw error
 }
 
+export async function mergeSupabaseUser(sourceUserId, destinationUserId) {
+  if (!supabasePersistence || !sourceUserId || !destinationUserId) return
+  const source = String(sourceUserId)
+  const destination = String(destinationUserId)
+  const { data: records, error: recordsError } = await supabasePersistence.from('moonscribe_records').select('*').eq('user_id', source)
+  if (recordsError) throw recordsError
+  for (const record of records || []) {
+    const { error } = await supabasePersistence.from('moonscribe_records').upsert({ ...record, user_id: destination }, { onConflict: 'user_id,store,id' })
+    if (error) throw error
+  }
+  const { error: sessionError } = await supabasePersistence.from('moonscribe_sessions').update({ user_id: destination }).eq('user_id', source)
+  if (sessionError) throw sessionError
+  const { error: deleteRecordsError } = await supabasePersistence.from('moonscribe_records').delete().eq('user_id', source)
+  if (deleteRecordsError) throw deleteRecordsError
+  const { error: userError } = await supabasePersistence.from('moonscribe_users').delete().eq('id', source)
+  if (userError) throw userError
+}
+
 // One-way, idempotent migration. Nothing is deleted from Supabase and every
 // record uses the newest timestamp, so a restart cannot erase production work.
 export async function migrateSqliteToSupabase(db) {

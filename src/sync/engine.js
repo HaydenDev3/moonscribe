@@ -197,7 +197,15 @@ export async function validateSession() {
   if (!cfg.server || !cfg.token) return null
   try {
     const profile = await accountProfile(cfg.server, cfg.token)
-    await bindLocalLibrary(profile.id)
+    try {
+      await bindLocalLibrary(profile.id)
+    } catch (error) {
+      if (error?.code !== 'LIBRARY_OWNER_CONFLICT') throw error
+      // A valid remote session must survive a local-library ownership
+      // warning. Keep the account connected and let the UI handle the
+      // separate local-library choice without signing the user out.
+      setStatus('attention', error.message)
+    }
     await setConfig({ accountId: profile.id, username: profile.username || cfg.username })
     return profile
   } catch (error) {
