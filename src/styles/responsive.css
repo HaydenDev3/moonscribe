@@ -133,6 +133,10 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
    composition there too, otherwise the cover stage is squeezed beside the
    icon rail and its camera appears off-screen. */
 @media (pointer: coarse) and (min-width: 701px) and (max-width: 1400px) {
+  html, body, #root { height: 100%; max-height: 100%; overflow: hidden; }
+  body:has(.workspace) { overscroll-behavior: none; }
+  .workspace { height: 100svh; max-height: 100svh; overflow: hidden; }
+  .workspace > .main { min-height: 0; height: 100%; overflow: hidden; }
   .ds-layout { position: relative; flex-direction: column; overflow: hidden; }
   .ds-layout { height: 100%; max-height: 100%; min-height: 0; }
   .ds-stage { order: 1; min-height: 0; height: 100%; flex: 1 1 auto; }
