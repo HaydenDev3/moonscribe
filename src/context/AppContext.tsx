@@ -274,16 +274,21 @@ export function AppProvider({ children }) {
       } else if (exchangeCode) {
         setAuthFlow({ state: 'processing', provider: callback.provider, error: null })
         try {
+          const withTimeout = (promise, label, ms = 12000) => Promise.race([
+            promise,
+            new Promise((_, reject) => window.setTimeout(() => reject(new Error(`${label} timed out. Please try again.`)), ms)),
+          ])
           const oauthServer = discordServer()
+          const callbackServer = new URLSearchParams(window.location.search).get('oauth_server')?.replace(/\/+$/, '')
           const exchangePath = oauthCode ? '/api/auth/oauth/exchange' : '/api/auth/discord/exchange'
           const exchangeCodeValue = oauthCode || exchangeCode
-          const exchangeOrigins = [...new Set([oauthServer, typeof window !== 'undefined' ? window.location.origin : ''].filter(Boolean))]
+          const exchangeOrigins = [...new Set([callbackServer, oauthServer, typeof window !== 'undefined' ? window.location.origin : ''].filter(Boolean))]
           let response = null
           let account = null
           let lastError = null
           for (const origin of exchangeOrigins) {
             try {
-              const candidate = await fetch(`${origin}${exchangePath}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: exchangeCodeValue }) })
+              const candidate = await withTimeout(fetch(`${origin}${exchangePath}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: exchangeCodeValue }) }), 'The MoonScribe account service')
               const payload = await candidate.json().catch(() => ({}))
               if (candidate.ok) { response = candidate; account = payload; break }
               lastError = new Error(payload.error || `OAuth exchange failed at ${origin}.`)
@@ -295,9 +300,9 @@ export function AppProvider({ children }) {
           await setMeta('discordUsername', account.username)
           await setMeta('authProvider', account.provider || oauthProvider || 'discord')
           const existing = await syncEngine.getConfig()
-          const res = await syncEngine.connectWithToken({ server: account.server || oauthServer, token: account.linked && existing.token ? existing.token : account.token, username: account.username })
+          const res = await withTimeout(syncEngine.connectWithToken({ server: account.server || oauthServer, token: account.linked && existing.token ? existing.token : account.token, username: account.username }), 'Saving your account session')
           if (res.ok) {
-            const profile = await syncEngine.validateSession().catch(() => null)
+            const profile = await withTimeout(syncEngine.validateSession(), 'Loading your account profile').catch(() => null)
             if (profile) {
               const roles = normalizeRoles(profile.roles || profile.role || 'user')
               setAccount({
