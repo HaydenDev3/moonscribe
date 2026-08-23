@@ -23,7 +23,7 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import { DatabaseSync } from 'node:sqlite'
 import { WebSocketServer } from 'ws'
 import { isEmailConfigured, sendAccountUpdateEmail, sendMagicLink, sendReminderEmail, sendTwoFactorCode, sendVerificationCode } from './email.js'
-import { migrateSqliteToSupabase, supabasePersistenceEnabled, mirrorRecords } from './supabasePersistence.js'
+import { migrateSqliteToSupabase, restoreSupabaseToSqlite, supabasePersistenceEnabled, mirrorRecords, mirrorUserAndSession, mirrorOauthExchange, consumeSupabaseOauthExchange } from './supabasePersistence.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = join(ROOT, 'dist')
@@ -152,6 +152,7 @@ function issueToken(db, userId, { deviceId = null, deviceName = 'Unknown device'
   db.prepare('INSERT INTO tokens (token_hash, user_id, created_at, expires_at, device_id, device_name, last_seen_at, session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
     sha(token), userId, Date.now(), expiresAt, deviceId, deviceName.slice(0, 120), Date.now(), sessionId
   )
+  if (supabasePersistenceEnabled) mirrorUserAndSession(db, userId, { token: sha(token), expiresAt, sessionId, deviceId, deviceName: deviceName.slice(0, 120) }).catch((error) => console.error('[supabase] session mirror failed', String(error)))
   return { token, expiresAt, sessionId }
 }
 
@@ -736,6 +737,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         const exchange = randomBytes(24).toString('base64url')
         database.prepare('INSERT OR REPLACE INTO oauth_exchanges (code, user_id, username, avatar, provider, server_origin, expires_at, created_at, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .run(exchange, user.id, user.username, avatarUrl, 'discord', oauthCallbackOrigin(req), Date.now() + 2 * 60 * 1000, Date.now(), stateData.mode || 'login')
+        if (supabasePersistenceEnabled) mirrorOauthExchange({ code: exchange, userId: user.id, username: user.username, avatar: avatarUrl, provider: 'discord', serverOrigin: oauthCallbackOrigin(req), expiresAt: Date.now() + 2 * 60 * 1000, mode: stateData.mode || 'login' }).catch((error) => console.error('[supabase] Discord exchange mirror failed', String(error)))
         const params = new URLSearchParams({ discord_exchange: exchange, ...(stateData.mode === 'link' ? { linked: '1' } : {}) })
         res.writeHead(302, { Location: oauthResultLocation(stateData.redirectTo, params), 'Cache-Control': 'no-store' })
         res.end()
@@ -809,6 +811,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         const exchange = randomBytes(24).toString('base64url')
         database.prepare('INSERT OR REPLACE INTO oauth_exchanges (code, user_id, username, avatar, provider, server_origin, expires_at, created_at, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
           .run(exchange, user.id, user.username, profile.picture || '', 'google', oauthCallbackOrigin(req), Date.now() + 2 * 60 * 1000, Date.now(), stateData.mode || 'login')
+        if (supabasePersistenceEnabled) mirrorOauthExchange({ code: exchange, userId: user.id, username: user.username, avatar: profile.picture || '', provider: 'google', serverOrigin: oauthCallbackOrigin(req), expiresAt: Date.now() + 2 * 60 * 1000, mode: stateData.mode || 'login' }).catch((error) => console.error('[supabase] Google exchange mirror failed', String(error)))
         res.writeHead(302, { Location: oauthResultLocation(stateData.redirectTo, new URLSearchParams({ oauth_exchange: exchange, provider: 'google', ...(stateData.mode === 'link' ? { linked: '1' } : {}) })), 'Cache-Control': 'no-store' })
         res.end()
       })().catch((error) => {
@@ -826,8 +829,8 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     }
 
     if (path === '/api/auth/oauth/exchange' && req.method === 'POST') {
-      readBody(req, 8 * 1024).then(({ code }) => {
-        const exchange = database.prepare('SELECT * FROM oauth_exchanges WHERE code = ?').get(String(code || ''))
+      readBody(req, 8 * 1024).then(async ({ code }) => {
+        const exchange = database.prepare('SELECT * FROM oauth_exchanges WHERE code = ?').get(String(code || '')) || await consumeSupabaseOauthExchange(code)
         if (!exchange || Number(exchange.expires_at) < Date.now()) throw new Error('This sign-in link has expired. Please try again.')
         if (!database.prepare('SELECT 1 FROM users WHERE id = ? AND disabled_at IS NULL').get(exchange.user_id)) throw new Error('This MoonScribe account is disabled. Contact support to restore access.')
         database.prepare('DELETE FROM oauth_exchanges WHERE code = ?').run(String(code))
@@ -838,9 +841,9 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     }
 
     if (path === '/api/auth/discord/exchange' && req.method === 'POST') {
-      readBody(req, 8 * 1024)
-        .then(({ code }) => {
-          const exchange = database.prepare('SELECT * FROM oauth_exchanges WHERE code = ?').get(String(code || ''))
+        readBody(req, 8 * 1024)
+        .then(async ({ code }) => {
+          const exchange = database.prepare('SELECT * FROM oauth_exchanges WHERE code = ?').get(String(code || '')) || await consumeSupabaseOauthExchange(code)
           if (!exchange || Number(exchange.expires_at) < Date.now()) throw new Error('This sign-in link has expired. Please try again.')
           if (!database.prepare('SELECT 1 FROM users WHERE id = ? AND disabled_at IS NULL').get(exchange.user_id)) throw new Error('This MoonScribe account is disabled. Contact support to restore access.')
           database.prepare('DELETE FROM oauth_exchanges WHERE code = ?').run(String(code))
@@ -1895,7 +1898,7 @@ function safeJson(raw) {
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
 if (isMain) {
   const { server, db, limiter } = createMoonScribeServer()
-  server.listen(PORT, () => {
+  const startServer = () => server.listen(PORT, () => {
     console.log(`🌙 MoonScribe server listening on http://localhost:${PORT}`)
     console.log('   Accounts: sign in or create one in the app (Settings → Sign in).')
     if (!existsSync(DIST)) {
@@ -1905,6 +1908,9 @@ if (isMain) {
       migrateSqliteToSupabase(db).then((summary) => console.log('[supabase] migration complete:', summary)).catch((error) => console.error('[supabase] migration failed:', String(error)))
     }
   })
+  if (supabasePersistenceEnabled) {
+    restoreSupabaseToSqlite(db).then((summary) => { console.log('[supabase] state restored:', summary); startServer() }).catch((error) => { console.error('[supabase] restore failed; refusing to start with cloud state unavailable:', String(error)); process.exitCode = 1 })
+  } else startServer()
   const shutdown = () => {
     limiter.dispose()
     server.close(() => process.exit(0))
