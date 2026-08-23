@@ -37,8 +37,8 @@ export default function Landing() {
   }, [])
 
   useEffect(() => {
-    if (accountReady && syncUsername) navigate('/dashboard', { replace: true })
-  }, [accountReady, syncUsername, navigate])
+    if (accountReady && syncUsername && platform !== 'mobile') navigate('/dashboard', { replace: true })
+  }, [accountReady, syncUsername, navigate, platform])
 
   const signIn = () => setAuthOpen(true)
   const downloadUrl = platformDownload(platform, import.meta.env)
