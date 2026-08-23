@@ -26,6 +26,7 @@ import { acceptShareInvite } from '../sync/engine'
 import DashboardHome from '../dashboard/DashboardHome'
 import ProfileAvatar from '../components/ProfileAvatar'
 import GlobalMedia from '../dashboard/GlobalMedia'
+import AdSlot from '../components/AdSlot'
 
 const COVER_STYLES = [
   { key: 'moonstone', label: 'Moonstone' },
@@ -284,7 +285,7 @@ function RotatingQuote({ novels }) {
 }
 
 export default function Dashboard() {
-  const { novels, refreshNovels, toast, syncUsername, syncStatus, syncDiscordAvatar, syncProvider, syncNow, forgetNovelUnlock, settings, setFocusMode, openSettings, hasRole } = useApp()
+  const { novels, refreshNovels, toast, syncUsername, syncStatus, syncDiscordAvatar, syncProvider, syncNow, disconnectSync, forgetNovelUnlock, settings, setFocusMode, openSettings, hasRole } = useApp()
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const code = params.get('share')
@@ -671,6 +672,7 @@ export default function Dashboard() {
         onNew={() => setNewOpen(true)}
         onOpenChapter={(chapter) => navigate(`/novel/${chapter.novelId}`, { state: { chapterId: chapter.id } })}
         onSettings={openSettings}
+        onSignOut={async () => { await disconnectSync(); toast('Signed out.') }}
         onAdmin={hasRole('admin') ? () => navigate('/admin') : undefined}
         syncUsername={syncUsername}
         syncStatus={syncStatus}
@@ -886,6 +888,7 @@ export default function Dashboard() {
         {dashboardView === 'journal' && <DashboardJournal novel={resumeNovel} analytics={analytics} onOpen={() => resumeNovel && navigate(`/novel/${resumeNovel.id}/writing-journal`)} />}
         {dashboardView === 'insights' && <DashboardInsights analytics={analytics} data={dashboardData} onOpen={() => resumeNovel && navigate(`/novel/${resumeNovel.id}/analytics`)} />}
         </div>
+        <AdSlot placement="dashboard-secondary" />
       </div>
       </main>
 
@@ -941,7 +944,7 @@ function HeroCard({ novel, chapter, counts, todayWords, streak, onOpen, onOpenCh
   )
 }
 
-function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLibrary, onMedia, onJournal, onInsights, onSearch, onNew, onOpenChapter, onSettings, onAdmin, syncUsername, syncStatus, syncAvatar, syncProvider, onSync, resumeChapter, recent, showCurrentStory = true }) {
+function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLibrary, onMedia, onJournal, onInsights, onSearch, onNew, onOpenChapter, onSettings, onSignOut, onAdmin, syncUsername, syncStatus, syncAvatar, syncProvider, onSync, resumeChapter, recent, showCurrentStory = true }) {
   const { openContextMenu } = useContextMenu()
   const openProfileMenu = (event) => {
     event.preventDefault()
@@ -951,6 +954,8 @@ function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLib
       { label: 'Settings', icon: 'fa-solid fa-gear', onClick: onSettings },
       { label: 'Sync now', icon: 'fa-solid fa-rotate', onClick: onSync },
       { label: 'Copy username', icon: 'fa-regular fa-copy', disabled: !syncUsername, onClick: () => syncUsername && navigator.clipboard?.writeText(syncUsername) },
+      'divider',
+      { label: 'Sign out', icon: 'fa-solid fa-right-from-bracket', onClick: onSignOut },
     ])
   }
   const item = (key, label, icon, onClick) => (

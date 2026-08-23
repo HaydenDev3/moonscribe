@@ -81,7 +81,7 @@ export default function Sidebar({
   onTitleSave,
 }) {
   const { openContextMenu } = useContextMenu()
-  const { settings, updateSettings, toast, syncUsername, syncStatus, syncDiscordAvatar, syncProvider, openSettings } = useApp()
+  const { settings, updateSettings, toast, syncUsername, syncStatus, syncDiscordAvatar, syncProvider, openSettings, disconnectSync } = useApp()
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(() => new Set())
   const [navCollapsed, setNavCollapsed] = useState(() => new Set(['World', 'Craft', 'Journal', 'Archive']))
@@ -522,6 +522,8 @@ export default function Sidebar({
               { label: 'Settings', icon: 'fa-solid fa-gear', onClick: openSettings },
               { label: 'Sync now', icon: 'fa-solid fa-rotate', onClick: onSyncClick },
               { label: 'Copy username', icon: 'fa-regular fa-copy', disabled: !syncUsername, onClick: () => syncUsername && navigator.clipboard?.writeText(syncUsername) },
+              'divider',
+              { label: 'Sign out', icon: 'fa-solid fa-right-from-bracket', onClick: async () => { await disconnectSync(); toast('Signed out.') } },
             ])
           }}>
             <button className="dashboard-account-identity" type="button" onClick={(event) => {
@@ -531,6 +533,8 @@ export default function Sidebar({
                 'divider',
                 { label: 'Settings', icon: 'fa-solid fa-gear', onClick: openSettings },
                 { label: 'Sync now', icon: 'fa-solid fa-rotate', onClick: onSyncClick },
+                'divider',
+                { label: 'Sign out', icon: 'fa-solid fa-right-from-bracket', onClick: async () => { await disconnectSync(); toast('Signed out.') } },
               ])
             }} aria-label="Open account menu">
               <span className="dashboard-account-avatar">
