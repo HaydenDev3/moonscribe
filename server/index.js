@@ -604,7 +604,10 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
   }
   const oauthResultLocation = (target, params) => target.startsWith('moonscribe:')
     ? `${target}?${params}`
-    : `${target}/dashboard?${params}`
+    // Always land on the public root callback. The root mounts AppContext
+    // without the signed-out studio guard, so the exchange request cannot be
+    // redirected away before the token is stored.
+    : `${target}/?${params}`
 
   const clientAddress = (req) => {
     if (process.env.TRUST_PROXY === 'true') return String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'unknown'
