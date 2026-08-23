@@ -27,7 +27,6 @@ import DashboardHome from '../dashboard/DashboardHome'
 import ProfileAvatar from '../components/ProfileAvatar'
 import GlobalMedia from '../dashboard/GlobalMedia'
 import AdSlot from '../components/AdSlot'
-import { detectPlatform } from '../utils/platform'
 
 const COVER_STYLES = [
   { key: 'moonstone', label: 'Moonstone' },
@@ -655,11 +654,6 @@ export default function Dashboard() {
     onPin: handlePin,
     onDuplicate: handleDuplicate,
     listView: viewMode === 'list'
-  }
-
-  const currentPlatform = detectPlatform(globalThis.navigator?.userAgent, globalThis.navigator?.platform, globalThis.navigator?.maxTouchPoints)
-  if (currentPlatform === 'mobile') {
-    return <main className="mobile-dashboard-gate"><div className="mobile-dashboard-gate-card"><span className="mobile-dashboard-gate-mark">☾</span><span className="landing-eyebrow"><i /> MoonScribe Cloud</span><h1>The studio is waiting on a larger screen.</h1><p>The MoonScribe landing page is available on mobile, but the writing dashboard is designed for tablet and desktop screens so your manuscript, tools and pages have room to breathe.</p><div><button className="button button-primary" onClick={() => navigate('/')}><Icon icon="fa-solid fa-house" /> Return to home</button><button className="button button-secondary" onClick={async () => { await disconnectSync(); toast('Signed out.') }}>Sign out</button></div></div></main>
   }
 
   return (
