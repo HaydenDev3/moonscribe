@@ -238,13 +238,15 @@ export function AppProvider({ children }) {
       const authProvider = await getMeta('authProvider', null)
       setSync({
         server: cfg.server,
-        username: cfg.username || discordUsername,
+        // Provider metadata is only a display cache. Never use it to render
+        // an authenticated session after the bearer token was rejected.
+        username: cfg.token ? (cfg.username || discordUsername) : null,
         // A stored authenticated session is connected even before this tab's
         // first background pass. The status listener will move it through
         // syncing/synced (or error) immediately afterwards.
         status: cfg.server && cfg.token ? 'connecting' : 'offline',
-        discordAvatar,
-        provider: authProvider
+        discordAvatar: cfg.token ? discordAvatar : null,
+        provider: cfg.token ? authProvider : null
       })
 
       const callback = readOAuthCallback(window.location.search)

@@ -233,6 +233,12 @@ function claimLegacyRecords(db, userId) {
 // the destination account is preserved unless it is currently empty.
 function mergeAccountRecords(db, sourceId, destinationId) {
   if (!sourceId || !destinationId || sourceId === destinationId) return
+  const sourceUser = db.prepare('SELECT role, roles FROM users WHERE id = ?').get(sourceId)
+  const destinationUser = db.prepare('SELECT role, roles FROM users WHERE id = ?').get(destinationId)
+  const sourceRoles = normalizeRoles(sourceUser?.roles || sourceUser?.role)
+  const destinationRoles = normalizeRoles(destinationUser?.roles || destinationUser?.role)
+  const mergedRoles = normalizeRoles([...new Set([...sourceRoles, ...destinationRoles])])
+  if (mergedRoles.includes('admin')) mergedRoles.splice(mergedRoles.indexOf('admin'), 1, 'admin')
   db.exec('BEGIN')
   try {
     db.prepare('UPDATE records SET user_id = ? WHERE user_id = ?').run(destinationId, sourceId)
@@ -243,6 +249,7 @@ function mergeAccountRecords(db, sourceId, destinationId) {
     db.prepare('UPDATE share_presence SET user_id = ? WHERE user_id = ?').run(destinationId, sourceId)
     db.prepare('UPDATE share_invites SET owner_user_id = ? WHERE owner_user_id = ?').run(destinationId, sourceId)
     db.prepare('UPDATE share_rooms SET owner_user_id = ? WHERE owner_user_id = ?').run(destinationId, sourceId)
+    db.prepare('UPDATE users SET role = ?, roles = ? WHERE id = ?').run(mergedRoles.includes('admin') ? 'admin' : mergedRoles.includes('developer') ? 'developer' : 'user', mergedRoles.join(','), destinationId)
     db.prepare('DELETE FROM oauth_exchanges WHERE user_id = ?').run(sourceId)
     db.prepare('DELETE FROM users WHERE id = ?').run(sourceId)
     db.exec('COMMIT')
