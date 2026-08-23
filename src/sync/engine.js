@@ -532,15 +532,25 @@ export async function connectWithToken({ server, token, username }) {
     const base = server.replace(/\/+$/, '')
     const profile = await accountProfile(base, token)
     if (await getMeta('guestMode', false)) await migrateGuestToAccount(profile.id)
-    await bindLocalLibrary(profile.id)
+    let libraryConflict = false
+    try {
+      await bindLocalLibrary(profile.id)
+    } catch (error) {
+      if (error?.code !== 'LIBRARY_OWNER_CONFLICT') throw error
+      // Authentication must not fail just because this browser also contains
+      // another account's local library. Keep the session, but do not push
+      // those records into the newly authenticated cloud account.
+      libraryConflict = true
+      setStatus('attention', error.message)
+    }
     await setConfig({ server: base, token, accountId: profile.id, username: profile.username || username })
     // OAuth is successful once the bearer token has been verified and stored.
     // A first library sync may fail because the device is offline or the API
     // origin is briefly unavailable; that must not sign the user back out.
-    try { await sync() } catch (syncError) {
+    try { if (!libraryConflict) await sync() } catch (syncError) {
       setStatus('attention', syncError?.message || 'Cloud sync will retry shortly.')
     }
-    return { ok: true, username: profile.username || username }
+    return { ok: true, username: profile.username || username, libraryConflict }
   } catch (err) {
     setStatus('error', err.message)
     return { ok: false, error: err.message }
