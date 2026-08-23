@@ -1,5 +1,11 @@
 export type MoonScribePlatform = 'windows' | 'macos' | 'linux' | 'mobile' | 'unknown'
 
+export function isTabletRuntime(userAgent = '', maxTouchPoints = 0, width = 0, height = 0) {
+  const ua = userAgent.toLowerCase()
+  const largeTouchViewport = maxTouchPoints > 0 && Math.max(width, height) >= 600
+  return /ipad|tablet|android(?!.*mobile)/.test(ua) || largeTouchViewport
+}
+
 export function detectPlatform(userAgent = '', platform = '', maxTouchPoints = 0): MoonScribePlatform {
   const ua = userAgent.toLowerCase()
   const os = platform.toLowerCase()

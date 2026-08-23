@@ -40,7 +40,10 @@ export default function Landing() {
     if (accountReady && syncUsername && platform !== 'mobile') navigate('/dashboard', { replace: true })
   }, [accountReady, syncUsername, navigate, platform])
 
-  const signIn = () => setAuthOpen(true)
+  const signIn = () => {
+    if (syncUsername) navigate('/dashboard')
+    else setAuthOpen(true)
+  }
   const downloadUrl = platformDownload(platform, import.meta.env)
   const cloudOnly = platform === 'mobile' || !downloadUrl
   const mobileCloudDisabled = false

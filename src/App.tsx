@@ -28,7 +28,7 @@ import './styles/scrollrail.css'
 import './styles/announcements.css'
 import './styles/responsive.css'
 import AnnouncementBanner from './components/AnnouncementBanner'
-import { detectPlatform } from './utils/platform'
+import { detectPlatform, isTabletRuntime } from './utils/platform'
 
 const PrintView = lazy(() => import('./pages/PrintView'))
 
@@ -102,13 +102,6 @@ function MobileCloudPaused() {
   )
 }
 
-function isIpadRuntime() {
-  if (typeof navigator === 'undefined') return false
-  const ua = navigator.userAgent.toLowerCase()
-  const platform = navigator.platform.toLowerCase()
-  return /ipad/.test(ua) || (platform.includes('mac') && navigator.maxTouchPoints > 1)
-}
-
 export default function App() {
   const appState = useApp() as {
     onboardingDone: boolean | null
@@ -160,7 +153,8 @@ export default function App() {
   const detectedPlatform = typeof navigator !== 'undefined'
     ? detectPlatform(navigator.userAgent, navigator.platform, navigator.maxTouchPoints)
     : 'unknown'
-  if (detectedPlatform === 'mobile' && !isIpadRuntime()) {
+  const tabletRuntime = typeof navigator !== 'undefined' && isTabletRuntime(navigator.userAgent, navigator.maxTouchPoints, window.innerWidth, window.innerHeight)
+  if (detectedPlatform === 'mobile' && !tabletRuntime) {
     return <MobileCloudPaused />
   }
 
