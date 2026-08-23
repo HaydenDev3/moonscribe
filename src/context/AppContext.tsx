@@ -145,6 +145,7 @@ export function AppProvider({ children }) {
   const [account, setAccount] = useState(DEFAULT_ACCOUNT)
   const [accountReady, setAccountReady] = useState(false)
   const [authFlow, setAuthFlow] = useState({ state: 'idle', provider: null, error: null })
+  const oauthCallbackInFlight = useRef(false)
   const [guestMode, setGuestMode] = useState(false)
   const [appLock, setAppLockState] = useState(undefined) // undefined = loading, null = none
   const [locked, setLocked] = useState(false)
@@ -272,6 +273,8 @@ export function AppProvider({ children }) {
           }
         } catch (err) { toast(err.message || 'Could not complete Magic Link sign-in.') }
       } else if (exchangeCode) {
+        if (oauthCallbackInFlight.current) return
+        oauthCallbackInFlight.current = true
         setAuthFlow({ state: 'processing', provider: callback.provider, error: null })
         try {
           const withTimeout = (promise, label, ms = 12000) => Promise.race([
