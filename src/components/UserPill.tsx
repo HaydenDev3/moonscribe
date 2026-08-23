@@ -9,6 +9,7 @@ export default function UserPill({ onConnectClick }) {
   const [open, setOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 16, width: 220 })
   const ref = useRef(null)
+  const menuRef = useRef(null)
 
   const positionMenu = () => {
     const trigger = ref.current?.querySelector('.user-pill')
@@ -26,7 +27,9 @@ export default function UserPill({ onConnectClick }) {
     if (!open) return
     positionMenu()
     const reposition = () => positionMenu()
-    const close = (e) => { if (!ref.current?.contains(e.target)) setOpen(false) }
+    const close = (e) => {
+      if (!ref.current?.contains(e.target) && !menuRef.current?.contains(e.target)) setOpen(false)
+    }
     document.addEventListener('mousedown', close)
     window.addEventListener('resize', reposition)
     window.addEventListener('scroll', reposition, true)
@@ -88,7 +91,7 @@ export default function UserPill({ onConnectClick }) {
       </button>
 
       {open && createPortal(
-        <div className="user-pill-menu" style={{ top: menuPosition.top, right: menuPosition.right, width: menuPosition.width }}>
+        <div ref={menuRef} className="user-pill-menu" style={{ top: menuPosition.top, right: menuPosition.right, width: menuPosition.width }}>
           <div className="user-pill-header">
             <div className="user-pill-header-avatar">
               {isDiscord

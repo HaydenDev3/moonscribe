@@ -528,7 +528,7 @@ function securityHeaders() {
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-    'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://cdn.discordapp.com https://lh3.googleusercontent.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://discord.com https://discordapp.com https://accounts.google.com https://oauth2.googleapis.com https://openidconnect.googleapis.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    'Content-Security-Policy': "default-src 'self'; script-src 'self' https://pagead2.googlesyndication.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://cdn.discordapp.com https://lh3.googleusercontent.com https://*.googleadservices.com https://*.googlesyndication.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' https://discord.com https://discordapp.com https://accounts.google.com https://oauth2.googleapis.com https://openidconnect.googleapis.com https://*.googleadservices.com https://*.googlesyndication.com; frame-src 'self' https://*.doubleclick.net https://*.googlesyndication.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   }
 }
 
@@ -1999,9 +1999,16 @@ if (isMain) {
       migrateSqliteToSupabase(db).then((summary) => console.log('[supabase] migration complete:', summary)).catch((error) => console.error('[supabase] migration failed:', String(error)))
     }
   })
+  // Bind the port immediately so Railway/Docker healthchecks can reach the
+  // process while cloud state is being restored. The local database remains
+  // available during the restore and receives the durable state before normal
+  // interactive use begins.
+  startServer()
   if (supabasePersistenceEnabled) {
-    restoreSupabaseToSqlite(db).then((summary) => { console.log('[supabase] state restored:', summary); startServer() }).catch((error) => { console.error('[supabase] restore failed; refusing to start with cloud state unavailable:', String(error)); process.exitCode = 1 })
-  } else startServer()
+    restoreSupabaseToSqlite(db).then((summary) => console.log('[supabase] state restored:', summary)).catch((error) => {
+      console.error('[supabase] restore failed; continuing with local state:', String(error))
+    })
+  }
   const shutdown = () => {
     limiter.dispose()
     stopBabyLoveGrowthSync()
