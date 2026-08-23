@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { getNovel, updateNovel } from '../db/novels'
 import { listChapters } from '../db/chapters'
 import { PAGE_PRESETS, pageSizeMm, pageMarginMm } from '../utils/pageSize'
@@ -16,6 +16,7 @@ const FONTS = {
 
 export default function PrintView() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const [novel, setNovel] = useState<any>(null)
   const [chapters, setChapters] = useState<any[]>([])
   const [layout, setLayout] = useState<Record<string, any>>({})
@@ -80,7 +81,7 @@ export default function PrintView() {
           <span className="muted small">{Math.round(w)} × {Math.round(h)} mm{bleed ? ` · ${bleed} mm bleed` : ''}</span>
         </div>
         <div className="actions-row">
-          <button className="button button-ghost" onClick={() => { window.location.hash = `#/novel/${id}/design` }}>← Back to designer</button>
+          <button className="button button-ghost" onClick={() => navigate(`/novel/${id}/design`)}>← Back to designer</button>
           <button className="button button-primary" onClick={() => window.print()}>🖨 Print / Save as PDF</button>
         </div>
       </div>

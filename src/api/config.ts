@@ -26,6 +26,17 @@ export function apiBaseUrl(env: ApiEnvironment = import.meta.env as ApiEnvironme
   return trim(locationLike?.origin)
 }
 
+/** Resolve the browser-safe WebSocket origin for realtime services. */
+export function webSocketBaseUrl(env: ApiEnvironment = import.meta.env as ApiEnvironment, locationLike: LocationInput = globalThis.location) {
+  const base = apiBaseUrl(env, locationLike)
+  if (!base) return ''
+  return base.replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:')
+}
+
+export function websocketOrigin(origin: string) {
+  return trim(origin).replace(/^https:/i, 'wss:').replace(/^http:/i, 'ws:')
+}
+
 export function webAppUrl(env: ApiEnvironment = import.meta.env as ApiEnvironment, locationLike: LocationInput = globalThis.location) {
   const configured = trim(env.VITE_APP_URL)
   if (configured) return configured

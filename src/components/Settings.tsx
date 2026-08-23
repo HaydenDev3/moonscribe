@@ -30,7 +30,6 @@ const IDLE_OPTIONS = [
 const CATEGORIES = [
   { key: 'overview', label: 'Overview', icon: 'fa-solid fa-sliders', group: 'General', terms: 'home start screen preferences settings' },
   { key: 'profile', label: 'Profile', icon: 'fa-solid fa-user', group: 'Account', terms: 'name pen name language timezone identity' },
-  { key: 'authentication', label: 'Authentication', icon: 'fa-solid fa-shield-halved', group: 'Account', terms: 'sign in password discord google account identity login provider authentication' },
   { key: 'appearance', label: 'Appearance', icon: 'fa-solid fa-palette', group: 'Experience', terms: 'theme colour paper custom motion' },
   { key: 'editor', label: 'Editor', icon: 'fa-solid fa-pen-nib', group: 'Experience', terms: 'writing font spelling autocorrect page' },
   { key: 'writing', label: 'Writing experience', icon: 'fa-solid fa-feather-pointed', group: 'Experience', terms: 'autosave typewriter focus writing session' },
@@ -54,7 +53,7 @@ export default function Settings() {
   const { settings, updateSettings, refreshNovels, toast, settingsOpen, openSettings, closeSettings,
     appLock, enableAppLock, updateAppLock, disableAppLock, lockNow,
     customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts,
-    connectDiscord, connectGoogle } = app
+    } = app
 
   const [cat, setCat] = useState('overview')
   const [query, setQuery] = useState('')
@@ -92,6 +91,7 @@ export default function Settings() {
         <nav className="settings-rail">
           <div className="settings-profile"><span className="settings-profile-mark"><Icon icon="fa-solid fa-moon" /></span><span><strong>MoonScribe</strong><small>Make the studio yours</small></span></div>
           <label className="settings-search"><Icon icon="fa-solid fa-magnifying-glass" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
+          <button className="settings-account-centre-button" onClick={() => setConnectOpen(true)}><span className="settings-rail-icon"><Icon icon="fa-solid fa-user-shield" /></span><span>Account Centre</span><Icon icon="fa-solid fa-arrow-up-right-from-square" /></button>
           {[...new Set(CATEGORIES.map((item) => item.group))].map((group) => {
             const items = CATEGORIES.filter((item) => item.group === group && `${item.label} ${item.terms}`.toLowerCase().includes(query.trim().toLowerCase()))
             if (!items.length) return null
@@ -128,7 +128,6 @@ export default function Settings() {
           {!query && cat === 'editor' && <EditorSettings settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'overview' && <SettingsOverview onOpenCategory={setCat} />}
           {!query && cat === 'profile' && <Profile settings={settings} updateSettings={updateSettings} />}
-          {!query && cat === 'authentication' && <AppConnections onOpen={() => setConnectOpen(true)} onConnectDiscord={connectDiscord} onConnectGoogle={connectGoogle} />}
           {!query && cat === 'writing' && <WritingExperience settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'sounds' && <SoundsFeedback settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'notifications' && <NotificationPreferences settings={settings} updateSettings={updateSettings} />}
@@ -249,13 +248,13 @@ function AppConnections({ onOpen, onConnectDiscord, onConnectGoogle }) {
     <section className="settings-panel">
       <div className="settings-panel-kicker">Account</div>
       <h2>Authentication</h2>
-      <p className="muted">Choose how you sign in. You only need one method, and every method opens the same MoonScribe library.</p>
+      <p className="muted">Use any connected method to access the same MoonScribe account and library. These methods authenticate one account; none owns it.</p>
       <div className="settings-identity-card">
         {syncDiscordAvatar ? <img src={syncDiscordAvatar} alt="" /> : <span><Icon icon="fa-solid fa-moon" /></span>}
         <div><strong>{syncUsername || 'Your MoonScribe identity'}</strong><small>{connected ? 'Connected and ready to sync' : 'Connect a provider to sync this library'}</small></div>
         <span className={`settings-status-pill ${syncStatus === 'synced' ? 'safe' : 'warn'}`}>{connected ? 'Active' : 'Local only'}</span>
       </div>
-      <div className="settings-subheading">Sign-in options</div>
+      <div className="settings-subheading">Sign-in methods</div>
       <ConnectionRow icon="fa-brands fa-discord" name="Discord" detail={connected && provider === 'Discord' ? `Connected as ${syncUsername}` : 'Use your Discord account'} connected={connected && provider === 'Discord'} onManage={connected && provider === 'Discord' ? onOpen : onConnectDiscord} />
       <ConnectionRow icon="fa-brands fa-google" name="Google" detail={connected && provider === 'Google' ? `Connected as ${syncUsername}` : 'Use your Google account'} connected={connected && provider === 'Google'} onManage={connected && provider === 'Google' ? onOpen : onConnectGoogle} />
       <ConnectionRow icon="fa-solid fa-key" name="MoonScribe password" detail="Sign in with an email and password" connected={false} onManage={onOpen} />
@@ -525,6 +524,8 @@ const ACCENT_OPTIONS = [
 ]
 
 function Appearance({ settings, updateSettings, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, fontName, setFontName, fontFileRef, toast }) {
+  const [fontQuery, setFontQuery] = useState('')
+  const [fontFilter, setFontFilter] = useState('all')
   const themes = [
     ['light', 'Parchment', '#f4efe5', '#27221d'], ['sandstone', 'Sandstone', '#d8c0a2', '#3c2d22'],
     ['dark', 'Moonlight', '#17161c', '#e8e0d5'], ['ember', 'Ember', '#211713', '#f0c7a3'],
@@ -532,8 +533,17 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
   ]
 
   const renderFontShelf = (fonts, kind) => {
+    const query = fontQuery.trim().toLowerCase()
+    const filteredFonts = (fonts || []).filter((font) => {
+      const label = String(font.label || font.family).toLowerCase()
+      const family = String(font.family || '').toLowerCase()
+      const haystack = `${label} ${family}`
+      const matchesQuery = !query || haystack.includes(query)
+      const matchesFilter = fontFilter === 'all' || String(font.category || font.kind || '').toLowerCase().includes(fontFilter)
+      return matchesQuery && matchesFilter
+    })
     const grouped = (Object.entries(
-      ((fonts || []) as Array<any>).reduce((acc: Record<string, any[]>, font: any) => {
+      ((filteredFonts || []) as Array<any>).reduce((acc: Record<string, any[]>, font: any) => {
         const groupKey = font.group || (kind === 'custom' ? 'Custom' : 'System')
         if (!acc[groupKey]) acc[groupKey] = []
         acc[groupKey].push(font)
@@ -544,12 +554,12 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
     return grouped.map(([group, items]) => (
       <div className="font-shelf-group" key={`${kind}-${group}`}>
         <div className="font-shelf-group-label">{group}</div>
-        <div className="font-shelf-grid">
+        <div className="font-shelf-list">
           {(items || []).map((font) => (
-            <div key={`${kind}-${font.id || font.family}-${font.label || font.family}`} className={`font-shelf-card${kind === 'custom' ? ' removable' : ''}`} style={{ fontFamily: font.family }}>
-              <div className="font-shelf-preview" title={font.label || font.family}>{font.label || font.family}</div>
+            <div key={`${kind}-${font.id || font.family}-${font.label || font.family}`} className="font-shelf-row" style={{ fontFamily: font.family }}>
+              <div className="font-shelf-preview" title={font.label || font.family}>Aa</div>
+              <div className="font-shelf-name"><strong>{font.label || font.family}</strong><small>{font.kind || (kind === 'custom' ? 'Installed' : 'Available on this device')}</small></div>
               <div className="font-shelf-meta">
-                <span>{font.kind || (kind === 'custom' ? 'Installed' : 'Detected')}</span>
                 {kind === 'custom' && (
                   <button type="button" className="font-shelf-remove" onClick={() => deleteCustomFont(font)} aria-label={`Remove ${font.label || font.family}`}>
                     <Icon icon="fa-solid fa-xmark" />
@@ -605,6 +615,12 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
 
       <div className="settings-subheading">Fonts</div>
       <p className="settings-row-sub">MoonScribe can use built-in Google fonts, detected system fonts, and fonts you install from file.</p>
+      <div className="font-browser-toolbar">
+        <label className="font-browser-search"><Icon icon="fa-solid fa-magnifying-glass" /><input value={fontQuery} onChange={(event) => setFontQuery(event.target.value)} placeholder="Search installed fonts" aria-label="Search installed fonts" /></label>
+        <div className="font-filter-chips" role="group" aria-label="Filter fonts">
+          {['all', 'serif', 'sans', 'mono'].map((filter) => <button type="button" key={filter} className={fontFilter === filter ? 'active' : ''} onClick={() => setFontFilter(filter)}>{filter === 'all' ? 'All fonts' : filter[0].toUpperCase() + filter.slice(1)}</button>)}
+        </div>
+      </div>
       {supabaseReady && <div className="settings-status-pill safe" style={{ marginBottom: 14 }}>Supabase ready</div>}
       <div className="settings-section-card">
         <div className="settings-section-head">
@@ -684,7 +700,12 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
       <div className="settings-row"><div><div className="settings-row-title">Interface scale</div><div className="settings-row-sub">Resize navigation, dialogs, buttons and labels throughout MoonScribe.</div></div><Select ariaLabel="Interface scale" width={150} value={String(settings.interfaceScale || 100)} onChange={(v) => updateSettings({ interfaceScale: Number(v) })} options={[{ value: '90', label: '90%', hint: 'compact' }, { value: '100', label: '100%', hint: 'default' }, { value: '110', label: '110%', hint: 'large' }, { value: '120', label: '120%', hint: 'largest' }]} /></div>
       <div className="settings-row"><div><div className="settings-row-title">Control density</div><div className="settings-row-sub">Choose how much information fits on screen.</div></div><Select ariaLabel="Control density" width={160} value={settings.interfaceDensity || 'comfortable'} onChange={(v) => updateSettings({ interfaceDensity: v })} options={[{ value: 'compact', label: 'Compact' }, { value: 'comfortable', label: 'Comfortable' }, { value: 'spacious', label: 'Spacious' }]} /></div>
       <div className="settings-row"><div><div className="settings-row-title">Corner style</div><div className="settings-row-sub">Change the visual character of cards, menus and controls.</div></div><Select ariaLabel="Corner style" width={160} value={settings.cornerStyle || 'rounded'} onChange={(v) => updateSettings({ cornerStyle: v })} options={[{ value: 'square', label: 'Precise' }, { value: 'rounded', label: 'Rounded' }, { value: 'soft', label: 'Extra soft' }]} /></div>
-      <div className="settings-row"><div><div className="settings-row-title">Simplify decoration</div><div className="settings-row-sub">Reduce grain, glow and ornamental effects while keeping the theme.</div></div><Toggle checked={!!settings.simplifiedDecorations} onChange={(v) => updateSettings({ simplifiedDecorations: v })} /></div>
+      <div className="settings-subheading">Text effects</div>
+      <div className="settings-section-card effects-card">
+        <div className="effects-card-intro"><strong>Keep the page calm</strong><small>Choose how much visual texture MoonScribe adds around your writing.</small></div>
+        <div className="settings-row"><div><div className="settings-row-title">Paper texture</div><div className="settings-row-sub">A subtle grain behind pages and previews.</div></div><Toggle checked={!!settings.paperTexture} onChange={(v) => updateSettings({ paperTexture: v })} /></div>
+        <div className="settings-row"><div><div className="settings-row-title">Decorative effects</div><div className="settings-row-sub">Keep glow, ornaments and atmospheric accents.</div></div><Toggle checked={!settings.simplifiedDecorations} onChange={(v) => updateSettings({ simplifiedDecorations: !v })} /></div>
+      </div>
     </section>
   )
 }

@@ -437,6 +437,7 @@ export default function AuthModal({
 
   const [magicEmail, setMagicEmail] = useState('')
   const [sentMagicEmail, setSentMagicEmail] = useState('')
+  const [resetEmail, setResetEmail] = useState('')
 
   const [busy, setBusy] = useState(false)
   const [busyProvider, setBusyProvider] = useState(null)
@@ -1660,6 +1661,17 @@ export default function AuthModal({
             )}
           </button>
         </form>
+
+        {mode === 'login' && (
+          <div className="mt-4 rounded-xl border border-white/[0.07] bg-white/[0.02] p-3">
+            <div className="mb-2 text-[10px] font-semibold text-zinc-300">Forgot your password?</div>
+            <div className="flex gap-2">
+              <input className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-xs text-white" type="email" value={resetEmail} onChange={(event) => setResetEmail(event.target.value)} placeholder="Account email" />
+              <button type="button" className="rounded-lg bg-white/[0.08] px-3 py-2 text-[10px] text-zinc-200" onClick={async () => { try { const response = await fetch(`${apiBaseUrl()}/api/auth/request-password-reset`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: resetEmail }) }); const result = await response.json().catch(() => ({})); if (!response.ok) throw new Error(result.error || 'Could not request a reset code.'); toast?.('Reset code sent. Check your email.'); } catch (error) { toast?.(error?.message || 'Could not request a reset code.') } }}>Send code</button>
+            </div>
+            <p className="mt-2 text-[10px] text-zinc-600">We’ll send a short-lived verification code to your account email.</p>
+          </div>
+        )}
 
         {libraryConflict && (
           <div

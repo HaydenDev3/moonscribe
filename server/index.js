@@ -294,7 +294,8 @@ function setupSchema(db) {
       provider     TEXT NOT NULL,
       server_origin TEXT NOT NULL,
       expires_at   INTEGER NOT NULL,
-      created_at   INTEGER NOT NULL
+      created_at   INTEGER NOT NULL,
+      mode         TEXT NOT NULL DEFAULT 'login'
     );
     CREATE TABLE IF NOT EXISTS magic_links (
       id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL,
@@ -328,6 +329,7 @@ function setupSchema(db) {
   ensureColumn('users', 'two_factor_code', 'two_factor_code TEXT')
   ensureColumn('users', 'two_factor_expires_at', 'two_factor_expires_at INTEGER')
   ensureColumn('users', 'disabled_at', 'disabled_at INTEGER')
+  ensureColumn('oauth_exchanges', 'mode', "mode TEXT NOT NULL DEFAULT 'login'")
   ensureColumn('users', 'role', "role TEXT NOT NULL DEFAULT 'user'")
   ensureColumn('users', 'roles', "roles TEXT NOT NULL DEFAULT 'user'")
   db.exec(`
@@ -691,8 +693,13 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         const discordUser = await meRes.json()
         if (!discordUser.id) throw new Error('Could not retrieve Discord user')
 
-        // Find or create local user linked to this Discord ID
-        let user = database.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordUser.id)
+        // Linking never creates or switches the MoonScribe account.
+        let user = stateData.mode === 'link'
+          ? database.prepare('SELECT * FROM users WHERE id = ?').get(stateData.linkUserId)
+          : database.prepare('SELECT * FROM users WHERE discord_id = ?').get(discordUser.id)
+        const owner = database.prepare('SELECT id FROM users WHERE discord_id = ?').get(discordUser.id)
+        if (stateData.mode === 'link' && owner && owner.id !== stateData.linkUserId) throw new Error('This Discord account already belongs to another MoonScribe account')
+        if (stateData.mode === 'link' && !user) throw new Error('The current MoonScribe session is no longer valid.')
         if (!user) {
           const userId = randomBytes(12).toString('hex')
           let base = (discordUser.username || 'user').toLowerCase().replace(/[^a-z0-9._-]/g, '_').slice(0, 28)
@@ -710,8 +717,13 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         } else {
           if (user.disabled_at) throw new Error('This MoonScribe account is disabled. Contact support to restore access.')
           // Refresh avatar/username
-          database.prepare('UPDATE users SET discord_avatar = ?, discord_username = ? WHERE discord_id = ?')
-            .run(discordUser.avatar || '', discordUser.username || '', discordUser.id)
+          if (stateData.mode === 'link') {
+            database.prepare('UPDATE users SET discord_id = ?, discord_avatar = ?, discord_username = ? WHERE id = ?')
+              .run(discordUser.id, discordUser.avatar || '', discordUser.username || '', user.id)
+          } else {
+            database.prepare('UPDATE users SET discord_avatar = ?, discord_username = ? WHERE discord_id = ?')
+              .run(discordUser.avatar || '', discordUser.username || '', discordUser.id)
+          }
         }
 
         const avatarUrl = discordUser.avatar
@@ -721,9 +733,9 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         // A short-lived, one-use code keeps the long-lived sync token out of
         // redirect URLs, browser history, and referrer headers.
         const exchange = randomBytes(24).toString('base64url')
-        database.prepare('INSERT OR REPLACE INTO oauth_exchanges (code, user_id, username, avatar, provider, server_origin, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(exchange, user.id, user.username, avatarUrl, 'discord', oauthCallbackOrigin(req), Date.now() + 2 * 60 * 1000, Date.now())
-        const params = new URLSearchParams({ discord_exchange: exchange })
+        database.prepare('INSERT OR REPLACE INTO oauth_exchanges (code, user_id, username, avatar, provider, server_origin, expires_at, created_at, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(exchange, user.id, user.username, avatarUrl, 'discord', oauthCallbackOrigin(req), Date.now() + 2 * 60 * 1000, Date.now(), stateData.mode || 'login')
+        const params = new URLSearchParams({ discord_exchange: exchange, ...(stateData.mode === 'link' ? { linked: '1' } : {}) })
         res.writeHead(302, { Location: oauthResultLocation(stateData.redirectTo, params), 'Cache-Control': 'no-store' })
         res.end()
       })().catch((err) => {
@@ -773,7 +785,12 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         const profile = await profileRes.json()
         if (!profile.sub || !profile.email || profile.email_verified === false) throw new Error('Google did not return a verified email address.')
         const email = String(profile.email).toLowerCase()
-        let user = database.prepare('SELECT * FROM users WHERE google_id = ? OR email = ?').get(profile.sub, email)
+        let user = stateData.mode === 'link'
+          ? database.prepare('SELECT * FROM users WHERE id = ?').get(stateData.linkUserId)
+          : database.prepare('SELECT * FROM users WHERE google_id = ? OR email = ?').get(profile.sub, email)
+        const owner = database.prepare('SELECT id FROM users WHERE google_id = ? OR (email = ? AND email_verified = 1)').get(profile.sub, email)
+        if (stateData.mode === 'link' && owner && owner.id !== stateData.linkUserId) throw new Error('This Google account already belongs to another MoonScribe account')
+        if (stateData.mode === 'link' && !user) throw new Error('The current MoonScribe session is no longer valid.')
         if (!user) {
           const userId = randomBytes(12).toString('hex')
         const userCount = database.prepare('SELECT COUNT(*) AS n FROM users').get().n
@@ -789,9 +806,9 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           database.prepare('UPDATE users SET google_id = ?, google_avatar = ?, email = ? WHERE id = ?').run(profile.sub, profile.picture || '', email, user.id)
         }
         const exchange = randomBytes(24).toString('base64url')
-        database.prepare('INSERT OR REPLACE INTO oauth_exchanges (code, user_id, username, avatar, provider, server_origin, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(exchange, user.id, user.username, profile.picture || '', 'google', oauthCallbackOrigin(req), Date.now() + 2 * 60 * 1000, Date.now())
-        res.writeHead(302, { Location: oauthResultLocation(stateData.redirectTo, new URLSearchParams({ oauth_exchange: exchange, provider: 'google' })), 'Cache-Control': 'no-store' })
+        database.prepare('INSERT OR REPLACE INTO oauth_exchanges (code, user_id, username, avatar, provider, server_origin, expires_at, created_at, mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(exchange, user.id, user.username, profile.picture || '', 'google', oauthCallbackOrigin(req), Date.now() + 2 * 60 * 1000, Date.now(), stateData.mode || 'login')
+        res.writeHead(302, { Location: oauthResultLocation(stateData.redirectTo, new URLSearchParams({ oauth_exchange: exchange, provider: 'google', ...(stateData.mode === 'link' ? { linked: '1' } : {}) })), 'Cache-Control': 'no-store' })
         res.end()
       })().catch((error) => {
         console.error('[Google OAuth]', error.message)
@@ -814,7 +831,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         if (!database.prepare('SELECT 1 FROM users WHERE id = ? AND disabled_at IS NULL').get(exchange.user_id)) throw new Error('This MoonScribe account is disabled. Contact support to restore access.')
         database.prepare('DELETE FROM oauth_exchanges WHERE code = ?').run(String(code))
         const { token } = issueToken(database, exchange.user_id, device(req))
-        json(res, 200, { token, accountId: exchange.user_id, username: exchange.username, avatar: exchange.avatar, provider: exchange.provider, server: exchange.server_origin || publicOrigin(req) })
+        json(res, 200, { token, accountId: exchange.user_id, username: exchange.username, avatar: exchange.avatar, provider: exchange.provider, server: exchange.server_origin || publicOrigin(req), linked: exchange.mode === 'link' })
       }).catch((error) => json(res, 400, { error: error.message }))
       return
     }
@@ -827,7 +844,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           if (!database.prepare('SELECT 1 FROM users WHERE id = ? AND disabled_at IS NULL').get(exchange.user_id)) throw new Error('This MoonScribe account is disabled. Contact support to restore access.')
           database.prepare('DELETE FROM oauth_exchanges WHERE code = ?').run(String(code))
           const { token } = issueToken(database, exchange.user_id, device(req))
-          json(res, 200, { token, accountId: exchange.user_id, username: exchange.username, avatar: exchange.avatar, provider: exchange.provider || 'discord', server: exchange.server_origin || publicOrigin(req) })
+          json(res, 200, { token, accountId: exchange.user_id, username: exchange.username, avatar: exchange.avatar, provider: exchange.provider || 'discord', server: exchange.server_origin || publicOrigin(req), linked: exchange.mode === 'link' })
         })
         .catch((err) => json(res, 400, { error: err.message }))
       return
@@ -891,6 +908,32 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           json(res, 200, { ok: true, email: address, codeSent: true, expiresAt })
         })
         .catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/auth/request-password-reset' && req.method === 'POST') {
+      readBody(req, 8 * 1024).then(({ email }) => {
+        const address = String(email || '').trim().toLowerCase()
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) throw new Error('Enter a valid email address.')
+        const user = database.prepare('SELECT * FROM users WHERE email = ?').get(address)
+        if (!user) return json(res, 404, { error: 'No MoonScribe account uses that email address.' })
+        const { code, expiresAt } = issueEmailCode(database, user.id, 'password_reset')
+        if (isEmailConfigured()) sendVerificationCode({ to: address, username: user.username, code, appOrigin: publicOrigin(req), expiresAt })
+        json(res, 200, { ok: true, email: address, expiresAt })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/auth/reset-password' && req.method === 'POST') {
+      readBody(req, 8 * 1024).then(({ email, code, password }) => {
+        const address = String(email || '').trim().toLowerCase()
+        if (String(password || '').length < 10) throw new Error('Your password needs at least 10 characters.')
+        const user = database.prepare('SELECT id FROM users WHERE email = ?').get(address)
+        if (!user || !verifyEmailCode(database, user.id, 'password_reset', code)) throw new Error('That reset code is invalid or expired.')
+        database.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), user.id)
+        database.prepare('DELETE FROM tokens WHERE user_id = ?').run(user.id)
+        json(res, 200, { ok: true })
+      }).catch((err) => json(res, 400, { error: err.message }))
       return
     }
 
@@ -1000,6 +1043,26 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       return
     }
 
+    // Linking is deliberately separate from login. The browser must prove an
+    // existing MoonScribe session before an OAuth provider can be attached.
+    if (path === '/api/auth/link/start' && req.method === 'POST') {
+      readBody(req, 8 * 1024).then(({ provider, redirect_to }) => {
+        const providerName = provider === 'google' || provider === 'discord' ? provider : null
+        if (!providerName) return json(res, 400, { error: 'Unsupported sign-in method.' })
+        if (providerName === 'discord' && !DISCORD_CLIENT_SECRET) return json(res, 503, { error: 'Discord sign-in is not configured.' })
+        if (providerName === 'google' && (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET)) return json(res, 503, { error: 'Google sign-in is not configured.' })
+        const redirectTo = authReturnTarget(req, redirect_to)
+        const state = oauthState({ redirectTo, provider: providerName, mode: 'link', linkUserId: userId })
+        const callbackUrl = `${oauthCallbackOrigin(req)}/auth/${providerName}/callback`
+        const params = providerName === 'google'
+          ? new URLSearchParams({ client_id: GOOGLE_CLIENT_ID, redirect_uri: callbackUrl, response_type: 'code', scope: 'openid email profile', state, access_type: 'online', prompt: 'select_account' })
+          : new URLSearchParams({ client_id: DISCORD_CLIENT_ID, redirect_uri: callbackUrl, response_type: 'code', scope: DISCORD_SCOPES, state })
+        const url = providerName === 'google' ? `https://accounts.google.com/o/oauth2/v2/auth?${params}` : `https://discord.com/api/oauth2/authorize?${params}`
+        json(res, 200, { ok: true, provider: providerName, url })
+      }).catch((error) => json(res, 400, { error: error.message }))
+      return
+    }
+
     if (path === '/api/auth/verify-email' && req.method === 'POST') {
       readBody(req, 8 * 1024).then(({ code }) => {
         const user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
@@ -1013,15 +1076,20 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     }
 
     if (path === '/api/auth/update-account' && req.method === 'POST') {
-      readBody(req, 12 * 1024).then(async ({ email, password, content, notify }) => {
+      readBody(req, 12 * 1024).then(async ({ username, email, password, content, notify }) => {
         const user = database.prepare('SELECT * FROM users WHERE id = ?').get(userId)
         if (!user) return json(res, 401, { error: 'Account no longer exists.' })
+        const nextUsername = typeof username === 'string' && username.trim() ? username.trim() : user.username
+        if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{1,39}$/.test(nextUsername)) throw new Error('Username must be 2–40 characters and use letters, numbers, dots, dashes or underscores.')
+        const usernameOwner = database.prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE AND id <> ?').get(nextUsername, userId)
+        if (usernameOwner) throw new Error('That username is already in use.')
         const nextEmail = typeof email === 'string' && email.trim() ? email.trim().toLowerCase() : user.email
         if (nextEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) throw new Error('Enter a valid email address.')
         if (typeof password === 'string' && password.trim()) {
           if (password.length < 10) throw new Error('Your password needs at least 10 characters.')
           database.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(password), userId)
         }
+        if (nextUsername !== user.username) database.prepare('UPDATE users SET username = ? WHERE id = ?').run(nextUsername, userId)
         if (nextEmail && nextEmail !== user.email) {
           database.prepare('UPDATE users SET email = ?, email_verified = 0 WHERE id = ?').run(nextEmail, userId)
           if (isEmailConfigured()) {
@@ -1039,7 +1107,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         if (notify && typeof notify === 'string' && user.email) {
           await sendAccountUpdateEmail({ to: user.email, username: user.username, summary: notify }).catch(() => null)
         }
-        json(res, 200, { ok: true, email: nextEmail || null })
+        json(res, 200, { ok: true, username: nextUsername, email: nextEmail || null })
       }).catch((err) => json(res, 400, { error: err.message }))
       return
     }
@@ -1054,6 +1122,31 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         database.prepare('DELETE FROM tokens WHERE user_id = ?').run(userId)
         database.prepare('DELETE FROM share_presence WHERE user_id = ?').run(userId)
         json(res, 200, { ok: true, disabledAt: now })
+      }).catch((err) => json(res, 400, { error: err.message }))
+      return
+    }
+
+    if (path === '/api/auth/delete-account' && req.method === 'POST') {
+      readBody(req, 8 * 1024).then(({ confirmation }) => {
+        const user = database.prepare('SELECT username FROM users WHERE id = ?').get(userId)
+        if (!user) return json(res, 404, { error: 'Account not found.' })
+        if (String(confirmation || '').trim() !== String(user.username)) return json(res, 400, { error: `Type ${user.username} exactly to permanently delete this account.` })
+        database.exec('BEGIN')
+        try {
+          database.prepare('DELETE FROM records WHERE user_id = ?').run(userId)
+          database.prepare('DELETE FROM tokens WHERE user_id = ?').run(userId)
+          database.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId)
+          database.prepare('DELETE FROM email_tokens WHERE user_id = ?').run(userId)
+          database.prepare('DELETE FROM magic_links WHERE user_id = ?').run(userId)
+          database.prepare('DELETE FROM novel_members WHERE member_user_id = ? OR owner_user_id = ?').run(userId, userId)
+          database.prepare('DELETE FROM share_presence WHERE user_id = ?').run(userId)
+          database.prepare('DELETE FROM users WHERE id = ?').run(userId)
+          database.exec('COMMIT')
+          json(res, 200, { ok: true, deleted: true })
+        } catch (error) {
+          database.exec('ROLLBACK')
+          throw error
+        }
       }).catch((err) => json(res, 400, { error: err.message }))
       return
     }
@@ -1100,7 +1193,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       const user = database.prepare('SELECT id, username, email, discord_id, discord_username, discord_avatar, google_id, google_avatar, email_verified, two_factor_enabled, created_at, disabled_at, role, roles FROM users WHERE id = ?').get(userId)
       if (!user) return json(res, 401, { error: 'Account no longer exists.' })
       const roleInfo = userRoleInfo(user)
-      json(res, 200, { account: { id: user.id, username: user.username, email: user.email || null, provider: user.discord_id ? 'discord' : user.google_id ? 'google' : 'email', discordUsername: user.discord_username || null, discordAvatar: user.discord_avatar || user.google_avatar || null, emailVerified: Number(user.email_verified) === 1, twoFactorEnabled: Number(user.two_factor_enabled) === 1, disabledAt: user.disabled_at || null, createdAt: user.created_at, role: roleInfo.role, roles: roleInfo.roles, isAdmin: roleInfo.isAdmin, isDeveloper: roleInfo.isDeveloper } })
+      json(res, 200, { account: { id: user.id, username: user.username, email: user.email || null, provider: user.discord_id ? 'discord' : user.google_id ? 'google' : 'email', discordUsername: user.discord_username || null, discordAvatar: user.discord_avatar || user.google_avatar || null, emailVerified: Number(user.email_verified) === 1, twoFactorEnabled: Number(user.two_factor_enabled) === 1, disabledAt: user.disabled_at || null, createdAt: user.created_at, role: roleInfo.role, roles: roleInfo.roles, isAdmin: roleInfo.isAdmin, isDeveloper: roleInfo.isDeveloper, linkedProviders: { discord: Boolean(user.discord_id), google: Boolean(user.google_id), password: Boolean(user.password_hash) } } })
       return
     }
 

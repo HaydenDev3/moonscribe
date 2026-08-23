@@ -7,7 +7,7 @@ import { getMeta, setMeta } from '../db/meta'
 import { toWire, fromWire } from './serialize'
 import { todayKey, addTodayWords } from '../db/stats'
 import { hasDesktopCredentialVault, readDesktopCredential, writeDesktopCredential } from '../security/credentials'
-import { apiBaseUrl } from '../api/config'
+import { apiBaseUrl, websocketOrigin } from '../api/config'
 
 let statusListeners = []
 // Sync requests can arrive together (initial app sync, focus, invite accept).
@@ -619,9 +619,11 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
   const cfg = await getConfig()
   if (!cfg.server || !cfg.token || !novelId || typeof WebSocket === 'undefined') return () => {}
   const base = apiBase(cfg)
-  const wsUrl = base.replace(/^http/i, 'ws') + `/ws/presence?novelId=${encodeURIComponent(novelId)}&token=${encodeURIComponent(cfg.token)}`
+  const wsUrl = websocketOrigin(base) + `/ws/presence?novelId=${encodeURIComponent(novelId)}&token=${encodeURIComponent(cfg.token)}`
   let closed = false
   let retryTimer = null
+  let retryAttempt = 0
+  let online = typeof navigator === 'undefined' || navigator.onLine !== false
   let socket = null
   const pendingRecords = new Map()
   const sendRecord = (record) => {
@@ -637,9 +639,11 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
   window.addEventListener('moonscribe:record-written', publishRecord)
 
   const connectSocket = () => {
-    if (closed) return
+    if (closed || !online) return
+    window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: retryAttempt ? 'reconnecting' : 'connecting', novelId } }))
     socket = new WebSocket(wsUrl)
     socket.addEventListener('open', () => {
+      retryAttempt = 0
       for (const [key, record] of pendingRecords) {
         if (sendRecord(record)) pendingRecords.delete(key)
       }
@@ -667,7 +671,8 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
     socket.addEventListener('close', () => {
       if (closed) return
       window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: 'reconnecting', novelId } }))
-      retryTimer = setTimeout(connectSocket, 1500)
+      const delay = Math.min(30000, 800 * (2 ** Math.min(retryAttempt++, 6))) + Math.round(Math.random() * 250)
+      retryTimer = setTimeout(connectSocket, delay)
     })
     socket.addEventListener('error', (error) => {
       onError?.(error)
@@ -675,10 +680,17 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
     })
   }
 
+  const onOnline = () => { online = true; retryAttempt = 0; connectSocket() }
+  const onOffline = () => { online = false; clearTimeout(retryTimer); try { socket?.close() } catch {} ; window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: 'offline', novelId } })) }
+  window.addEventListener('online', onOnline)
+  window.addEventListener('offline', onOffline)
+
   connectSocket()
   return () => {
     closed = true
     window.removeEventListener('moonscribe:record-written', publishRecord)
+    window.removeEventListener('online', onOnline)
+    window.removeEventListener('offline', onOffline)
     clearTimeout(retryTimer)
     if (!socket) return
     if (socket.readyState === WebSocket.OPEN) {

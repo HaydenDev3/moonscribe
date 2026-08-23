@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ComponentType } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { getNovel, updateNovel } from '../db/novels'
 import { listChapters } from '../db/chapters'
 import { useApp } from '../context/AppContext'
@@ -17,6 +17,7 @@ import { coverGeometry } from '../utils/coverGeometry'
 import { buildDesignerFontOptions } from '../utils/fonts'
 import { useContextMenu } from '../components/ContextMenu'
 import { clearPresence, subscribePresence, updatePresence } from '../sync/engine'
+import { listMoodboard } from '../db/moodboard'
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -123,6 +124,7 @@ const SECTIONS = [
   { key: 'palette',   label: 'Palette',       icon: 'fa-solid fa-swatchbook',          group: 'Cover' },
   { key: 'effects',   label: 'Text effects',  icon: 'fa-solid fa-text-height',         group: 'Cover' },
   { key: 'image',     label: 'Cover image',   icon: 'fa-regular fa-image',             group: 'Cover' },
+  { key: 'media',     label: 'Media library', icon: 'fa-regular fa-images',            group: 'Cover' },
   { key: 'shapes',    label: 'Ornaments',     icon: 'fa-solid fa-shapes',              group: 'Cover' },
   { key: 'atmosphere', label: 'Atmosphere',    icon: 'fa-solid fa-hat-wizard',          group: 'Pages' },
   { key: 'body',       label: 'Body text',     icon: 'fa-solid fa-font',               group: 'Pages' },
@@ -221,12 +223,14 @@ export default function BookDesigner({
   embedded?: boolean
 }) {
   const { id: paramId } = useParams()
+  const navigate = useNavigate()
   const id = novelId || paramId
   const { toast, customFonts, systemFonts } = useApp() as any
   const { openContextMenu } = useContextMenu()
 
   const [novel, setNovel] = useState<any>(null)
   const [chapters, setChapters] = useState<any[]>([])
+  const [libraryImages, setLibraryImages] = useState<any[]>([])
   const [layout, setLayout] = useState<any>(null)
   const canEditDesigner = !novel?.sharedRole || novel.sharedRole === 'editor'
 
@@ -258,6 +262,7 @@ export default function BookDesigner({
       const n = await getNovel(id)
       setNovel(n)
       setChapters(await listChapters(id))
+      setLibraryImages((await listMoodboard(id)).filter((tile) => tile.kind === 'image' && tile.image))
       setLayout(n.layout || {})
       layoutRef.current = n.layout || {}
     })()
@@ -402,9 +407,12 @@ export default function BookDesigner({
         setCanUndo(true)
         setCanRedo(false)
       }
+      // Save artwork immediately as well as through the normal layout debounce.
+      // Large data URLs can outlive a route change before the debounce fires.
+      updateNovel(id, { layout: next }).catch(() => toast('Artwork could not be saved locally. Try a smaller image.'))
       return next
     })
-  }, [canEditDesigner])
+  }, [canEditDesigner, id, toast])
 
   const applySurfaceImage = useCallback(async (file, surface = coverSurface) => {
     if (!file?.type?.startsWith('image/')) return false
@@ -582,7 +590,7 @@ export default function BookDesigner({
             </button>
           </div>
           <div className="ds-panel-body studio-rail-scroll" data-section={section}>
-            {renderSection(section, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements, designerFontOptions })}
+            {renderSection(section, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements, designerFontOptions, libraryImages })}
           </div>
         </div>
 
@@ -606,7 +614,7 @@ export default function BookDesigner({
               <button className={`ds-stage-tab ${stageView === 'cover' ? 'active' : ''}`} onClick={() => setStageView('cover')}>
                 <Icon icon="fa-solid fa-book" /> Cover
               </button>
-              <button className={`ds-stage-tab ${stageView === 'page' ? 'active' : ''}`} onClick={() => { window.location.hash = `#/novel/${id}/design/print` }}>
+              <button className={`ds-stage-tab ${stageView === 'page' ? 'active' : ''}`} onClick={() => navigate(`/novel/${id}/design/print`)}>
                 <Icon icon="fa-solid fa-file-lines" /> Print preview
               </button>
             </div>
@@ -681,7 +689,7 @@ export default function BookDesigner({
           {/* Footer */}
           <div className="ds-stage-footer">
             <span className="small muted">{measurements.trimWidthMm.toFixed(1)} × {measurements.trimHeightMm.toFixed(1)} mm · {measurements.spineMm.toFixed(1)} mm spine · ~{measurements.pages} pages</span>
-            <button className="button button-primary" onClick={() => { window.location.hash = `#/novel/${id}/design/print` }}>
+            <button className="button button-primary" onClick={() => navigate(`/novel/${id}/design/print`)}>
               Open print view →
             </button>
           </div>
@@ -693,12 +701,13 @@ export default function BookDesigner({
 
 // ─── section renderer ─────────────────────────────────────────────────────────
 
-function renderSection(section, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements, designerFontOptions }) {
+function renderSection(section, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements, designerFontOptions, libraryImages }) {
   switch (section) {
     case 'cover':     return <CoverTab cover={cover} updateCover={updateCover} />
     case 'palette':   return <PaletteTab cover={cover} updateCover={updateCover} />
     case 'effects':   return <EffectsTab cover={cover} updateCover={updateCover} designerFontOptions={designerFontOptions} />
     case 'image':     return <ImageTab novel={novel} cover={cover} updateCover={updateCover} surface={coverSurface} setSurface={setCoverSurface} />
+    case 'media':     return <MediaDesignerTab images={libraryImages} cover={cover} updateCover={updateCover} surface={coverSurface} />
     case 'shapes':    return <ShapesTab cover={cover} layout={layout} updateCover={updateCover} update={update} />
     case 'atmosphere': return <AtmosphereTab layout={layout} update={update} toast={toast} />
     case 'body':      return <BodyTab layout={layout} update={update} designerFontOptions={designerFontOptions} />
@@ -899,6 +908,17 @@ function ImageTab({ novel, cover, updateCover, surface, setSurface }) {
       {surface === 'back' && <label className="ds-toggle-row"><span>Show blurb on back</span><input type="checkbox" checked={cover.showBackText !== false} onChange={(event) => updateCover({ showBackText: event.target.checked })} /></label>}
     </>
   )
+}
+
+function MediaDesignerTab({ images = [], cover, updateCover, surface }) {
+  const imageKey = `${surface}Image`
+  const cropKey = `${surface}Crop`
+  const choose = (image) => updateCover({ [imageKey]: image, [cropKey]: { zoom: 1, x: 50, y: 50 }, showImage: true })
+  return <>
+    <p className="ds-hint">Choose an image from this novel’s Media Library for the {surface} cover.</p>
+    <div className="ds-surface-tabs">{['front', 'spine', 'back'].map((item) => <span key={item} className={surface === item ? 'active' : ''}>{item}</span>)}</div>
+    {images.length ? <div className="ds-media-grid">{images.map((item) => <button type="button" key={item.id} className={`ds-media-pick ${cover[imageKey] === item.image ? 'active' : ''}`} onClick={() => choose(item.image)}><img src={item.image} alt={item.text || 'Media Library image'} /><strong>{item.text || 'Untitled image'}</strong></button>)}</div> : <div className="ds-surface-empty"><Icon icon="fa-regular fa-images" /> No images in Media Library yet.</div>}
+  </>
 }
 
 function CropSlider({ label, min, max, step, value, onChange }) {

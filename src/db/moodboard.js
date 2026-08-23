@@ -1,5 +1,9 @@
 import { getDB, uid, putRecord, removeRecord } from './db'
 
+export const MEDIA_MAX_BYTES = 100 * 1024 * 1024
+export const MEDIA_MAX_IMAGE_BYTES = 10 * 1024 * 1024
+export function dataUrlBytes(value) { return typeof value === 'string' ? Math.ceil(value.length * 0.75) : 0 }
+
 // Moodboard: a free-form board of image tiles and sticky notes per novel.
 // Images are stored as dataURL strings (resized to keep the store light).
 export async function listMoodboard(novelId) {
@@ -34,6 +38,13 @@ export async function createTile(novelId, data) {
     stack: data.stack || null,
     createdAt: now,
     updatedAt: now
+  }
+  if (kind === 'image') {
+    const existing = await listMoodboard(novelId)
+    const used = existing.reduce((total, item) => total + dataUrlBytes(item.image), 0)
+    const incoming = dataUrlBytes(tile.image)
+    if (incoming > MEDIA_MAX_IMAGE_BYTES) throw new Error('That image is larger than the 10 MB per-image limit.')
+    if (used + incoming > MEDIA_MAX_BYTES) throw new Error('Media Library storage is full. Delete an image before adding another.')
   }
   return putRecord('moodboard', tile)
 }

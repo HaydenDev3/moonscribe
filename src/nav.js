@@ -15,6 +15,7 @@ export const NOVEL_NAV = [
     group: 'Craft',
     items: [
       { to: 'design', label: 'Designer', icon: 'fa-solid fa-wand-magic-sparkles' },
+      { to: 'media', label: 'Media Library', icon: 'fa-regular fa-images' },
       { to: 'analytics', label: 'Analytics', icon: 'fa-solid fa-chart-line' },
       { to: 'corkboard', label: 'Draft board', icon: 'fa-solid fa-border-all' },
       { to: 'continuity', label: 'Continuity', icon: 'fa-solid fa-circle-check' }

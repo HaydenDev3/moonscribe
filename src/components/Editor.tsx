@@ -9,6 +9,7 @@ import ScrollRail from './ScrollRail'
 import Modal from './Modal'
 import { useApp } from '../context/AppContext'
 import { buildEditorFontOptions } from '../utils/fonts'
+import { listMoodboard } from '../db/moodboard'
 import { editorPageGeometry, PAGE_MARGIN_PRESETS, PAGE_PRESETS } from '../utils/pageSize'
 
 const FONT_SIZES = [
@@ -108,12 +109,15 @@ export default function Editor({
   onLineSpacingChange = undefined,
   pageLayout,
   onPageLayoutChange = (_patch: any) => {},
+  typography = {},
+  onTypographyChange = (_patch: any) => {},
   canEdit = false,
   readOnly = false,
   spellCheck = true,
   autoCorrect = true,
   collaborators = [],
   chapterId = null,
+  novelId = null,
 }) {
   const ref = useRef(null)
   const wrapRef = useRef(null)
@@ -121,6 +125,12 @@ export default function Editor({
   const onReportRef = useRef(onReport)
   const { customFonts, systemFonts, toast } = useApp()
   const editorFontOptions = useMemo(() => buildEditorFontOptions({ systemFonts, customFonts }), [systemFonts, customFonts])
+  const [libraryImages, setLibraryImages] = useState<any[]>([])
+  const [mediaOpen, setMediaOpen] = useState(false)
+  useEffect(() => {
+    if (!novelId) return
+    listMoodboard(novelId).then((tiles) => setLibraryImages(tiles.filter((tile) => tile.kind === 'image' && tile.image))).catch(() => {})
+  }, [novelId])
 
   const liveCollaborators = useMemo(() => {
     const textLength = Math.max(1, (ref.current?.innerText || String(initialHtml || '').replace(/<[^>]+>/g, '')).length)
@@ -147,7 +157,11 @@ export default function Editor({
 
   // ── Toolbar state ────────────────────────────────────────────────────────
   const [colorPop, setColorPop] = useState(null)
-  const [fontFamily, setFontFamily] = useState(editorFontOptions[0]?.value || "'Literata', Georgia, serif")
+  const defaultBodyFont = typography?.bodyStyle?.fontFamily || editorFontOptions[0]?.value || "'Literata', Georgia, serif"
+  const defaultTitleFont = typography?.chapterTitleStyle?.fontFamily || "'Cormorant Garamond', Georgia, serif"
+  const [fontFamily, setFontFamily] = useState(defaultBodyFont)
+  const [titleFontFamily, setTitleFontFamily] = useState(defaultTitleFont)
+  const [typographyTarget, setTypographyTarget] = useState<'body' | 'title'>('body')
   const [fontSize, setFontSize] = useState('12')
 
   const [pageSize, setPageSize] = useState(() => {
@@ -752,7 +766,10 @@ export default function Editor({
 
       // ── Keep headings with their next block ──────────────────────────────
       if (isHeading(child)) {
-        const next = children[i + 1]
+        // Use the measured leaf sequence. `children` also contains wrapper
+        // headings/blocks from imported HTML, so indexing into it can point at
+        // the wrong node and is especially visible on compact A5 pages.
+        const next = leafChildren[i + 1]
 
         if (
           next &&
@@ -847,8 +864,27 @@ export default function Editor({
 
     window.addEventListener('resize', handleResize)
 
+    // Images load after the editor has rendered and change the height of the
+    // manuscript. Reflow pagination after each image settles so A5, A4,
+    // paperback and custom sizes all use the same live geometry.
+    const prose = ref.current
+    const onImageLoad = () => recalcRef.current?.()
+    const images = Array.from(prose?.querySelectorAll('img') || [])
+    images.forEach((image) => image.addEventListener('load', onImageLoad))
+    const observer = typeof MutationObserver !== 'undefined' && prose
+      ? new MutationObserver(() => {
+          prose.querySelectorAll('img:not([data-page-listener])').forEach((image) => {
+            image.setAttribute('data-page-listener', 'true')
+            image.addEventListener('load', onImageLoad)
+          })
+        })
+      : null
+    observer?.observe(prose, { childList: true, subtree: true })
+
     return () => {
       window.removeEventListener('resize', handleResize)
+      images.forEach((image) => image.removeEventListener('load', onImageLoad))
+      observer?.disconnect()
     }
   }, [])
 
@@ -869,11 +905,17 @@ export default function Editor({
     requestAnimationFrame(annotateTypedMention)
 
     if (pageSize !== 'continuous') {
-      clearTimeout(pgTimer.current)
-
-      pgTimer.current = setTimeout(() => {
-        recalcRef.current?.()
-      }, 850)
+      // Throttle pagination instead of debouncing it. Debouncing meant every
+      // keystroke cancelled the measurement, so a long uninterrupted passage
+      // could remain on one visual page until Enter or a pause. Measuring at
+      // most a few times per second keeps typing responsive while keeping all
+      // page sizes in sync with the live content.
+      if (!pgTimer.current) {
+        pgTimer.current = setTimeout(() => {
+          pgTimer.current = null
+          recalcRef.current?.()
+        }, 450)
+      }
     }
   }, [
     getPersistentHtml,
@@ -1694,6 +1736,29 @@ export default function Editor({
     })
   }, [report, toast])
 
+  const insertLibraryImage = useCallback((id) => {
+    const item = libraryImages.find((tile) => tile.id === id)
+    if (!item || !ref.current) return
+    const img = document.createElement('img')
+    img.src = item.image
+    img.alt = item.text || 'Media Library image'
+    img.style.maxWidth = '100%'
+    img.style.height = 'auto'
+    img.style.display = 'block'
+    img.style.margin = '1.25rem auto'
+    const selection = window.getSelection()
+    if (selection?.rangeCount && ref.current.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+      const range = selection.getRangeAt(0)
+      range.deleteContents()
+      range.insertNode(img)
+      range.setStartAfter(img)
+      range.collapse(true)
+      selection.removeAllRanges()
+      selection.addRange(range)
+    } else ref.current.appendChild(img)
+    report()
+  }, [libraryImages, report])
+
   // ── Selection toolbar state ──────────────────────────────────────────────
   useEffect(() => {
     const updateState = () => {
@@ -2398,12 +2463,15 @@ export default function Editor({
 
   // ── Toolbar handlers ─────────────────────────────────────────────────────
   const handleFontChange = useCallback((val) => {
+    if (typographyTarget === 'title') {
+      setTitleFontFamily(val)
+      onTypographyChange({ chapterTitleStyle: { ...(typography?.chapterTitleStyle || {}), fontFamily: val } })
+      return
+    }
     setFontFamily(val)
-    applyStyle(
-      'fontFamily',
-      val,
-    )
-  }, [applyStyle])
+    applyStyle('fontFamily', val)
+    onTypographyChange({ bodyStyle: { ...(typography?.bodyStyle || {}), fontFamily: val } })
+  }, [applyStyle, onTypographyChange, typography, typographyTarget])
 
   const handleSizeChange = useCallback((val) => {
     setFontSize(val)
@@ -2577,14 +2645,12 @@ export default function Editor({
         {/* ── Row 1 ─────────────────────────────────────────────────────── */}
         <div className="tb-row">
           <Select
-            value={String(fontFamily)}
+            value={String(typographyTarget === 'title' ? titleFontFamily : fontFamily)}
             onChange={(value) => handleFontChange(String(value))}
             ariaLabel="Font family"
             width={162}
             disabled={readOnly}
-            onMouseDown={
-              saveSelection
-            }
+            onMouseDown={() => { saveSelection(); if (document.activeElement === titleRef.current) setTypographyTarget('title') }}
             renderLabel={(opt) => (
               <span
                 style={{
@@ -3246,6 +3312,11 @@ export default function Editor({
             <Icon icon="fa-solid fa-link" />
           </Btn>
 
+          {libraryImages.length > 0 && <div className="editor-media-picker" title="Insert image from Media Library">
+            <button type="button" className="editor-media-icon" aria-label="Open Media Library images" onClick={() => setMediaOpen((open) => !open)}><Icon icon="fa-regular fa-image" /></button>
+            {mediaOpen && <div className="editor-media-popover"><strong>Media Library</strong><div>{libraryImages.map((item) => <button type="button" key={item.id} onClick={() => { insertLibraryImage(item.id); setMediaOpen(false) }}><img src={item.image} alt="" /><span>{item.text || 'Untitled image'}</span></button>)}</div></div>}
+          </div>}
+
           <Btn
             action={insertSceneBreak}
             title="Scene break (Ctrl+Shift+E)"
@@ -3352,7 +3423,7 @@ export default function Editor({
                     ref={titleRef}
                     className="chapter-edit-title"
                     style={{
-                      fontFamily,
+                      fontFamily: titleFontFamily,
                     }}
                     value={title}
                     rows={1}
@@ -3363,6 +3434,7 @@ export default function Editor({
                         e.target.value,
                       )
                     }}
+                    onFocus={() => setTypographyTarget('title')}
                     onBlur={() =>
                       onTitleBlur?.()
                     }
@@ -3481,6 +3553,7 @@ export default function Editor({
                   'The first sentence is the hardest. Start anywhere.'
                 }
                 onInput={report}
+                onFocus={() => setTypographyTarget('body')}
                 onClick={handleEditorClick}
                 onBeforeInput={ensureCaretInTextBlock}
                 onBlur={report}

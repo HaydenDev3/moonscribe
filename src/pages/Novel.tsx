@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { Link, useLocation, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getNovel, updateNovel } from '../db/novels'
 import { listChapters, updateChapter, createChapter, trashChapter, moveChapter, mergeChapters, tidyChapter, reorderChapter } from '../db/chapters'
 import { listCharacters } from '../db/characters'
@@ -39,6 +39,7 @@ import AnnotationsPanel from '../components/AnnotationsPanel'
 import { listAnnotations, createAnnotation, updateAnnotation, deleteAnnotation } from '../db/annotations'
 const Analytics = lazy(() => import('./Analytics'))
 const BookDesigner = lazy(() => import('./BookDesigner'))
+const MediaLibrary = lazy(() => import('./MediaLibrary'))
 const Trash = lazy(() => import('./Trash'))
 const Corkboard = lazy(() => import('./Corkboard'))
 const Timeline = lazy(() => import('./Timeline'))
@@ -924,7 +925,8 @@ export default function Novel() {
 
   const hasProse = !!(chapter && chapter.content && chapter.content.replace(/<[^>]*>/g, '').trim())
   const mentionsMap = useMemo(() => autoChapterMentions(chapters, characters), [chapters, characters])
-  const openSection = useCallback((seg) => { window.location.hash = `#/novel/${id}/${seg}` }, [id])
+  const navigate = useNavigate()
+  const openSection = useCallback((seg) => { navigate(`/novel/${id}/${seg}`) }, [id, navigate])
 
   if (notFound) {
     return (
@@ -1092,6 +1094,8 @@ export default function Novel() {
           <div className="mode-body">
             <BookDesigner novelId={id} embedded />
           </div>
+        ) : activeSection === 'media' ? (
+          <div className="mode-body"><MediaLibrary novelId={id} embedded /></div>
         ) : activeSection === 'analytics' ? (
           <div className="mode-body">
             <Analytics embedded />
@@ -1279,6 +1283,7 @@ export default function Novel() {
                     collaborators={collaboratorPresence}
                     canEdit={canEditSharedNovel}
                     chapterId={chapter.id}
+                    novelId={id}
                     placeholder="The first sentence is the hardest. Start anywhere."
                     onDesigns={() => setDesignsOpen((o) => !o)}
                     onLineSpacingChange={(spacing) => {
@@ -1286,6 +1291,13 @@ export default function Novel() {
                       setLineSpacingWpp(WPP_MAP[spacing] || 333)
                     }}
                     pageLayout={novel.layout || {}}
+                    typography={novel.typography || {}}
+                    onTypographyChange={(patch) => {
+                      const typography = { ...(novelRef.current?.typography || {}), ...patch }
+                      novelRef.current = { ...novelRef.current, typography }
+                      setNovel((current) => current ? { ...current, typography } : current)
+                      updateNovel(id, { typography })
+                    }}
                     onPageLayoutChange={(patch) => {
                       const layout = { ...(novelRef.current?.layout || {}), ...patch }
                       novelRef.current = { ...novelRef.current, layout }

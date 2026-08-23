@@ -7,6 +7,7 @@ import Landing from './pages/Landing'
 import DesktopGateway from './components/DesktopGateway'
 import { isDesktopRuntime } from './api/config'
 import { capabilities } from './platform/capabilities'
+import { detectPlatform } from './utils/platform'
 import { checkForDesktopUpdate } from './platform/updater'
 import Toasts from './components/Toasts'
 import CommandPalette from './components/CommandPalette'
@@ -26,6 +27,7 @@ import './styles/beta.css'
 import './styles/notifications.css'
 import './styles/scrollrail.css'
 import './styles/announcements.css'
+import './styles/responsive.css'
 import AnnouncementBanner from './components/AnnouncementBanner'
 
 const PrintView = lazy(() => import('./pages/PrintView'))
@@ -36,6 +38,10 @@ function Loading() {
       <span style={{ fontFamily: 'var(--font-heading)', fontStyle: 'italic' }}>gathering the light…</span>
     </div>
   )
+}
+
+function MobileCloudPaused() {
+  return <main className="mobile-cloud-paused"><div className="mobile-cloud-paused-card"><span className="settings-panel-kicker">MoonScribe</span><h1>Mobile cloud is temporarily paused</h1><p>We’re tuning the tablet and phone experience before reopening the writing studio. Your local desktop library is safe and unchanged.</p><a className="button button-secondary" href="/">Return to MoonScribe</a></div></main>
 }
 
 function SplashScreen() {
@@ -99,6 +105,7 @@ export default function App() {
     guestMode?: boolean
   }
   const { onboardingDone, appLock, locked, unlockApp, syncUsername, accountReady, guestMode } = appState
+  const mobileCloudPaused = detectPlatform(globalThis.navigator?.userAgent, globalThis.navigator?.platform, globalThis.navigator?.maxTouchPoints) === 'mobile'
 
   useEffect(() => {
     registerSW({ immediate: true })
@@ -138,6 +145,7 @@ export default function App() {
 
   const enterStudio = (content: ReactNode) => {
     if (!accountReady) return <SplashScreen />
+    if (mobileCloudPaused) return <MobileCloudPaused />
     if (!syncUsername) return <Navigate to="/?signin=1" replace />
     if (!onboardingDone) return <Onboarding />
     return content
@@ -158,11 +166,6 @@ export default function App() {
           <Route path="/contact" element={<PublicPage page="contact" />} />
           <Route path="/dashboard" element={enterStudio(<FeatureGuard featureName="dashboard" title="Dashboard unavailable"><Dashboard /></FeatureGuard>)} />
           <Route path="/admin" element={enterStudio(<AdminDashboard />)} />
-          <Route path="/novel/:id" element={enterStudio(<FeatureGuard featureName="novel" title="Novel workspace unavailable"><Novel /></FeatureGuard>)} />
-          {/* Every section is a mode of the writer workspace. */}
-          <Route path="/novel/:id/:mode" element={enterStudio(<FeatureGuard featureName="novel-mode" title="Writer mode unavailable"><Novel /></FeatureGuard>)} />
-          {/* Legacy binder deep links still resolve to the inline mode. */}
-          <Route path="/novel/:id/binder/:section" element={enterStudio(<FeatureGuard featureName="binder" title="Binder unavailable"><Novel /></FeatureGuard>)} />
           <Route
             path="/novel/:id/design/print"
             element={enterStudio(
@@ -173,6 +176,11 @@ export default function App() {
               </FeatureGuard>
             )}
           />
+          <Route path="/novel/:id" element={enterStudio(<FeatureGuard featureName="novel" title="Novel workspace unavailable"><Novel /></FeatureGuard>)} />
+          {/* Every section is a mode of the writer workspace. */}
+          <Route path="/novel/:id/:mode" element={enterStudio(<FeatureGuard featureName="novel-mode" title="Writer mode unavailable"><Novel /></FeatureGuard>)} />
+          {/* Legacy binder deep links still resolve to the inline mode. */}
+          <Route path="/novel/:id/binder/:section" element={enterStudio(<FeatureGuard featureName="binder" title="Binder unavailable"><Novel /></FeatureGuard>)} />
           <Route path="*" element={<NotFound />} />
         </Routes></Suspense>
         <CommandPalette />

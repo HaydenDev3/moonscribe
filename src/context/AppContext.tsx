@@ -280,7 +280,8 @@ export function AppProvider({ children }) {
           await setMeta('discordAvatar', account.avatar || null)
           await setMeta('discordUsername', account.username)
           await setMeta('authProvider', account.provider || oauthProvider || 'discord')
-          const res = await syncEngine.connectWithToken({ server: account.server || oauthServer, token: account.token, username: account.username })
+          const existing = await syncEngine.getConfig()
+          const res = await syncEngine.connectWithToken({ server: account.server || oauthServer, token: account.linked && existing.token ? existing.token : account.token, username: account.username })
           if (res.ok) {
             const profile = await syncEngine.validateSession().catch(() => null)
             if (profile) {
@@ -317,8 +318,10 @@ export function AppProvider({ children }) {
             ? 'MoonScribe’s account service cannot reach the identity provider right now. Check the server network connection and try again.'
           : providerCredentialError
             ? 'The provider credentials or callback URL are not configured correctly on the MoonScribe server.'
-            : reason === 'discord_profile_failed' || reason === 'google_profile_failed'
+          : reason === 'discord_profile_failed' || reason === 'google_profile_failed'
               ? 'The provider approved sign-in but did not return a usable profile. Please try again.'
+              : reason === 'google_sign_in_failed'
+                ? 'Google sign-in could not be completed. Check the Google OAuth callback URL and server credentials, then try again.'
               : 'The provider approved sign-in, but MoonScribe could not finish the secure account connection. Please try again.')
       }
     })().finally(() => setAccountReady(true))
@@ -679,6 +682,14 @@ export function AppProvider({ children }) {
   const connectDiscord = useCallback(async () => {
     const server = discordServer()
     try {
+      const current = await syncEngine.getConfig()
+      if (current.token) {
+        const response = await fetch(`${server}/api/auth/link/start`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${current.token}` }, body: JSON.stringify({ provider: 'discord', redirect_to: authReturnUrl() }) })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(result.error || 'Could not start Discord connection.')
+        await openExternalUrl(result.url)
+        return
+      }
       const response = await fetch(`${server}/api/auth/status`)
       const status = await response.json().catch(() => ({}))
       if (!response.ok || !status.online) throw new Error('MoonScribe’s account service is not running. Start the app with “npm run dev”, then try again.')
@@ -693,6 +704,14 @@ export function AppProvider({ children }) {
   const connectGoogle = useCallback(async () => {
     const server = discordServer()
     try {
+      const current = await syncEngine.getConfig()
+      if (current.token) {
+        const response = await fetch(`${server}/api/auth/link/start`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${current.token}` }, body: JSON.stringify({ provider: 'google', redirect_to: authReturnUrl() }) })
+        const result = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(result.error || 'Could not start Google connection.')
+        await openExternalUrl(result.url)
+        return
+      }
       const response = await fetch(`${server}/api/auth/status`)
       const status = await response.json().catch(() => ({}))
       if (!response.ok || !status.online) throw new Error('MoonScribe’s account service is not running. Start the app with “npm run dev”, then try again.')
