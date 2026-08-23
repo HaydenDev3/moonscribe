@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useApp } from '../context/AppContext'
 import Icon from './Icon'
 import ProfileAvatar from './ProfileAvatar'
@@ -6,13 +7,34 @@ import ProfileAvatar from './ProfileAvatar'
 export default function UserPill({ onConnectClick }) {
   const { syncUsername, syncServer, syncStatus, syncDiscordAvatar, syncProvider, disconnectSync, openSettings, toast } = useApp()
   const [open, setOpen] = useState(false)
+  const [menuPosition, setMenuPosition] = useState({ top: 0, right: 16, width: 220 })
   const ref = useRef(null)
+
+  const positionMenu = () => {
+    const trigger = ref.current?.querySelector('.user-pill')
+    if (!trigger) return
+    const rect = trigger.getBoundingClientRect()
+    const menuWidth = 220
+    setMenuPosition({
+      top: Math.min(rect.bottom + 8, window.innerHeight - 12),
+      right: Math.max(12, window.innerWidth - rect.right),
+      width: Math.min(menuWidth, window.innerWidth - 24),
+    })
+  }
 
   useEffect(() => {
     if (!open) return
+    positionMenu()
+    const reposition = () => positionMenu()
     const close = (e) => { if (!ref.current?.contains(e.target)) setOpen(false) }
     document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
+    window.addEventListener('resize', reposition)
+    window.addEventListener('scroll', reposition, true)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      window.removeEventListener('resize', reposition)
+      window.removeEventListener('scroll', reposition, true)
+    }
   }, [open])
 
   const copyId = () => {
@@ -59,8 +81,8 @@ export default function UserPill({ onConnectClick }) {
         <Icon icon="fa-solid fa-chevron-down" className={`user-pill-caret${open ? ' open' : ''}`} />
       </button>
 
-      {open && (
-        <div className="user-pill-menu">
+      {open && createPortal(
+        <div className="user-pill-menu" style={{ top: menuPosition.top, right: menuPosition.right, width: menuPosition.width }}>
           <div className="user-pill-header">
             <div className="user-pill-header-avatar">
               {isDiscord
@@ -89,7 +111,8 @@ export default function UserPill({ onConnectClick }) {
           <button className="user-pill-item user-pill-item-danger" onClick={signOut}>
             <Icon icon="fa-solid fa-right-from-bracket" /> Sign out
           </button>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
