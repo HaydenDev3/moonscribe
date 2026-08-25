@@ -9,6 +9,7 @@ import {
   trashCharacter,
   characterColors
 } from '../db/characters'
+import { listRelationships } from '../db/relationships'
 import { useApp } from '../context/AppContext'
 import SubPageTopbar from '../components/SubPageTopbar'
 import Modal from '../components/Modal'
@@ -41,6 +42,7 @@ export default function Characters({ novelId, embedded }) {
   const [novel, setNovel] = useState(null)
   const [characters, setCharacters] = useState([])
   const [chapters, setChapters] = useState([])
+  const [relationships, setRelationships] = useState([])
   const [editing, setEditing] = useState(null)
   const [deleting, setDeleting] = useState(null)
   const [draftRestored, setDraftRestored] = useState(false)
@@ -49,8 +51,10 @@ export default function Characters({ novelId, embedded }) {
 
   const load = useCallback(async () => {
     setNovel(await getNovel(nid))
-    setCharacters(await listCharacters(nid))
-    setChapters(await listChapters(nid))
+    const [nextCharacters, nextChapters, nextRelationships] = await Promise.all([listCharacters(nid), listChapters(nid), listRelationships(nid)])
+    setCharacters(nextCharacters)
+    setChapters(nextChapters)
+    setRelationships(nextRelationships)
   }, [nid])
 
   useEffect(() => { load() }, [load])
@@ -130,6 +134,22 @@ export default function Characters({ novelId, embedded }) {
       c.aliases?.some((a) => a.toLowerCase().includes(q))
     )
   })
+  const pairedCharacters = useMemo(() => {
+    const groups = new Map()
+    relationships.forEach((relationship) => {
+      if (!relationship.a || !relationship.b || relationship.a === relationship.b) return
+      const current = [...(groups.get(relationship.a) || []), relationship.b, relationship.a]
+      current.forEach((id) => groups.set(id, [...new Set(current)]))
+    })
+    return [...filtered].sort((a, b) => {
+      const aGroup = groups.get(a.id)
+      const bGroup = groups.get(b.id)
+      if (!aGroup && !bGroup) return 0
+      if (!aGroup) return 1
+      if (!bGroup) return -1
+      return filtered.findIndex((item) => item.id === aGroup[0]) - filtered.findIndex((item) => item.id === bGroup[0])
+    })
+  }, [filtered, relationships])
 
   return (
     <div className={embedded ? undefined : 'app'}>
@@ -190,9 +210,10 @@ export default function Characters({ novelId, embedded }) {
           </div>
         ) : (
           <div className="chars-grid">
-            {filtered.map((c) => (
+            {pairedCharacters.map((c, index) => (
               <CharCard
                 key={c.id}
+                style={{ ['--char-card-delay' as any]: `${Math.min(index, 12) * 55}ms` }}
                 character={c}
                 mentions={mentionMap[c.id] || []}
                 chapterName={chapterName}
@@ -224,12 +245,12 @@ export default function Characters({ novelId, embedded }) {
   )
 }
 
-function CharCard({ character: c, mentions, chapterName, onEdit, onDelete, onContextMenu }) {
+function CharCard({ character: c, mentions, chapterName, onEdit, onDelete, onContextMenu, style }) {
   const gradient = colorToGradient(c.color)
   const hasMentions = mentions.length > 0
 
   return (
-    <div className="char-card" onContextMenu={onContextMenu} onClick={onEdit} role="button" tabIndex={0}
+    <div className="char-card" style={style} onContextMenu={onContextMenu} onClick={onEdit} role="button" tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onEdit()}>
       {/* Banner */}
       <div className="char-card-banner" style={{ background: gradient }}>

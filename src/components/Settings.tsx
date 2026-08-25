@@ -163,7 +163,7 @@ export default function Settings() {
               <p className="muted">A quiet, private place to write — made with love, for Storm Tattersall. Every word stays on your device by default; nothing is ever counted against you.</p>
               <p className="muted small">Online across your devices · offline-safe · yours.</p>
               <div className="settings-row" style={{ marginTop: 'var(--space-5)' }}>
-                <div><div className="settings-row-title">Version</div><div className="settings-row-sub">0.1.0 — Parchment</div></div>
+                <div><div className="settings-row-title">Version 1.1.0</div><div className="settings-row-sub">Released 26 August 2026 — Parchment</div></div>
               </div>
             </section>
           )}
@@ -1040,7 +1040,6 @@ function LockSecurity({ appLock, enableAppLock, updateAppLock, disableAppLock, l
 
       <div className="settings-subheading">Privacy controls</div>
       <div className="settings-row"><div><div className="settings-row-title">Lock when app is backgrounded</div><div className="settings-row-sub">Require the PIN or passphrase after switching tabs or minimising MoonScribe.</div></div><Toggle checked={!!settings.lockOnBackground} disabled={!appLock?.enabled} onChange={(v) => updateSettings({ lockOnBackground: v })} /></div>
-      <div className="settings-row"><div><div className="settings-row-title">Conceal writing when focus is lost</div><div className="settings-row-sub">Blur the application while another window is active, helping protect against shoulder surfing and previews.</div></div><Toggle checked={!!settings.privacyBlur} onChange={(v) => updateSettings({ privacyBlur: v })} /></div>
 
       <div className="settings-row-title" style={{ marginTop: 'var(--space-5)' }}>Privacy tips</div>
       <ul className="privacy-list">

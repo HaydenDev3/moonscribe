@@ -3,11 +3,14 @@ import { getSnapshot, getSnapshotTimeline } from '../db/snapshots'
 import Icon from './Icon'
 import { sanitizeStoredHtml } from '../utils/formatHtml'
 
-const SPEEDS = { slow: 1500, normal: 800, fast: 350 }
+// Replay is intentionally paced like a writing session rather than a slideshow.
+// The previous intervals made snapshots advance before the typing animation had
+// time to settle, which made the whole replay feel unnaturally rushed.
+const SPEEDS = { slow: 3600, normal: 2400, fast: 1400 }
 const LARGE_SNAPSHOT_CHARS = 60_000
 const PREVIEW_CHARS = 42_000
 const MAX_TICKS = 120
-const TYPING_RATES = { slow: 38, normal: 90, fast: 180 }
+const TYPING_RATES = { slow: 12, normal: 24, fast: 48 }
 
 function boundedSnapshotHtml(html, complete) {
   const safe = sanitizeStoredHtml(html || '')

@@ -402,7 +402,7 @@ export default function BookDesigner({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
 
-  // Debounced autosave — 400ms after last change
+  // Debounced autosave — one local/cloud write after the user settles a change.
   useEffect(() => {
     layoutRef.current = layout
     if (!layout || !novel) return
@@ -450,12 +450,9 @@ export default function BookDesigner({
         setCanUndo(true)
         setCanRedo(false)
       }
-      // Save artwork immediately as well as through the normal layout debounce.
-      // Large data URLs can outlive a route change before the debounce fires.
-      updateNovel(id, { layout: next }).catch(() => toast('Artwork could not be saved locally. Try a smaller image.'))
       return next
     })
-  }, [canEditDesigner, id, toast])
+  }, [canEditDesigner])
 
   const applySurfaceImage = useCallback(async (file, surface = coverSurface) => {
     if (!file?.type?.startsWith('image/')) return false
@@ -694,7 +691,7 @@ export default function BookDesigner({
         >
           {/* Top bar */}
           <div className="ds-stage-bar studio-bar">
-            <div className="ds-stage-tabs studio-seg">
+            <div className="ds-stage-tabs studio-seg designer-stage-main">
               {PREVIEW_MODES.map((mode) => (
                 <button key={mode.key} className={`ds-stage-tab ${previewMode === mode.key ? 'active' : ''}`} onClick={() => {
                   setPreviewMode(mode.key)
@@ -707,14 +704,14 @@ export default function BookDesigner({
               ))}
             </div>
 
-            <div className="ds-stage-actions">
+            <div className="ds-stage-actions designer-stage-tools">
               <button className="ds-action-btn" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)"><Icon icon="fa-solid fa-rotate-left" /></button>
                 <button className="ds-action-btn" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Y)"><Icon icon="fa-solid fa-rotate-right" /></button>
                 <button type="button" className={`ds-action-btn ds-guides-action ${showGuides ? 'active' : ''}`} onClick={() => setShowGuides((value) => !value)} title="Toggle print guides" aria-pressed={showGuides}><Icon icon="fa-solid fa-ruler-combined" /><span>Guides</span></button>
             </div>
 
           {stageView === 'cover' && (
-              <div className="ds-stage-actions">
+              <div className="ds-stage-actions designer-stage-settings">
                 <Select value={bookEnvironment} options={BOOK_ENVIRONMENTS} width={142} ariaLabel="Book preview environment" className="ds-environment-select" onChange={(value) => { setBookEnvironment(value); window.localStorage?.setItem?.('moonscribe_book_environment', value) }} />
                 <Select
                   value={typeof layout.pageSize === 'string' && PAGE_PRESETS.some((preset) => preset.key === layout.pageSize) ? layout.pageSize : 'trade-paperback'}

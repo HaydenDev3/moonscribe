@@ -36,7 +36,6 @@ const DEFAULT_SETTINGS = {
   largeTargets: false,
   colorVision: 'default',
   simplifiedDecorations: false,
-  privacyBlur: false,
   lockOnBackground: false,
   // Editor preferences
   editorFontSize: 'md',        // 'sm' | 'md' | 'lg' | 'xl'
@@ -489,7 +488,7 @@ export function AppProvider({ children }) {
     root.classList.toggle('underline-links', !!settings.underlineLinks)
     root.classList.toggle('large-targets', !!settings.largeTargets)
     root.classList.toggle('simplified-decorations', !!settings.simplifiedDecorations)
-  }, [settings.interfaceScale, settings.interfaceDensity, settings.cornerStyle, settings.colorVision, settings.appLayout, settings.paperStrength, settings.reduceTransparency, settings.underlineLinks, settings.largeTargets, settings.simplifiedDecorations, settings.privacyBlur])
+  }, [settings.interfaceScale, settings.interfaceDensity, settings.cornerStyle, settings.colorVision, settings.appLayout, settings.paperStrength, settings.reduceTransparency, settings.underlineLinks, settings.largeTargets, settings.simplifiedDecorations])
 
   useEffect(() => {
     if (!settings.soundEnabled) return undefined
@@ -827,20 +826,6 @@ export function AppProvider({ children }) {
     setSync({ server: base, username: connected.username || result.username || username, status: 'synced', discordAvatar: null, provider: 'email' })
     return { ok: true, username: connected.username || result.username || username }
   }, [])
-
-  useEffect(() => {
-    const conceal = () => {
-      if (settings.privacyBlur) document.documentElement.classList.add('privacy-hidden')
-    }
-    const reveal = () => document.documentElement.classList.remove('privacy-hidden')
-    window.addEventListener('blur', conceal)
-    window.addEventListener('focus', reveal)
-    return () => {
-      window.removeEventListener('blur', conceal)
-      window.removeEventListener('focus', reveal)
-      reveal()
-    }
-  }, [settings.privacyBlur])
 
   useEffect(() => {
     if (!settings.lockOnBackground || !appLock?.enabled) return undefined
