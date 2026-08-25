@@ -22,6 +22,12 @@ export function normalizeDocumentHtml(input) {
     node.replaceWith(pageBreak(doc))
   }
 
+  for (const node of Array.from(doc.body.querySelectorAll('[data-auto-page-break="true"]'))) {
+    node.className = 'pg-auto-break'
+    node.setAttribute('contenteditable', 'false')
+    node.setAttribute('aria-hidden', 'true')
+  }
+
   for (const node of Array.from(doc.body.querySelectorAll('.scene-break, [data-scene-break="true"]'))) {
     node.className = 'scene-break'
     node.dataset.sceneBreak = 'true'

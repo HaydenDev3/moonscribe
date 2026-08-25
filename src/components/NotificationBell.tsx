@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import Icon from './Icon'
 import { getConfig } from '../sync/engine'
+import { notifyDesktop } from '../platform/notifications'
+import { useApp } from '../context/AppContext'
 
 type Notice = { id: string; title: string; body: string; category?: string; readAt: number | null; createdAt: number; actionUrl?: string | null }
 
 export default function NotificationBell() {
+  const { settings } = useApp()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<Notice[]>([])
   const [unread, setUnread] = useState(0)
@@ -34,6 +37,7 @@ export default function NotificationBell() {
           if (data?.type !== 'notification:new' || !data.notification) return
           setItems((current) => [data.notification, ...current.filter((item) => item.id !== data.notification.id)].slice(0, 50))
           setUnread((current) => current + (data.notification.readAt ? 0 : 1))
+          if (!data.notification.readAt && settings.desktopNotifications !== false) void notifyDesktop(data.notification.title || 'MoonScribe', data.notification.body || 'You have a new notification.')
         } catch { /* ignore malformed realtime events */ }
       }
       socket.onclose = () => { if (!closed) retryTimer = window.setTimeout(connect, 1500) }
@@ -41,7 +45,7 @@ export default function NotificationBell() {
     }
     void connect()
     return () => { closed = true; if (retryTimer) window.clearTimeout(retryTimer); try { socket?.close() } catch { /* noop */ } }
-  }, [])
+  }, [settings.desktopNotifications])
   const markRead = async (id: string) => {
     const config = await getConfig()
     if (!config.server || !config.token) return

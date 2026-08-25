@@ -43,6 +43,14 @@ export default function Moodboard({ novelId, embedded }) {
   }, [load])
 
   useEffect(() => {
+    const refreshSharedBoard = (event) => {
+      if (String(event.detail?.novelId || '') === String(nid)) load()
+    }
+    window.addEventListener('moonscribe:shared-media-refresh', refreshSharedBoard)
+    return () => window.removeEventListener('moonscribe:shared-media-refresh', refreshSharedBoard)
+  }, [load, nid])
+
+  useEffect(() => {
     const onKey = (event) => {
       if (event.key === 'Escape') setFullscreen(false)
       if ((event.key === 'f' || event.key === 'F') && !event.target.closest('input,textarea')) setFullscreen((value) => !value)

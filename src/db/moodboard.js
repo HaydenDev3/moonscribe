@@ -35,6 +35,8 @@ export async function createTile(novelId, data) {
     url: data.url || '', // link tiles
     palette: data.palette || [], // palette tiles: hex strings
     links: data.links || [],
+    folderId: data.folderId || null,
+    order: data.order ?? Date.now(),
     stack: data.stack || null,
     createdAt: now,
     updatedAt: now

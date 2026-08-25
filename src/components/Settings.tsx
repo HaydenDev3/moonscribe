@@ -8,7 +8,6 @@ import { getDB } from '../db/db'
 import { clearOldSnapshots } from '../db/snapshots'
 import { downloadBlob } from '../utils/download'
 import SyncStatus from './SyncStatus'
-import AccountCentre from './AccountCentre'
 import Select from './Select'
 import Icon from './Icon'
 import RolePermissions from './RolePermissions'
@@ -17,6 +16,9 @@ import { NOVEL_NAV } from '../nav'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { capabilities } from '../platform/capabilities'
 import UpdateSettings from './UpdateSettings'
+import { flushNativeMirrorFailures, listNativeBackups, pendingNativeMirrorFailures, restoreNativeStorage } from '../platform/nativeStorage'
+import { readDesktopFile, takePendingDesktopBackup } from '../platform/fileOpen'
+import { pendingSyncCount } from '../sync/engine'
 import { DEFAULT_KEYBINDS, KEYBIND_LABELS, formatKeybind, keybindConflicts, keybindFromEvent, keybindsWithDefaults } from '../utils/keybinds'
 
 const IDLE_OPTIONS = [
@@ -30,7 +32,7 @@ const IDLE_OPTIONS = [
 
 const CATEGORIES = [
   { key: 'overview', label: 'Overview', icon: 'fa-solid fa-sliders', group: 'General', terms: 'home start screen preferences settings' },
-  { key: 'accountCentre', label: 'Account Centre', icon: 'fa-solid fa-user-shield', group: 'Account', terms: 'account authentication connections profile security username email' },
+  { key: 'account', label: 'Account & sync', icon: 'fa-solid fa-user-shield', group: 'Account', terms: 'account authentication connections profile security username email' },
   { key: 'appearance', label: 'Appearance', icon: 'fa-solid fa-palette', group: 'Experience', terms: 'theme colour paper custom motion' },
   { key: 'editor', label: 'Editor', icon: 'fa-solid fa-pen-nib', group: 'Experience', terms: 'writing font spelling autocorrect page' },
   { key: 'writing', label: 'Writing experience', icon: 'fa-solid fa-feather-pointed', group: 'Experience', terms: 'autosave typewriter focus writing session' },
@@ -58,7 +60,6 @@ export default function Settings() {
 
   const [cat, setCat] = useState('overview')
   const [query, setQuery] = useState('')
-  const [connectOpen, setConnectOpen] = useState(false)
   const [fontName, setFontName] = useState('')
   const fileRef = useRef(null)
   const fontFileRef = useRef(null)
@@ -70,13 +71,13 @@ export default function Settings() {
         e.preventDefault()
         if (settingsOpen) closeSettings()
         else openSettings()
-      } else if (e.key === 'Escape' && settingsOpen && !connectOpen) {
+      } else if (e.key === 'Escape' && settingsOpen) {
         closeSettings()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [settings.keybinds, settingsOpen, connectOpen, openSettings, closeSettings])
+  }, [settings.keybinds, settingsOpen, openSettings, closeSettings])
 
   useEffect(() => {
     const search = (event) => setQuery(event.detail || '')
@@ -96,7 +97,7 @@ export default function Settings() {
             const items = CATEGORIES.filter((item) => item.group === group && `${item.label} ${item.terms}`.toLowerCase().includes(query.trim().toLowerCase()))
             if (!items.length) return null
             return <div className="settings-rail-group" key={group}><div className="settings-rail-group-label">{group}</div>{items.map((c) => (
-              <button key={c.key} className={`settings-rail-item ${cat === c.key ? 'active' : ''}`} onClick={() => c.key === 'accountCentre' ? setConnectOpen(true) : setCat(c.key)}><span className="settings-rail-icon"><Icon icon={c.icon} /></span>{c.label}<Icon icon={c.key === 'accountCentre' ? 'fa-solid fa-arrow-up-right-from-square' : 'fa-solid fa-chevron-right'} className="settings-rail-chevron" /></button>
+              <button key={c.key} className={`settings-rail-item ${cat === c.key || (c.key === 'account' && cat === 'sync') ? 'active' : ''}`} onClick={() => setCat(c.key === 'account' ? 'sync' : c.key)}><span className="settings-rail-icon"><Icon icon={c.icon} /></span>{c.label}<Icon icon="fa-solid fa-chevron-right" className="settings-rail-chevron" /></button>
             ))}</div>
           })}
           <div className="settings-rail-foot">
@@ -105,11 +106,12 @@ export default function Settings() {
         </nav>
 
         <div className="settings-content">
+          <div className="settings-content-chrome"><span className="settings-content-kicker">MoonScribe studio</span><span className="settings-content-title">Preferences</span></div>
           <button className="settings-close" onClick={closeSettings} aria-label="Close settings">
             <Icon icon="fa-solid fa-xmark" />
           </button>
 
-          {query && <SettingsSearchResults query={query} settings={settings} updateSettings={updateSettings} onOpenCategory={(key) => { if (key === 'accountCentre') setConnectOpen(true); else setCat(key); setQuery('') }} />}
+          {query && <SettingsSearchResults query={query} settings={settings} updateSettings={updateSettings} onOpenCategory={(key) => { setCat(key === 'accountCentre' || key === 'account' ? 'sync' : key); setQuery('') }} />}
           {!query && cat === 'appearance' && (
             <Appearance
               settings={settings}
@@ -126,7 +128,7 @@ export default function Settings() {
             />
           )}
           {!query && cat === 'editor' && <EditorSettings settings={settings} updateSettings={updateSettings} />}
-          {!query && cat === 'overview' && <SettingsOverview onOpenCategory={setCat} onOpenAccountCentre={() => setConnectOpen(true)} />}
+          {!query && cat === 'overview' && <SettingsOverview onOpenCategory={setCat} onOpenAccountCentre={() => setCat('sync')} />}
           {!query && cat === 'writing' && <WritingExperience settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'sounds' && <SoundsFeedback settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'notifications' && <NotificationPreferences settings={settings} updateSettings={updateSettings} />}
@@ -146,7 +148,7 @@ export default function Settings() {
               <div className="settings-panel-kicker">Identity &amp; devices</div>
               <h2>Account &amp; sync</h2>
               <p className="muted">Manage who you are in MoonScribe, where your library lives, and which devices can reach it.</p>
-              <SyncPanel onOpen={() => setConnectOpen(true)} />
+              <SyncPanel onOpen={() => setCat('sync')} />
               <RolePermissions />
               <div className="settings-section-card">
                 <div className="settings-section-head"><span className="settings-section-icon"><Icon icon="fa-solid fa-laptop-file" /></span><div><strong>Local writing identity</strong><small>Your offline library is available without an account.</small></div><span className="settings-status-pill safe">Active</span></div>
@@ -168,7 +170,6 @@ export default function Settings() {
         </div>
       </div>
 
-      {connectOpen ? <AccountCentre onClose={() => setConnectOpen(false)} /> : null}
     </div>,
     document.body
   )
@@ -240,9 +241,50 @@ function Profile({ settings, updateSettings }) {
 }
 
 function AppConnections({ onOpen, onConnectDiscord, onConnectGoogle }) {
-  const { syncUsername, syncDiscordAvatar, syncStatus, syncProvider } = useApp() as any
+  const { syncUsername, syncDiscordAvatar, syncStatus, syncProvider, toast } = useApp() as any
+  const [passkeys, setPasskeys] = useState<any[]>([])
+  const [passkeyBusy, setPasskeyBusy] = useState(false)
   const connected = !!syncUsername
   const provider = syncProvider === 'google' ? 'Google' : 'Discord'
+  const loadPasskeys = useCallback(async () => {
+    const cfg = await syncEngine.getConfig()
+    if (!cfg.server || !cfg.token) return setPasskeys([])
+    const response = await fetch(`${cfg.server}/api/auth/passkeys`, { headers: { Authorization: `Bearer ${cfg.token}` } })
+    if (response.ok) setPasskeys((await response.json()).passkeys || [])
+  }, [])
+  useEffect(() => { void loadPasskeys() }, [loadPasskeys, syncUsername])
+  const addPasskey = async () => {
+    if (!window.PublicKeyCredential) return toast('Passkeys are not supported by this browser or device.')
+    setPasskeyBusy(true)
+    try {
+      const cfg = await syncEngine.getConfig()
+      if (!cfg.server || !cfg.token) throw new Error('Sign in before adding a passkey.')
+      const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` }
+      const start = await fetch(`${cfg.server}/api/auth/passkeys/register/options`, { method: 'POST', headers, body: '{}' })
+      const request = await start.json().catch(() => ({}))
+      if (!start.ok) throw new Error(request.error || 'Could not start passkey setup.')
+      const { startRegistration } = await import('@simplewebauthn/browser')
+      const credential = await startRegistration({ optionsJSON: request.options })
+      const finish = await fetch(`${cfg.server}/api/auth/passkeys/register/verify`, { method: 'POST', headers, body: JSON.stringify({ challengeId: request.challengeId, response: credential, name: 'Passkey' }) })
+      const result = await finish.json().catch(() => ({}))
+      if (!finish.ok) throw new Error(result.error || 'Could not save that passkey.')
+      await loadPasskeys()
+      toast('Passkey added.')
+    } catch (error: any) {
+      toast(error?.name === 'NotAllowedError' ? 'Passkey setup was cancelled.' : error?.message || 'Could not add a passkey.')
+    } finally { setPasskeyBusy(false) }
+  }
+  const removePasskey = async (credentialId: string) => {
+    if (!window.confirm('Remove this passkey from your MoonScribe account?')) return
+    try {
+      const cfg = await syncEngine.getConfig()
+      const response = await fetch(`${cfg.server}/api/auth/passkeys/remove`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` }, body: JSON.stringify({ credentialId }) })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error || 'Could not remove that passkey.')
+      await loadPasskeys()
+      toast('Passkey removed.')
+    } catch (error: any) { toast(error?.message || 'Could not remove that passkey.') }
+  }
   return (
     <section className="settings-panel">
       <div className="settings-panel-kicker">Account</div>
@@ -257,14 +299,15 @@ function AppConnections({ onOpen, onConnectDiscord, onConnectGoogle }) {
       <ConnectionRow icon="fa-brands fa-discord" name="Discord" detail={connected && provider === 'Discord' ? `Connected as ${syncUsername}` : 'Use your Discord account'} connected={connected && provider === 'Discord'} onManage={connected && provider === 'Discord' ? onOpen : onConnectDiscord} />
       <ConnectionRow icon="fa-brands fa-google" name="Google" detail={connected && provider === 'Google' ? `Connected as ${syncUsername}` : 'Use your Google account'} connected={connected && provider === 'Google'} onManage={connected && provider === 'Google' ? onOpen : onConnectGoogle} />
       <ConnectionRow icon="fa-solid fa-key" name="MoonScribe password" detail="Sign in with an email and password" connected={false} onManage={onOpen} />
-      <ConnectionRow icon="fa-solid fa-fingerprint" name="Passkey" detail="A faster sign-in option coming soon" connected={false} disabled />
+      <ConnectionRow icon="fa-solid fa-fingerprint" name="Passkey" detail={passkeys.length ? `${passkeys.length} passkey${passkeys.length === 1 ? '' : 's'} registered` : 'Use your device lock, fingerprint, or security key'} connected={passkeys.length > 0} onManage={addPasskey} disabled={!connected || passkeyBusy} />
+      {passkeys.map((passkey) => <div className="settings-row" key={passkey.id}><div><div className="settings-row-title">{passkey.name}</div><div className="settings-row-sub">Added {new Date(passkey.createdAt).toLocaleDateString()}{passkey.lastUsedAt ? ` · Last used ${new Date(passkey.lastUsedAt).toLocaleDateString()}` : ''}</div></div><button className="button button-secondary" type="button" onClick={() => void removePasskey(passkey.id)}>Remove</button></div>)}
       <div className="settings-help-card"><Icon icon="fa-solid fa-circle-info" /><span><strong>New to MoonScribe?</strong><small>Connect Discord or Google to keep your library available across devices. Your local writing remains available without an account.</small></span></div>
     </section>
   )
 }
 
 function ConnectionRow({ icon, name, detail, connected, onManage = () => {}, disabled = false }) {
-  return <div className="settings-row settings-connection-row"><div><div className="settings-row-title"><Icon icon={icon} /> {name}</div><div className="settings-row-sub">{detail}</div></div><button className="button button-secondary" disabled={disabled} onClick={onManage}>{connected ? 'Connected' : disabled ? 'Coming soon' : 'Set up'}</button></div>
+  return <div className="settings-row settings-connection-row"><div><div className="settings-row-title"><Icon icon={icon} /> {name}</div><div className="settings-row-sub">{detail}</div></div><button className="button button-secondary" disabled={disabled} onClick={onManage}>{connected ? 'Connected' : disabled ? 'Unavailable' : 'Set up'}</button></div>
 }
 
 function WritingExperience({ settings, updateSettings }) {
@@ -301,7 +344,10 @@ function SoundsFeedback({ settings, updateSettings }) {
       <SoundLevel label="Writing volume" value={settings.writingSoundVolume} onChange={(value) => updateSettings({ writingSoundVolume: value })} />
       <div className="settings-row"><div><div className="settings-row-title">Notification sounds</div><div className="settings-row-sub">Distinct chimes for attention-worthy events.</div></div><Toggle checked={settings.notificationSounds !== false} onChange={(value) => updateSettings({ notificationSounds: value })} /></div>
       <SoundLevel label="Notification volume" value={settings.notificationSoundVolume} onChange={(value) => updateSettings({ notificationSoundVolume: value })} />
-      <div className="settings-row"><div><div className="settings-row-title">Ambient soundscape</div><div className="settings-row-sub">A persistent ambience that continues while moving between pages.</div></div><Select ariaLabel="Ambient soundscape" width={180} value={settings.ambientSound ? settings.ambientMood || 'moonlit' : 'off'} onChange={(value) => updateSettings({ ambientMood: value === 'off' ? settings.ambientMood : value, ambientSound: value !== 'off' })} options={[{ value: 'off', label: 'Off' }, { value: 'moonlit', label: 'Moonlit studio' }, { value: 'rainglass', label: 'Rain on glass' }, { value: 'hearth', label: 'Fireplace' }, { value: 'forest', label: 'Forest night' }, { value: 'ocean', label: 'Ocean room' }, { value: 'library', label: 'Quiet library' }, { value: 'cafe', label: 'Café' }]} /></div>
+      <div className="settings-row"><div><div className="settings-row-title">Daily digest at startup</div><div className="settings-row-sub">Show a calm daily writing summary when MoonScribe opens.</div></div><Toggle checked={settings.startupDigest !== false} onChange={(value) => updateSettings({ startupDigest: value })} /></div>
+      <div className="settings-row"><div><div className="settings-row-title">Startup sound</div><div className="settings-row-sub">Play the MoonScribe startup sound with the daily digest.</div></div><Toggle checked={settings.startupSound !== false} onChange={(value) => updateSettings({ startupSound: value })} /></div>
+      <SoundLevel label="Startup volume" value={settings.startupSoundVolume} onChange={(value) => updateSettings({ startupSoundVolume: value })} />
+      <div className="settings-row"><div><div className="settings-row-title">Ambient soundscape</div><div className="settings-row-sub">A persistent ambience that continues while moving between pages.</div></div><Select ariaLabel="Ambient soundscape" width={180} value={settings.ambientSound ? settings.ambientMood || 'moonlit' : 'off'} onChange={(value) => updateSettings({ ambientMood: value === 'off' ? settings.ambientMood : value, ambientSound: value !== 'off' })} options={[{ value: 'off', label: 'Off' }, { value: 'moonlit', label: 'Moonlit studio' }, { value: 'rainglass', label: 'Rain on glass' }, { value: 'hearth', label: 'Fireplace' }, { value: 'forest', label: 'Forest night' }, { value: 'ocean', label: 'Ocean room' }, { value: 'library', label: 'Quiet library' }, { value: 'cafe', label: 'Café' }, { value: 'clockwork', label: 'Clockwork room' }, { value: 'underwater', label: 'Deep sea' }, { value: 'treetop', label: 'Wind through trees' }]} /></div>
       <SoundLevel label="Ambient volume" value={settings.ambientSoundVolume} onChange={(value) => updateSettings({ ambientSoundVolume: value })} />
       <button className="button button-secondary" onClick={previewAmbience}><Icon icon="fa-solid fa-play" /> Preview ambience</button>
     </section>
@@ -330,6 +376,7 @@ function NotificationPreferences({ settings, updateSettings }) {
       <div className="settings-subheading">General</div>
       <div className="settings-row"><div><div className="settings-row-title">In-app notifications</div><div className="settings-row-sub">Keep important writing, account and collaboration events in your notification centre.</div></div><Toggle checked={preferences.inApp !== false} onChange={(value) => setPreference('inApp', value)} /></div>
       <div className="settings-row"><div><div className="settings-row-title">Browser notifications</div><div className="settings-row-sub">Only used for reminders and collaboration when MoonScribe is not in view.</div></div><Toggle checked={!!settings.browserNotifications} onChange={requestBrowserPermission} /></div>
+      {capabilities.nativeNotifications && <div className="settings-row"><div><div className="settings-row-title">Desktop notifications</div><div className="settings-row-sub">Show native notifications for new collaboration, writing, and sync events.</div></div><Toggle checked={settings.desktopNotifications !== false} onChange={(value) => updateSettings({ desktopNotifications: value })} /></div>}
       <div className="settings-subheading">Writing</div>
       <PreferenceRow label="Writing reminders" setting="writingReminders" preferences={preferences} onChange={setPreference} />
       <PreferenceRow label="Daily goal updates" setting="dailyGoalUpdates" preferences={preferences} onChange={setPreference} />
@@ -423,7 +470,17 @@ function AccountSessions() {
 
 // ---- Accent colour swatches ----
 function SyncPanel({ onOpen }) {
-  const { syncUsername, syncDiscordAvatar, syncServer, syncStatus, disconnectSync, toast } = useApp()
+  const { syncUsername, syncDiscordAvatar, syncServer, syncStatus, disconnectSync, toast, syncNow } = useApp()
+  const [pending, setPending] = useState(0)
+  const [nativePending, setNativePending] = useState(0)
+  const refresh = () => { void pendingSyncCount().then(setPending).catch(() => {}); setNativePending(pendingNativeMirrorFailures()) }
+  useEffect(() => {
+    refresh()
+    const timer = window.setInterval(refresh, 5000)
+    window.addEventListener('moonscribe:record-written', refresh)
+    window.addEventListener('moonscribe:native-mirror-failed', refresh)
+    return () => { window.clearInterval(timer); window.removeEventListener('moonscribe:record-written', refresh); window.removeEventListener('moonscribe:native-mirror-failed', refresh) }
+  }, [])
   const isConnected = !!(syncUsername || syncServer)
 
   const handleSignOut = async () => {
@@ -482,6 +539,7 @@ function SyncPanel({ onOpen }) {
             <span className="char-tag">Writer</span>
             <span className="char-tag">Discord</span>
           </div>
+          <div className="sync-queue-card" role="status"><div><strong>{pending + nativePending}</strong><span>{nativePending ? `${nativePending} local desktop retry${nativePending === 1 ? '' : 'ies'} pending` : (pending === 1 ? 'queued change' : 'queued changes')}</span></div><button className="button button-quiet" type="button" onClick={async () => { await flushNativeMirrorFailures(); void syncNow?.(); refresh(); toast('Sync and local recovery retry requested.') }} disabled={(!pending && !nativePending) || syncStatus === 'syncing'}>{syncStatus === 'syncing' ? 'Syncing…' : 'Retry now'}</button></div>
         </div>
 
         {/* Footer actions */}
@@ -502,6 +560,7 @@ function SyncPanel({ onOpen }) {
       <p className="muted small">Sign in to mirror novels to the server and reach them from any device. Each writer's library stays private to them.</p>
       <div className="sync-current"><SyncStatus onClick={onOpen} /></div>
       <div className="actions-row"><button className="button button-primary" onClick={onOpen}>Sign in / manage</button></div>
+      {(pending > 0 || nativePending > 0) && <div className="sync-queue-card" role="status"><div><strong>{pending + nativePending}</strong><span>{nativePending ? `${nativePending} local desktop retry${nativePending === 1 ? '' : 'ies'} pending` : 'local changes waiting for sync'}</span></div><button className="button button-quiet" type="button" onClick={async () => { await flushNativeMirrorFailures(); void syncNow?.(); refresh(); toast('Local recovery retry requested.') }}>Retry now</button></div>}
       <p className="muted small" style={{ marginTop: 'var(--space-4)' }}>
         Tip: a local export (Privacy &amp; data → Download backup) is a safety net that never depends on the cloud.
       </p>
@@ -997,6 +1056,9 @@ function PrivacyData({ toast, refreshNovels, fileRef }) {
   const [confirmWipe, setConfirmWipe] = useState(false)
   const [dbStats, setDbStats] = useState(null)
   const [loadingStats, setLoadingStats] = useState(false)
+  const [nativeBackups, setNativeBackups] = useState<string[]>([])
+  const [selectedNativeBackup, setSelectedNativeBackup] = useState('')
+  const [restoringNative, setRestoringNative] = useState(false)
   const wipeTimer = useRef(null)
   const stamp = () => new Date().toISOString().slice(0, 10)
 
@@ -1035,6 +1097,28 @@ function PrivacyData({ toast, refreshNovels, fileRef }) {
       toast('Everything restored. Welcome back.')
     } catch (err) { toast(err?.message?.includes('passphrase') ? err.message : 'That file didn\'t look right — nothing changed.') }
   }
+  const restoreDesktopBackup = useCallback(async (path) => {
+    try {
+      const data = JSON.parse(new TextDecoder().decode(await readDesktopFile(path)))
+      if (isEncryptedBackup(data)) {
+        const pass = window.prompt('This backup is encrypted. Enter its passphrase to unlock.')
+        if (pass === null) return
+        await importBackup(await decryptJSON(data, pass))
+      } else await importBackup(data)
+      await refreshNovels()
+      toast('Everything restored. Welcome back.')
+    } catch (err) { toast(err?.message?.includes('passphrase') ? err.message : 'That file didn\'t look right — nothing changed.') }
+  }, [refreshNovels, toast])
+
+  useEffect(() => {
+    const consume = () => {
+      const path = takePendingDesktopBackup()
+      if (path) void restoreDesktopBackup(path)
+    }
+    consume()
+    window.addEventListener('moonscribe:desktop-files-opened', consume)
+    return () => window.removeEventListener('moonscribe:desktop-files-opened', consume)
+  }, [restoreDesktopBackup])
   const deleteEverything = async () => {
     clearTimeout(wipeTimer.current)
     if (!confirmWipe) { setConfirmWipe(true); wipeTimer.current = setTimeout(() => setConfirmWipe(false), 4000); return }
@@ -1064,6 +1148,25 @@ function PrivacyData({ toast, refreshNovels, fileRef }) {
     toast('Replay snapshots cleared.')
     if (dbStats) loadDbStats()
   }, [toast, dbStats, loadDbStats])
+
+  const loadNativeBackups = async () => {
+    const backups = await listNativeBackups()
+    setNativeBackups(backups)
+    setSelectedNativeBackup((current) => current && backups.includes(current) ? current : backups[0] || '')
+  }
+
+  const restoreNative = async () => {
+    if (!selectedNativeBackup || restoringNative) return
+    if (!window.confirm(`Restore the desktop database from ${selectedNativeBackup}? MoonScribe will make a safety copy before replacing the current native database.`)) return
+    setRestoringNative(true)
+    try {
+      await restoreNativeStorage(selectedNativeBackup)
+      toast('Desktop database restored. MoonScribe will reload now.')
+      window.setTimeout(() => window.location.reload(), 450)
+    } catch (err) {
+      toast(err?.message || 'Could not restore the desktop database.')
+    } finally { setRestoringNative(false) }
+  }
 
   return (
     <section className="settings-panel">
@@ -1100,6 +1203,15 @@ function PrivacyData({ toast, refreshNovels, fileRef }) {
           ))}
         </div>
       )}
+      {capabilities.desktop && <>
+        <div className="settings-row-title" style={{ marginTop: 'var(--space-5)' }}>Desktop database snapshots</div>
+        <p className="muted small" style={{ margin: '4px 0 10px' }}>Native snapshots are created before desktop updates and can be restored without selecting arbitrary files.</p>
+        <div className="actions-row" style={{ flexWrap: 'wrap' }}>
+          <button className="button button-ghost" onClick={() => void loadNativeBackups()}>Find desktop snapshots</button>
+          {nativeBackups.length > 0 && <Select ariaLabel="Desktop database snapshot" width={260} value={selectedNativeBackup} onChange={setSelectedNativeBackup} options={nativeBackups.map((name) => ({ value: name, label: name }))} />}
+          {nativeBackups.length > 0 && <button className="button button-secondary" disabled={!selectedNativeBackup || restoringNative} onClick={() => void restoreNative()}>{restoringNative ? 'Restoring…' : 'Restore snapshot'}</button>}
+        </div>
+      </>}
 
       <div className="settings-row-title" style={{ marginTop: 'var(--space-5)' }}>Danger zone</div>
       <p className="muted small" style={{ margin: '4px 0 8px' }}>Erase everything on this device. This can't be undone — download a backup first.</p>

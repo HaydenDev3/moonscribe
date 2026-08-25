@@ -35,8 +35,8 @@ export default function Onboarding() {
         <h1>MoonScribe</h1>
         <div className="dedication">made with love, for Storm Tattersall</div>
         <p className="lead">
-          A quiet, private place for your stories. Everything you write stays on this device —
-          no accounts, no paywalls, no limits.
+          A quiet, private place for your stories. Your writing starts on this device and remains
+          available offline. Create an account later when you want secure sync and collaboration.
         </p>
 
         <div className="onboarding-steps">
@@ -64,7 +64,7 @@ export default function Onboarding() {
           {busy ? 'Opening…' : 'Begin my first novel'}
         </button>
         <p className="small muted" style={{ marginTop: 'var(--space-4)', marginBottom: 0 }}>
-          Everything is stored privately in this browser.
+          Your draft is stored privately on this device. You can back it up or export it at any time.
         </p>
       </div>
     </div>

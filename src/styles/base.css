@@ -392,3 +392,14 @@ html.high-contrast .chapter-item { border-width: 1px; }
   gap: var(--space-2);
   align-items: center;
 }
+/* Keyboard users can bypass persistent application chrome on every route. */
+.skip-link { position: fixed; top: 8px; left: 8px; z-index: 10000; transform: translateY(-150%); padding: 10px 14px; border: 2px solid var(--accent); border-radius: var(--radius); background: var(--surface-elev); color: var(--charcoal); box-shadow: var(--shadow-lg); font: 700 .8rem var(--font-ui); }
+.skip-link:focus { transform: none; }
+#main-content:focus { outline: none; }
+
+.install-prompt { position: fixed; right: 18px; bottom: 18px; z-index: 500; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 12px; width: min(430px, calc(100vw - 32px)); padding: 12px 14px; border: 1px solid var(--active-border); border-radius: var(--radius-lg); background: color-mix(in srgb, var(--surface-elev) 96%, transparent); color: var(--charcoal); box-shadow: var(--shadow-lg); backdrop-filter: blur(16px); }
+.install-prompt-icon { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-deep); }
+.install-prompt strong { display: block; font: 600 .86rem/1.2 var(--font-ui); }
+.install-prompt p { margin: 3px 0 0; color: var(--grey); font-size: .7rem; line-height: 1.35; }
+.install-prompt .button { min-height: 36px; }
+@media (max-width: 560px) { .install-prompt { right: 10px; bottom: 10px; grid-template-columns: auto minmax(0, 1fr) auto; }.install-prompt .button-primary { grid-column: 2; justify-self: start; }.install-prompt > .button-quiet { grid-column: 3; grid-row: 1; } }

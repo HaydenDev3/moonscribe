@@ -99,6 +99,16 @@
   --overlay: color-mix(in srgb, var(--color-neutral-900) 42%, transparent);
   --focus-ring: color-mix(in srgb, var(--color-accent) 30%, transparent);
 
+  /* Shared interaction states used across workspaces and compact layouts. */
+  --state-success: #6f946c;
+  --state-warning: #b27a35;
+  --state-danger: #a85c52;
+  --state-info: #6e8eaf;
+  --state-success-bg: color-mix(in srgb, var(--state-success) 12%, transparent);
+  --state-warning-bg: color-mix(in srgb, var(--state-warning) 12%, transparent);
+  --state-danger-bg: color-mix(in srgb, var(--state-danger) 12%, transparent);
+  --state-info-bg: color-mix(in srgb, var(--state-info) 12%, transparent);
+
   /* activity heatmap — gold ramp */
   --heat-1: var(--color-accent-100);
   --heat-2: var(--color-accent-200);
@@ -117,6 +127,9 @@
   --radius-sm: 2px;
   --radius: 4px;
   --radius-lg: 7px;
+
+  --control-min-height: 38px;
+  --touch-target: 44px;
 
   /* spacing */
   --space-1: 4px;

@@ -4,6 +4,7 @@ export const NOVEL_NAV = [
   {
     group: 'World',
     items: [
+      { to: 'planning', label: 'Planning cockpit', icon: 'fa-solid fa-compass-drafting' },
       { to: 'characters', label: 'Characters', icon: 'fa-solid fa-user' },
       { to: 'relationships', label: 'Relationships', icon: 'fa-regular fa-heart' },
       { to: 'world', label: 'Worldbuilding', icon: 'fa-solid fa-globe' },
@@ -16,6 +17,7 @@ export const NOVEL_NAV = [
     items: [
       { to: 'design', label: 'Designer', icon: 'fa-solid fa-wand-magic-sparkles' },
       { to: 'media', label: 'Media Library', icon: 'fa-regular fa-images' },
+      { to: 'files', label: 'Project files', icon: 'fa-solid fa-folder-tree' },
       { to: 'analytics', label: 'Analytics', icon: 'fa-solid fa-chart-line' },
       { to: 'corkboard', label: 'Draft board', icon: 'fa-solid fa-border-all' },
       { to: 'continuity', label: 'Continuity', icon: 'fa-solid fa-circle-check' }

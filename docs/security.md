@@ -8,7 +8,7 @@ The browser client is untrusted from the server's perspective. Every private ser
 
 Passwords are salted and hashed with Node `scrypt`; verification uses timing-safe comparison. Bearer tokens are random and stored hashed in SQLite with expiry, session ID, device label, and last-seen time. Google and Discord OAuth use signed, expiring state. Production OAuth should add PKCE where supported and exact callback/origin allowlists.
 
-Magic Link is implemented through the server Resend integration when the deployment has `RESEND_API_KEY` and `RESEND_FROM_EMAIL` configured. Passkey authentication remains unavailable. Production Magic Link tokens are random, hashed at rest, one-use, short-lived, generic on request, and rate-limited. WebAuthn challenges must be short-lived and bound to session/user and relying-party origin.
+Magic Link is implemented through the server Resend integration when the deployment has `RESEND_API_KEY` and `RESEND_FROM_EMAIL` configured. Passkey authentication uses WebAuthn with required user verification, origin and relying-party binding, five-minute one-use challenges, discoverable credentials, and authenticator signature-counter updates. Production should set `WEBAUTHN_ORIGIN=https://moonscribe.cc` and `WEBAUTHN_RP_ID=moonscribe.cc`; `WEBAUTHN_RP_NAME` is optional. Production Magic Link tokens are random, hashed at rest, one-use, short-lived, generic on request, and rate-limited.
 
 ## Authorization and tenancy
 
@@ -28,7 +28,7 @@ Imported/stored HTML must pass `sanitizeStoredHtml` before interactive rendering
 
 ## Browser and desktop policy
 
-The server emits security headers. The current Tauri configuration has `csp: null`, which is a blocker. Desktop capabilities must use least privilege, validate deep links, keep tokens in the OS keyring, and reject unsigned updates.
+The server emits security headers. The Tauri configuration uses a self-restricted CSP with explicit asset, network, and IPC allowances. Desktop capabilities must use least privilege, validate deep links, keep tokens in the OS keyring, and reject unsigned updates.
 
 ## Email
 

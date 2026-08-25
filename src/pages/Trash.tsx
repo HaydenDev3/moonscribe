@@ -12,7 +12,7 @@ const STORE_LABELS = {
   characters: 'Character',
   notes: 'Note',
   world: 'Worldbuilding',
-  glossary: 'Term'
+  glossary: 'Term', projectFiles: 'Project file'
 }
 
 function titleOf(store, rec) {
@@ -20,7 +20,7 @@ function titleOf(store, rec) {
   if (store === 'characters') return rec.name || 'A character'
   if (store === 'notes') return rec.title || 'Untitled note'
   if (store === 'glossary') return rec.term || 'Untitled term'
-  return rec.name || 'Untitled entry'
+  return rec.name || rec.title || 'Untitled entry'
 }
 
 export default function Trash({ novelId, embedded }) {

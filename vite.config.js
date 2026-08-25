@@ -51,6 +51,21 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true
+      },
+      '/ws': {
+        target: 'ws://localhost:3001',
+        changeOrigin: true,
+        ws: true,
+        configure(proxy) {
+          // Browsers and the collaboration client intentionally close sockets
+          // during HMR, API restarts, tab changes, and reconnect backoff. These
+          // are normal lifecycle events rather than proxy failures.
+          proxy.on('error', (error) => {
+            const code = error?.code
+            if (code === 'ECONNRESET' || code === 'ECONNABORTED' || code === 'EPIPE') return
+            console.error('[vite] websocket proxy error:', error)
+          })
+        }
       }
     }
   },

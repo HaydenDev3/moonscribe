@@ -11,7 +11,7 @@ import '../styles/admin-audit.css'
 import '../styles/admin-flags.css'
 import '../styles/admin-rich.css'
 
-type AdminUser = { id: string; username: string; email?: string | null; roles: string[]; disabledAt?: number | null }
+type AdminUser = { id: string; username: string; email?: string | null; roles: string[]; disabledAt?: number | null; createdAt?: number; emailVerified?: boolean; twoFactorEnabled?: boolean; online?: boolean; lastSeenAt?: number | null }
 type Health = { online?: boolean; emailDelivery?: boolean }
 type FeatureFlag = {
   key: string
@@ -32,6 +32,13 @@ type Announcement = { id: string; title: string; body: string; severity: string;
 const roleFor = (roles: string[]) =>
   roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user'
 
+function AdminUserProfile({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  return <section className="admin-user-profile" aria-label={`Profile for ${user.username}`}>
+    <header><div><span className={`admin-status-dot large ${user.online ? 'online' : 'offline'}`} /><div><h3>{user.username}</h3><p>{user.online ? 'Online now' : user.lastSeenAt ? `Last seen ${new Date(user.lastSeenAt).toLocaleString()}` : 'Offline'}</p></div></div><button type="button" onClick={onClose} aria-label="Close profile">×</button></header>
+    <div className="admin-profile-grid"><div><small>User ID</small><strong>{user.id}</strong></div><div><small>Email</small><strong>{user.email || 'Not attached'}</strong></div><div><small>Role</small><strong>{roleFor(user.roles)}</strong></div><div><small>All roles</small><strong>{user.roles.join(', ')}</strong></div><div><small>Created</small><strong>{user.createdAt ? new Date(user.createdAt).toLocaleString() : 'Unknown'}</strong></div><div><small>Email verification</small><strong>{user.emailVerified ? 'Verified' : 'Not verified'}</strong></div><div><small>Two-factor authentication</small><strong>{user.twoFactorEnabled ? 'Enabled' : 'Disabled'}</strong></div><div><small>Account state</small><strong>{user.disabledAt ? 'Disabled' : 'Active'}</strong></div></div>
+  </section>
+}
+
 export default function AdminDashboard() {
   const app = useApp() as any
   const [section, setSection] = useState('Dashboard')
@@ -40,6 +47,7 @@ export default function AdminDashboard() {
   const [audit, setAudit] = useState<AuditEvent[]>([])
   const [flags, setFlags] = useState<FeatureFlag[]>([])
   const [query, setQuery] = useState('')
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const isAdmin = Boolean(app.hasRole?.('admin'))
@@ -384,8 +392,11 @@ export default function AdminDashboard() {
                     ...(!user.roles.includes('admin') ? [{ label: user.disabledAt ? 'Restore account' : 'Disable account', icon: user.disabledAt ? 'fa-solid fa-unlock' : 'fa-solid fa-ban', onClick: () => void toggleDisabled(user) }] : []),
                     ...(!user.roles.includes('admin') ? ['divider' as const, { label: 'Delete user permanently', icon: 'fa-solid fa-trash', danger: true, onClick: () => void deleteUser(user) }] : []),
                   ])}>
-                    <span>
-                      <strong>{user.username}</strong>
+                    <span className="admin-user-identity">
+                      <button type="button" className="admin-profile-trigger" onClick={() => setSelectedUser(user)}>
+                        <span className={`admin-status-dot ${user.online ? 'online' : 'offline'}`} />
+                        <strong>{user.username}</strong>
+                      </button>
                       <small>{user.email || 'No email attached'}</small>
                     </span>
                     <span className={`admin-role role-${roleFor(user.roles)}`}>
@@ -409,6 +420,7 @@ export default function AdminDashboard() {
                 ))
               )}
             </div>
+            {selectedUser && <AdminUserProfile user={selectedUser} onClose={() => setSelectedUser(null)} />}
           </article>
         )}
         {section === 'Audit log' && (

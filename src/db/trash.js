@@ -6,7 +6,7 @@ import { getDB, putRecord, removeRecord } from './db'
 // are swept quietly on app boot.
 export const TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
-export const TRASHABLE = ['chapters', 'characters', 'notes', 'world', 'glossary']
+export const TRASHABLE = ['chapters', 'characters', 'notes', 'world', 'glossary', 'projectFiles']
 
 // Shared soft-delete used by the per-store `trash*` helpers.
 export async function trashRecord(storeName, id) {

@@ -22,6 +22,8 @@ const AppContext = createContext(null)
 
 const THEMES = ['light', 'dark', 'amoled', 'ember', 'moss', 'sandstone', 'midnight']
 const DEFAULT_SETTINGS = {
+  customGradientStart: '',
+  customGradientEnd: '',
   paperTexture: false,
   theme: 'light',
   reduceMotion: false,
@@ -57,12 +59,16 @@ const DEFAULT_SETTINGS = {
   clickSounds: true,
   typingSounds: false,
   notificationSounds: true,
+  desktopNotifications: true,
   ambientSound: false,
   ambientMood: 'moonlit',
   soundVolume: 35,
   interfaceSoundVolume: 25,
   writingSoundVolume: 18,
   notificationSoundVolume: 40,
+  startupDigest: true,
+  startupSound: true,
+  startupSoundVolume: 35,
   ambientSoundVolume: 30,
   hapticFeedback: false,
   hapticIntensity: 'subtle',
@@ -520,7 +526,6 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     let cancelled = false
-    let stopOnHide = null
     let stopAmbient = null
     if (!settings.soundEnabled || !settings.ambientSound) {
       import('../utils/sounds').then(({ stopAmbientSound }) => {
@@ -528,19 +533,22 @@ export function AppProvider({ children }) {
       })
       return () => { cancelled = true }
     }
-    import('../utils/sounds').then(({ startAmbientSound, stopAmbientSound }) => {
+    import('../utils/sounds').then(({ startAmbientSound, resumeAmbientSound, stopAmbientSound }) => {
       if (cancelled) return
       stopAmbient = stopAmbientSound
       startAmbientSound(settings.ambientSoundVolume, settings.ambientMood || 'moonlit')
-      stopOnHide = () => {
-        if (document.hidden) stopAmbientSound()
-        else startAmbientSound(settings.ambientSoundVolume, settings.ambientMood || 'moonlit')
-      }
-      document.addEventListener('visibilitychange', stopOnHide)
+      // Background ambience is intentionally not stopped when the tab loses
+      // focus. Browsers may suspend/resume media, so retry playback only when
+      // the document becomes visible again.
+      const resumeOnVisible = () => { if (!document.hidden) resumeAmbientSound() }
+      const resumeOnInteraction = () => resumeAmbientSound()
+      document.addEventListener('visibilitychange', resumeOnVisible)
+      window.addEventListener('pointerdown', resumeOnInteraction, { passive: true })
+      window.addEventListener('keydown', resumeOnInteraction, { passive: true })
+      stopAmbient = () => { document.removeEventListener('visibilitychange', resumeOnVisible); window.removeEventListener('pointerdown', resumeOnInteraction); window.removeEventListener('keydown', resumeOnInteraction); stopAmbientSound() }
     })
     return () => {
       cancelled = true
-      if (stopOnHide) document.removeEventListener('visibilitychange', stopOnHide)
       if (stopAmbient) stopAmbient()
     }
   }, [settings.soundEnabled, settings.ambientSound, settings.ambientMood, settings.ambientSoundVolume])
@@ -775,6 +783,26 @@ export function AppProvider({ children }) {
     }
   }, [toast])
 
+  const signInWithPasskey = useCallback(async () => {
+    const server = discordServer()
+    const optionsResponse = await fetch(`${server}/api/auth/passkey/options`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    const request = await optionsResponse.json().catch(() => ({}))
+    if (!optionsResponse.ok) throw new Error(request.error || 'Could not start passkey sign in.')
+    const { startAuthentication } = await import('@simplewebauthn/browser')
+    const credential = await startAuthentication({ optionsJSON: request.options })
+    const verifyResponse = await fetch(`${server}/api/auth/passkey/verify`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ challengeId: request.challengeId, response: credential }),
+    })
+    const account = await verifyResponse.json().catch(() => ({}))
+    if (!verifyResponse.ok) throw new Error(account.error || 'MoonScribe could not verify your passkey.')
+    const connected = await syncEngine.connectWithToken({ server: account.server || server, token: account.token, username: account.username })
+    if (!connected.ok) throw new Error(connected.error || 'MoonScribe could not save the account session.')
+    await setMeta('authProvider', 'passkey')
+    setSync({ server: account.server || server, username: connected.username || account.username, status: 'synced', discordAvatar: null, provider: 'passkey' })
+    return { ok: true, username: connected.username || account.username }
+  }, [])
+
   const sendMagicLink = useCallback(async (email) => {
     const response = await fetch(`${discordServer()}/api/auth/magic-link`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -950,6 +978,7 @@ export function AppProvider({ children }) {
       connectSync,
       connectDiscord,
       connectGoogle,
+      signInWithPasskey,
       sendMagicLink,
       completeTwoFactorSignIn,
       disconnectSync,
@@ -960,7 +989,7 @@ export function AppProvider({ children }) {
       deleteCustomFont,
       refreshSystemFonts,
     }),
-    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, sendMagicLink, completeTwoFactorSignIn, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, authFlow]
+    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, signInWithPasskey, sendMagicLink, completeTwoFactorSignIn, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, authFlow]
   )
 
   return (

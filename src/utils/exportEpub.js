@@ -124,7 +124,7 @@ ${navItems}
 .chapter-title { text-align: center; font-size: 1.4em; margin: 1em 0; }
 .content p { margin: 0 0 1em; line-height: ${Number(layout.lineSpacing) || 1.5}; }
 .content .scene-break { text-align: center; margin: 1.2em 0; color: ${theme.accent}; }
-.content .page-break, .content .pg-break, .content [data-page-break="true"] { break-after: page; page-break-after: always; height: 0; }
+.content .page-break, .content .pg-break, .content .pg-auto-break, .content [data-page-break="true"], .content [data-auto-page-break="true"] { break-after: page; page-break-after: always; height: 0; }
 nav ol { line-height: 1.8; }
 `
   })

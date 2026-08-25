@@ -48,7 +48,7 @@ export default function AccountCentre({ onClose }: { onClose: () => void }) {
       setAccount(profile); setEmail(profile.email || ''); setUsername(profile.username || ''); setProfileDraft({ displayName: app.settings?.displayName || '', writerName: app.settings?.writerName || '', profileBio: app.settings?.profileBio || '', timezone: app.settings?.timezone || 'UTC', language: app.settings?.language || 'en-AU' }); setSessions(uniqueSessions); setNotices(noticeData.notifications || [])
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load account data.') }
     finally { setLoading(false) }
-  }, [])
+  }, [app.settings?.displayName, app.settings?.writerName, app.settings?.profileBio, app.settings?.timezone, app.settings?.language])
   useEffect(() => { void load() }, [load])
 
   const request = async (path: string, body: object) => { const config = await getConfig(); if (!config.server || !config.token) throw new Error('Sign in first.'); const response = await fetch(`${config.server.replace(/\/$/, '')}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.token}` }, body: JSON.stringify(body) }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || 'The account change could not be saved.'); return data }

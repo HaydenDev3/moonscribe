@@ -5,9 +5,9 @@
 MoonScribe has four cooperating layers:
 
 1. A React 19 and Vite client renders the writing workspace and routes.
-2. IndexedDB, accessed through `idb`, is the authoritative immediate local store in the web application.
+2. IndexedDB, accessed through `idb`, is authoritative in web/PWA builds. Tauri desktop uses profile-scoped native SQLite as its sole runtime repository after a one-time legacy migration.
 3. An optional Node server provides accounts, sessions, collaboration, and record synchronization using SQLite.
-4. A Tauri 2 shell can package the same Vite frontend for Windows. The current shell is not yet a native local-first implementation.
+4. A Tauri 2 shell packages the same Vite frontend for Windows. Its repository facade serves reads, indexed queries, cursor operations, writes, backup, and restore from native SQLite; IndexedDB is opened only during the one-time migration of a legacy desktop profile.
 
 The core writing path does not require an account. Signing in adds optional server synchronization; it must not become a prerequisite for opening or editing local work.
 
@@ -43,7 +43,7 @@ Vite builds static assets and `vite-plugin-pwa` generates a service worker. Font
 
 ## Desktop boundary
 
-`src-tauri` currently opens the web frontend in a Tauri window and enables the shell plugin. It does not yet provide SQLite, keyring credentials, signed updater, deep links, tray, native notification, file association, or migration backup services. See [desktop.md](desktop.md).
+`src-tauri` packages the shared frontend and now provides the first native desktop foundation: SQLite mirroring with WAL and backups, keyring credential commands, deep-link plumbing, tray access, native notifications, window-state persistence, and backup-before-update hooks. IndexedDB remains the immediate browser repository while the native repository becomes the full source of truth. Signed release configuration, file associations, global shortcuts, and packaged-app QA remain release work. See [desktop.md](desktop.md).
 
 ## State scopes
 
@@ -53,4 +53,3 @@ Vite builds static assets and `vite-plugin-pwa` generates a service worker. Font
 - **Session-only:** open modal, current settings page, transient search, focus session, and toasts.
 
 New settings must declare a scope and migration/default behavior before being added.
-

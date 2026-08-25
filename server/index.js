@@ -22,6 +22,7 @@ import { pathToFileURL, fileURLToPath } from 'node:url'
 import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import { WebSocketServer } from 'ws'
+import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse } from '@simplewebauthn/server'
 import { isEmailConfigured, sendAccountUpdateEmail, sendMagicLink, sendReminderEmail, sendTwoFactorCode, sendVerificationCode } from './email.js'
 import { migrateSqliteToSupabase, restoreSupabaseToSqlite, supabasePersistenceEnabled, mirrorRecords, mirrorUserProfile, mirrorUserAndSession, mirrorOauthExchange, consumeSupabaseOauthExchange, mergeSupabaseUser } from './supabasePersistence.js'
 import { loadBabyLoveGrowthArticles, startBabyLoveGrowthSync } from './babylovegrowth.js'
@@ -30,6 +31,21 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = join(ROOT, 'dist')
 const PORT = Number(process.env.PORT || 3001)
 const notificationSockets = new Map()
+const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET || ''
+
+function base64Url(value) {
+  return Buffer.from(value).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+}
+
+function createSupabaseRealtimeToken({ userId, novelId, role, expiresIn = 300 }) {
+  if (!SUPABASE_JWT_SECRET) return null
+  const now = Math.floor(Date.now() / 1000)
+  const header = base64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }))
+  const payload = base64Url(JSON.stringify({ aud: 'authenticated', role: 'authenticated', sub: String(userId), user_id: String(userId), novel_id: String(novelId), share_role: role, iat: now, exp: now + expiresIn }))
+  const input = `${header}.${payload}`
+  const signature = base64Url(createHmac('sha256', SUPABASE_JWT_SECRET).update(input).digest())
+  return { token: `${input}.${signature}`, expiresAt: (now + expiresIn) * 1000 }
+}
 
 function describeSupabaseError(error) {
   if (!error) return 'Unknown Supabase error'
@@ -54,6 +70,8 @@ const STORES = new Set([
   'relationships',
   'world',
   'moodboard',
+  'projectFiles',
+  'workspacePreferences',
   'glossary',
   'annotations',
   'branches',
@@ -83,6 +101,10 @@ const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET
 const ALLOW_DEV_TUNNELS = process.env.ALLOW_DEV_TUNNELS === 'true' || !IS_PRODUCTION
 const DEV_TUNNEL_HOST = /(?:^|\.)(?:ngrok-free\.app|ngrok-free\.dev|ngrok\.io|loca\.lt)$/i
+const WEBAUTHN_RP_NAME = process.env.WEBAUTHN_RP_NAME || 'MoonScribe'
+const WEBAUTHN_ORIGIN = String(process.env.WEBAUTHN_ORIGIN || '').replace(/\/+$/, '')
+const WEBAUTHN_RP_ID = String(process.env.WEBAUTHN_RP_ID || '').trim()
+const WEBAUTHN_CHALLENGE_TTL_MS = 5 * 60 * 1000
 
 const OAUTH_STATE_SECRET = process.env.OAUTH_STATE_SECRET || DISCORD_CLIENT_SECRET || GOOGLE_CLIENT_SECRET
 function oauthState(payload) {
@@ -349,6 +371,40 @@ function setupSchema(db) {
       id TEXT PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL,
       expires_at INTEGER NOT NULL, used_at INTEGER, created_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS passkeys (
+      credential_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      public_key TEXT NOT NULL,
+      counter INTEGER NOT NULL DEFAULT 0,
+      transports TEXT NOT NULL DEFAULT '[]',
+      device_type TEXT NOT NULL,
+      backed_up INTEGER NOT NULL DEFAULT 0,
+      name TEXT NOT NULL DEFAULT 'Passkey',
+      created_at INTEGER NOT NULL,
+      last_used_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS webauthn_challenges (
+      id TEXT PRIMARY KEY,
+      user_id TEXT,
+      purpose TEXT NOT NULL,
+      challenge TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_passkeys_user ON passkeys(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_expiry ON webauthn_challenges(expires_at);
+    CREATE TABLE IF NOT EXISTS subscriptions (
+      user_id TEXT PRIMARY KEY,
+      provider TEXT NOT NULL DEFAULT 'manual',
+      customer_id TEXT,
+      subscription_id TEXT,
+      plan TEXT NOT NULL DEFAULT 'free',
+      status TEXT NOT NULL DEFAULT 'active',
+      current_period_end INTEGER,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_subscriptions_plan ON subscriptions(plan, status);
   `)
 
   const ensureColumn = (table, column, ddl) => {
@@ -393,6 +449,7 @@ function setupSchema(db) {
   `)
   db.exec('CREATE INDEX IF NOT EXISTS idx_records_user_since ON records(user_id, updated_at)')
   db.exec('CREATE INDEX IF NOT EXISTS idx_magic_links_hash ON magic_links(token_hash)')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_subscriptions_customer ON subscriptions(customer_id)')
   db.exec(`
     CREATE TABLE IF NOT EXISTS novel_members (
       novel_id TEXT NOT NULL, owner_user_id TEXT NOT NULL, member_user_id TEXT NOT NULL,
@@ -407,6 +464,14 @@ function setupSchema(db) {
       novel_id TEXT NOT NULL, user_id TEXT NOT NULL, chapter_id TEXT,
       last_seen_at INTEGER NOT NULL, PRIMARY KEY (novel_id, user_id)
     );
+    CREATE TABLE IF NOT EXISTS share_presence_sessions (
+      session_id TEXT PRIMARY KEY, novel_id TEXT NOT NULL, user_id TEXT NOT NULL,
+      chapter_id TEXT, tab_id TEXT, tab_name TEXT NOT NULL DEFAULT '',
+      workspace TEXT NOT NULL DEFAULT 'manuscript', activity TEXT NOT NULL DEFAULT 'viewing',
+      status TEXT NOT NULL DEFAULT 'online', line_number INTEGER, cursor_offset INTEGER,
+      selection_from INTEGER, selection_to INTEGER, client_version TEXT NOT NULL DEFAULT '',
+      last_seen_at INTEGER NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS share_rooms (
       novel_id TEXT PRIMARY KEY, owner_user_id TEXT NOT NULL,
       max_users INTEGER NOT NULL DEFAULT 4, default_role TEXT NOT NULL DEFAULT 'editor',
@@ -415,6 +480,8 @@ function setupSchema(db) {
     CREATE INDEX IF NOT EXISTS idx_members_user ON novel_members(member_user_id, novel_id);
     CREATE INDEX IF NOT EXISTS idx_invites_expiry ON share_invites(expires_at);
     CREATE INDEX IF NOT EXISTS idx_presence_novel ON share_presence(novel_id, last_seen_at);
+    CREATE INDEX IF NOT EXISTS idx_presence_sessions_novel ON share_presence_sessions(novel_id, last_seen_at);
+    CREATE INDEX IF NOT EXISTS idx_presence_sessions_user ON share_presence_sessions(novel_id, user_id);
   `)
   ensureColumn('share_presence', 'status', "status TEXT NOT NULL DEFAULT 'online'")
   ensureColumn('share_presence', 'activity', "activity TEXT NOT NULL DEFAULT 'viewing'")
@@ -635,6 +702,28 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     return APP_ORIGIN
   }
 
+  const webAuthnConfig = (req) => {
+    const origin = WEBAUTHN_ORIGIN || publicOrigin(req)
+    const parsed = new URL(origin)
+    if (IS_PRODUCTION && parsed.protocol !== 'https:') throw new Error('Passkeys require an HTTPS application origin.')
+    return { origin: parsed.origin, rpID: WEBAUTHN_RP_ID || parsed.hostname, rpName: WEBAUTHN_RP_NAME }
+  }
+
+  const issueWebAuthnChallenge = (purpose, challenge, userId = null) => {
+    const id = randomBytes(18).toString('base64url')
+    database.prepare('DELETE FROM webauthn_challenges WHERE expires_at < ? OR used_at IS NOT NULL').run(Date.now())
+    database.prepare('INSERT INTO webauthn_challenges (id, user_id, purpose, challenge, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, userId, purpose, challenge, Date.now() + WEBAUTHN_CHALLENGE_TTL_MS, Date.now())
+    return id
+  }
+
+  const consumeWebAuthnChallenge = (id, purpose, userId = null) => {
+    const row = database.prepare('SELECT * FROM webauthn_challenges WHERE id = ? AND purpose = ? AND used_at IS NULL').get(String(id || ''), purpose)
+    if (!row || row.expires_at < Date.now() || (userId && row.user_id !== userId)) throw new Error('This passkey request expired. Please try again.')
+    database.prepare('UPDATE webauthn_challenges SET used_at = ? WHERE id = ?').run(Date.now(), row.id)
+    return row
+  }
+
   // In production the API may be deployed separately from the web app. If
   // API_ORIGIN was omitted, derive the callback host from the request instead
   // of sending Discord/Google back to a static web host that cannot exchange
@@ -669,10 +758,10 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     deviceId: String(req.headers['x-device-id'] || '').trim().slice(0, 120) || null,
     deviceName: String(req.headers['x-device-name'] || req.headers['user-agent'] || 'Unknown device').trim()
   })
-  const presenceRowsFor = (novelId) => database.prepare(`SELECT u.id, u.username, u.discord_id, u.discord_avatar, u.google_avatar, p.chapter_id, p.last_seen_at, p.status, p.activity, p.workspace, p.tab_name, p.line_number, p.cursor_offset
-    FROM share_presence p JOIN users u ON u.id = p.user_id WHERE p.novel_id = ? AND p.last_seen_at > ? ORDER BY p.last_seen_at DESC`)
+  const presenceRowsFor = (novelId) => database.prepare(`SELECT u.id, u.username, u.discord_id, u.discord_avatar, u.google_avatar, p.session_id, p.chapter_id, p.tab_id, p.last_seen_at, p.status, p.activity, p.workspace, p.tab_name, p.line_number, p.cursor_offset, p.selection_from, p.selection_to, p.client_version
+    FROM share_presence_sessions p JOIN users u ON u.id = p.user_id WHERE p.novel_id = ? AND p.last_seen_at > ? ORDER BY p.last_seen_at DESC`)
     .all(String(novelId), Date.now() - 45_000)
-  const serializePresenceRows = (rows) => rows.map((p) => ({ id: p.id, username: p.username, avatar: publicAvatar(p), chapterId: p.chapter_id, lastSeenAt: p.last_seen_at, status: p.status, activity: p.activity, workspace: p.workspace, tabName: p.tab_name, lineNumber: p.line_number, cursorOffset: p.cursor_offset }))
+  const serializePresenceRows = (rows) => rows.map((p) => ({ id: p.id, sessionId: p.session_id, username: p.username, avatar: publicAvatar(p), chapterId: p.chapter_id, tabId: p.tab_id, lastSeenAt: p.last_seen_at, status: p.status, activity: p.activity, workspace: p.workspace, tabName: p.tab_name, lineNumber: p.line_number, cursorOffset: p.cursor_offset, selectionFrom: p.selection_from, selectionTo: p.selection_to, clientVersion: p.client_version }))
 
   function handleApi(req, res, url, path) {
     // Only configured browser origins may call the API cross-origin.
@@ -936,7 +1025,52 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     if (path === '/api/auth/status' && req.method === 'GET') {
       const userCount = database.prepare('SELECT COUNT(*) AS count FROM users').get().count
       const activeSessions = database.prepare('SELECT COUNT(*) AS count FROM tokens WHERE expires_at IS NULL OR expires_at > ?').get(Date.now()).count
-      json(res, 200, { online: true, emailAuth: true, discordAuth: !!DISCORD_CLIENT_SECRET, googleAuth: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET), emailDelivery: isEmailConfigured(), users: userCount, activeSessions, database: 'SQLite', appOrigin: publicOrigin(req) })
+      json(res, 200, { online: true, emailAuth: true, passkeyAuth: true, discordAuth: !!DISCORD_CLIENT_SECRET, googleAuth: !!(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET), emailDelivery: isEmailConfigured(), users: userCount, activeSessions, database: 'SQLite', appOrigin: publicOrigin(req) })
+      return
+    }
+
+    if (path === '/api/auth/passkey/options' && req.method === 'POST') {
+      const retryAfter = limiter.limited(clientAddress(req), Date.now())
+      if (retryAfter) { json(res, 429, { error: 'Too many attempts — wait a bit, then try again.' }); return }
+      Promise.resolve().then(async () => {
+        const { rpID } = webAuthnConfig(req)
+        const options = await generateAuthenticationOptions({ rpID, userVerification: 'required', timeout: 60_000 })
+        const challengeId = issueWebAuthnChallenge('authentication', options.challenge)
+        json(res, 200, { options, challengeId })
+      }).catch((error) => json(res, 400, { error: error.message }))
+      return
+    }
+
+    if (path === '/api/auth/passkey/verify' && req.method === 'POST') {
+      const retryAfter = limiter.limited(clientAddress(req), Date.now())
+      if (retryAfter) { json(res, 429, { error: 'Too many attempts — wait a bit, then try again.' }); return }
+      readBody(req, 64 * 1024).then(async ({ challengeId, response }) => {
+        if (!response?.id) throw new Error('The passkey response was incomplete.')
+        const challenge = consumeWebAuthnChallenge(challengeId, 'authentication')
+        const stored = database.prepare('SELECT * FROM passkeys WHERE credential_id = ?').get(String(response.id))
+        if (!stored) throw new Error('That passkey is not registered with MoonScribe.')
+        const user = database.prepare('SELECT id, username FROM users WHERE id = ? AND disabled_at IS NULL').get(stored.user_id)
+        if (!user) throw new Error('This MoonScribe account is unavailable.')
+        const { origin, rpID } = webAuthnConfig(req)
+        const verification = await verifyAuthenticationResponse({
+          response,
+          expectedChallenge: challenge.challenge,
+          expectedOrigin: origin,
+          expectedRPID: rpID,
+          requireUserVerification: true,
+          credential: {
+            id: stored.credential_id,
+            publicKey: Buffer.from(stored.public_key, 'base64url'),
+            counter: Number(stored.counter || 0),
+            transports: JSON.parse(stored.transports || '[]')
+          }
+        })
+        if (!verification.verified) throw new Error('MoonScribe could not verify that passkey.')
+        database.prepare('UPDATE passkeys SET counter = ?, last_used_at = ? WHERE credential_id = ?')
+          .run(verification.authenticationInfo.newCounter, Date.now(), stored.credential_id)
+        const { token } = issueToken(database, user.id, device(req))
+        json(res, 200, { ok: true, token, accountId: user.id, username: user.username, provider: 'passkey', server: API_ORIGIN })
+      }).catch((error) => json(res, 400, { error: error.message }))
       return
     }
 
@@ -1126,6 +1260,63 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       return
     }
 
+    if (path === '/api/auth/passkeys/register/options' && req.method === 'POST') {
+      Promise.resolve().then(async () => {
+        const user = database.prepare('SELECT id, username, email FROM users WHERE id = ?').get(userId)
+        const existing = database.prepare('SELECT credential_id, transports FROM passkeys WHERE user_id = ?').all(userId)
+        const { origin, rpID, rpName } = webAuthnConfig(req)
+        const options = await generateRegistrationOptions({
+          rpName,
+          rpID,
+          userName: user.email || user.username,
+          userDisplayName: user.username,
+          userID: new TextEncoder().encode(user.id),
+          attestationType: 'none',
+          timeout: 60_000,
+          excludeCredentials: existing.map((item) => ({ id: item.credential_id, transports: JSON.parse(item.transports || '[]') })),
+          authenticatorSelection: { residentKey: 'required', userVerification: 'required' }
+        })
+        const challengeId = issueWebAuthnChallenge('registration', options.challenge, userId)
+        json(res, 200, { options, challengeId, origin })
+      }).catch((error) => json(res, 400, { error: error.message }))
+      return
+    }
+
+    if (path === '/api/auth/passkeys/register/verify' && req.method === 'POST') {
+      readBody(req, 64 * 1024).then(async ({ challengeId, response, name }) => {
+        const challenge = consumeWebAuthnChallenge(challengeId, 'registration', userId)
+        const { origin, rpID } = webAuthnConfig(req)
+        const verification = await verifyRegistrationResponse({ response, expectedChallenge: challenge.challenge, expectedOrigin: origin, expectedRPID: rpID, requireUserVerification: true })
+        if (!verification.verified || !verification.registrationInfo) throw new Error('MoonScribe could not verify that passkey.')
+        const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo
+        database.prepare(`INSERT INTO passkeys (credential_id, user_id, public_key, counter, transports, device_type, backed_up, name, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(credential_id) DO UPDATE SET public_key = excluded.public_key, counter = excluded.counter, transports = excluded.transports, device_type = excluded.device_type, backed_up = excluded.backed_up, name = excluded.name`)
+          .run(credential.id, userId, Buffer.from(credential.publicKey).toString('base64url'), credential.counter, JSON.stringify(credential.transports || response?.response?.transports || []), credentialDeviceType, credentialBackedUp ? 1 : 0, String(name || 'Passkey').trim().slice(0, 80) || 'Passkey', Date.now())
+        json(res, 200, { ok: true, credentialId: credential.id })
+      }).catch((error) => json(res, 400, { error: error.message }))
+      return
+    }
+
+    if (path === '/api/auth/passkeys' && req.method === 'GET') {
+      const rows = database.prepare('SELECT credential_id, name, device_type, backed_up, created_at, last_used_at FROM passkeys WHERE user_id = ? ORDER BY created_at DESC').all(userId)
+      json(res, 200, { passkeys: rows.map((row) => ({ id: row.credential_id, name: row.name, deviceType: row.device_type, backedUp: !!row.backed_up, createdAt: row.created_at, lastUsedAt: row.last_used_at })) })
+      return
+    }
+
+    if (path === '/api/auth/passkeys/remove' && req.method === 'POST') {
+      readBody(req, 8 * 1024).then(({ credentialId }) => {
+        const owned = database.prepare('SELECT 1 FROM passkeys WHERE credential_id = ? AND user_id = ?').get(String(credentialId || ''), userId)
+        if (!owned) throw new Error('That passkey was not found.')
+        const user = database.prepare('SELECT password_hash, email, discord_id, google_id FROM users WHERE id = ?').get(userId)
+        const passkeyCount = database.prepare('SELECT COUNT(*) AS count FROM passkeys WHERE user_id = ?').get(userId).count
+        if (passkeyCount <= 1 && !user.password_hash && !user.email && !user.discord_id && !user.google_id) throw new Error('Add another sign-in method before removing your final passkey.')
+        database.prepare('DELETE FROM passkeys WHERE credential_id = ? AND user_id = ?').run(String(credentialId), userId)
+        json(res, 200, { ok: true })
+      }).catch((error) => json(res, 400, { error: error.message }))
+      return
+    }
+
     // Linking is deliberately separate from login. The browser must prove an
     // existing MoonScribe session before an OAuth provider can be attached.
     if (path === '/api/auth/link/start' && req.method === 'POST') {
@@ -1221,6 +1412,8 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           database.prepare('DELETE FROM notifications WHERE user_id = ?').run(userId)
           database.prepare('DELETE FROM email_tokens WHERE user_id = ?').run(userId)
           database.prepare('DELETE FROM magic_links WHERE user_id = ?').run(userId)
+          database.prepare('DELETE FROM passkeys WHERE user_id = ?').run(userId)
+          database.prepare('DELETE FROM webauthn_challenges WHERE user_id = ?').run(userId)
           database.prepare('DELETE FROM novel_members WHERE member_user_id = ? OR owner_user_id = ?').run(userId, userId)
           database.prepare('DELETE FROM share_presence WHERE user_id = ?').run(userId)
           database.prepare('DELETE FROM users WHERE id = ?').run(userId)
@@ -1276,7 +1469,24 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       const user = database.prepare('SELECT id, username, email, discord_id, discord_username, discord_avatar, google_id, google_avatar, email_verified, two_factor_enabled, created_at, disabled_at, role, roles FROM users WHERE id = ?').get(userId)
       if (!user) return json(res, 401, { error: 'Account no longer exists.' })
       const roleInfo = userRoleInfo(user)
-      json(res, 200, { account: { id: user.id, username: user.username, email: user.email || null, provider: user.discord_id ? 'discord' : user.google_id ? 'google' : 'email', discordUsername: user.discord_username || null, discordAvatar: user.discord_avatar || user.google_avatar || null, emailVerified: Number(user.email_verified) === 1, twoFactorEnabled: Number(user.two_factor_enabled) === 1, disabledAt: user.disabled_at || null, createdAt: user.created_at, role: roleInfo.role, roles: roleInfo.roles, isAdmin: roleInfo.isAdmin, isDeveloper: roleInfo.isDeveloper, linkedProviders: { discord: Boolean(user.discord_id), google: Boolean(user.google_id), password: Boolean(user.password_hash) } } })
+      const subscription = database.prepare('SELECT plan, status, current_period_end FROM subscriptions WHERE user_id = ?').get(user.id) || { plan: 'free', status: 'active', current_period_end: null }
+      json(res, 200, { account: { id: user.id, username: user.username, email: user.email || null, provider: user.discord_id ? 'discord' : user.google_id ? 'google' : 'email', discordUsername: user.discord_username || null, discordAvatar: user.discord_avatar || user.google_avatar || null, emailVerified: Number(user.email_verified) === 1, twoFactorEnabled: Number(user.two_factor_enabled) === 1, disabledAt: user.disabled_at || null, createdAt: user.created_at, role: roleInfo.role, roles: roleInfo.roles, isAdmin: roleInfo.isAdmin, isDeveloper: roleInfo.isDeveloper, plan: { id: subscription.plan, status: subscription.status, currentPeriodEnd: subscription.current_period_end || null }, linkedProviders: { discord: Boolean(user.discord_id), google: Boolean(user.google_id), password: Boolean(user.password_hash) } } })
+      return
+    }
+
+    if (path === '/api/account/plan' && req.method === 'GET') {
+      const subscription = database.prepare('SELECT plan, status, current_period_end FROM subscriptions WHERE user_id = ?').get(userId) || { plan: 'free', status: 'active', current_period_end: null }
+      const limits = subscription.plan === 'pro'
+        ? { novels: 50, collaboratorsPerNovel: 8, storageBytes: 5 * 1024 * 1024 * 1024 }
+        : { novels: 3, collaboratorsPerNovel: 2, storageBytes: 500 * 1024 * 1024 }
+      json(res, 200, { plan: { id: subscription.plan, status: subscription.status, currentPeriodEnd: subscription.current_period_end || null, limits } })
+      return
+    }
+
+    if (path === '/api/account/checkout' && req.method === 'POST') {
+      const checkoutUrl = String(process.env.BILLING_CHECKOUT_URL || '').trim()
+      if (!checkoutUrl) return json(res, 503, { error: 'Upgrades are not enabled on this deployment yet.' })
+      json(res, 200, { ok: true, url: checkoutUrl })
       return
     }
 
@@ -1320,9 +1530,13 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       const user = database.prepare('SELECT id, role, roles FROM users WHERE id = ?').get(userId)
       const currentRoleInfo = userRoleInfo(user)
       if (!currentRoleInfo.isAdmin) return json(res, 403, { error: 'Admin access required.' })
-      const users = database.prepare('SELECT id, username, email, role, roles, disabled_at, created_at FROM users ORDER BY created_at DESC').all().map((row) => {
+      const users = database.prepare(`SELECT u.id, u.username, u.email, u.role, u.roles, u.disabled_at, u.created_at,
+        u.email_verified, u.two_factor_enabled,
+        CASE WHEN EXISTS (SELECT 1 FROM tokens t WHERE t.user_id = u.id AND t.expires_at > ? AND t.last_seen_at > ?) THEN 1 ELSE 0 END AS online,
+        (SELECT MAX(last_seen_at) FROM tokens t WHERE t.user_id = u.id) AS last_seen_at
+        FROM users u ORDER BY u.created_at DESC`).all(Date.now(), Date.now() - 5 * 60 * 1000).map((row) => {
         const roleInfo = userRoleInfo(row)
-        return { id: row.id, username: row.username, email: row.email || null, role: roleInfo.role, roles: roleInfo.roles, disabledAt: row.disabled_at || null, createdAt: row.created_at }
+        return { id: row.id, username: row.username, email: row.email || null, role: roleInfo.role, roles: roleInfo.roles, disabledAt: row.disabled_at || null, createdAt: row.created_at, emailVerified: Boolean(row.email_verified), twoFactorEnabled: Boolean(row.two_factor_enabled), online: Boolean(row.online), lastSeenAt: row.last_seen_at || null }
       })
       json(res, 200, { users })
       return
@@ -1562,7 +1776,11 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
          WHERE user_id = ? AND (novel_id = ? OR (store = 'novels' AND id = ?))
          ORDER BY updated_at ASC`
       ).all(ownerUserId, novelId, novelId)
-      return rows.map((r) => {
+      return rows.filter((r) => {
+        if (r.store !== 'chapters' || r.deleted) return true
+        const payload = safeJson(r.payload)
+        return !payload?.conflictFork
+      }).map((r) => {
         const payload = r.deleted ? null : safeJson(r.payload)
         if (payload && r.store === 'novels' && role !== 'owner') {
           payload.sharedRole = role || 'viewer'
@@ -1701,18 +1919,24 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
 
     if (path === '/api/shares/presence' && req.method === 'POST') {
       if (!betaFeatureAllowed()) return json(res, 403, { error: 'Sharing is currently available to Beta Testers, Developers, and Admins.' })
-      readBody(req, 16 * 1024).then(({ novelId, chapterId, status, activity, workspace, tabName, lineNumber, cursorOffset }) => {
+      readBody(req, 16 * 1024).then(({ novelId, chapterId, sessionId, tabId, status, activity, workspace, tabName, lineNumber, cursorOffset, selectionFrom, selectionTo, clientVersion }) => {
         const access = accessFor(novelId)
         if (!access) return json(res, 403, { error: 'You do not have access to this novel.' })
         const safeStatus = ['online', 'idle', 'dnd', 'offline'].includes(status) ? status : 'online'
         if (safeStatus !== 'offline' && access.role !== 'owner' && !hostIsLive(novelId, access.ownerUserId)) return json(res, 423, { error: 'The host is offline. This private writing room is closed.' })
         const safeActivity = ['viewing', 'writing'].includes(activity) ? activity : 'viewing'
         if (safeStatus === 'offline') {
+          if (sessionId) database.prepare('DELETE FROM share_presence_sessions WHERE session_id = ? AND novel_id = ? AND user_id = ?').run(String(sessionId).slice(0, 120), String(novelId), userId)
           database.prepare('DELETE FROM share_presence WHERE novel_id = ? AND user_id = ?').run(String(novelId), userId)
           broadcastPresence?.(String(novelId))
           json(res, 200, { ok: true, offline: true })
           return
         }
+        const sid = String(sessionId || `http-${userId}`).slice(0, 120)
+        database.prepare(`INSERT INTO share_presence_sessions (session_id, novel_id, user_id, chapter_id, tab_id, tab_name, workspace, activity, status, line_number, cursor_offset, selection_from, selection_to, client_version, last_seen_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(session_id) DO UPDATE SET chapter_id=excluded.chapter_id, tab_id=excluded.tab_id, tab_name=excluded.tab_name, workspace=excluded.workspace, activity=excluded.activity, status=excluded.status, line_number=excluded.line_number, cursor_offset=excluded.cursor_offset, selection_from=excluded.selection_from, selection_to=excluded.selection_to, client_version=excluded.client_version, last_seen_at=excluded.last_seen_at`)
+          .run(sid, String(novelId), userId, chapterId ? String(chapterId) : null, tabId ? String(tabId).slice(0, 120) : null, String(tabName || '').slice(0, 120), String(workspace || 'manuscript').slice(0, 60), safeActivity, safeStatus, Number.isFinite(Number(lineNumber)) ? Number(lineNumber) : null, Number.isFinite(Number(cursorOffset)) ? Number(cursorOffset) : null, Number.isFinite(Number(selectionFrom)) ? Number(selectionFrom) : null, Number.isFinite(Number(selectionTo)) ? Number(selectionTo) : null, String(clientVersion || '').slice(0, 80), Date.now())
         database.prepare(`INSERT INTO share_presence (novel_id, user_id, chapter_id, last_seen_at, status, activity, workspace, tab_name, line_number, cursor_offset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(novel_id, user_id) DO UPDATE SET chapter_id = excluded.chapter_id, last_seen_at = excluded.last_seen_at, status = excluded.status, activity = excluded.activity, workspace = excluded.workspace, tab_name = excluded.tab_name, line_number = excluded.line_number, cursor_offset = excluded.cursor_offset`)
           .run(String(novelId), userId, chapterId ? String(chapterId) : null, Date.now(), safeStatus, safeActivity, String(workspace || 'manuscript').slice(0, 60), String(tabName || '').slice(0, 120), Number.isFinite(Number(lineNumber)) ? Number(lineNumber) : null, Number.isFinite(Number(cursorOffset)) ? Number(cursorOffset) : null)
@@ -1727,6 +1951,18 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       const novelId = url.searchParams.get('novelId')
       if (!requireLiveAccess(res, novelId)) return
       json(res, 200, { people: serializePresenceRows(presenceRowsFor(novelId)) })
+      return
+    }
+
+    if (path === '/api/shares/realtime-token' && req.method === 'GET') {
+      if (!betaFeatureAllowed()) return json(res, 403, { error: 'Sharing is currently available to Beta Testers, Developers, and Admins.' })
+      const novelId = url.searchParams.get('novelId')
+      const access = accessFor(novelId)
+      if (!access) return json(res, 403, { error: 'You do not have access to this novel.' })
+      if (!SUPABASE_JWT_SECRET) return json(res, 503, { error: 'Realtime collaboration is not configured on this server.' })
+      const realtime = createSupabaseRealtimeToken({ userId, novelId, role: access.role })
+      const profile = database.prepare('SELECT id, username, discord_id, discord_avatar, google_avatar FROM users WHERE id = ?').get(userId)
+      json(res, 200, { ...realtime, novelId: String(novelId), role: access.role, roomId: String(novelId), profile: profile ? { id: profile.id, username: profile.username, avatar: publicAvatar(profile) } : null })
       return
     }
 
@@ -1788,7 +2024,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
               // Cloud mirroring is deliberately after the local commit: a
               // transient Supabase outage must never discard an offline-safe
               // local write. The next startup migration repairs any gap.
-              mirrorRecords(cloudRecords).catch((error) => console.error('[supabase] record mirror failed', describeSupabaseError(error), {
+              mirrorRecords(cloudRecords, database).catch((error) => console.error('[supabase] record mirror failed', describeSupabaseError(error), {
                 count: cloudRecords.length,
                 stores: [...new Set(cloudRecords.map((record) => record.store).filter(Boolean))],
               }))
@@ -1855,6 +2091,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
   })
 
   const livePresenceRooms = new Map()
+  const roomSequences = new Map()
   const trackPresenceSocket = (novelId, socket) => {
     const key = String(novelId)
     const room = livePresenceRooms.get(key) || new Set()
@@ -1868,7 +2105,13 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
   var broadcastPresence = (novelId) => {
     const room = livePresenceRooms.get(String(novelId))
     if (!room?.size) return
-    const payload = JSON.stringify({ type: 'presence', novelId: String(novelId), people: serializePresenceRows(presenceRowsFor(novelId)) })
+    let payload
+    try {
+      const roomId = String(novelId)
+      const serverSequence = (roomSequences.get(roomId) || 0) + 1
+      roomSequences.set(roomId, serverSequence)
+      payload = JSON.stringify({ type: 'room.snapshot', protocolVersion: 1, roomId, serverSequence, serverTimestamp: Date.now(), people: serializePresenceRows(presenceRowsFor(novelId)) })
+    } catch { return }
     for (const socket of room) {
       // `OPEN` is a static WebSocket constant in ws; the numeric state keeps
       // this compatible with every ws release we support.
@@ -1884,7 +2127,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       if (record.store === 'novels' && socket.role !== 'owner' && record.payload) {
         outgoing = { ...record, payload: { ...record.payload, sharedRole: socket.role, sharedOwnerId: socket.ownerUserId } }
       }
-      socket.send(JSON.stringify({ type: 'record:update', novelId: String(novelId), record: outgoing }))
+      socket.send(JSON.stringify({ type: 'record:update', protocolType: 'document.update', protocolVersion: 1, roomId: String(novelId), serverTimestamp: Date.now(), novelId: String(novelId), record: outgoing }))
     }
   }
 
@@ -1919,6 +2162,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         ws.userId = wsUserId
         ws.ownerUserId = String(access.ownerUserId)
         ws.role = access.role
+        ws.sessionId = String(url.searchParams.get('sessionId') || `${wsUserId}-${Math.random().toString(36).slice(2)}`).slice(0, 120)
         wss.emit('connection', ws, req)
       })
     } catch {
@@ -1936,10 +2180,22 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
 
   wss.on('connection', (ws) => {
     const untrack = trackPresenceSocket(ws.novelId, ws)
-    ws.send(JSON.stringify({ type: 'presence', novelId: ws.novelId, people: serializePresenceRows(presenceRowsFor(ws.novelId)) }))
+    const removeSession = () => { try { database.prepare('DELETE FROM share_presence_sessions WHERE session_id = ? AND novel_id = ? AND user_id = ?').run(ws.sessionId, ws.novelId, ws.userId) } catch { /* database may already be closed during shutdown */ } }
+    ws.send(JSON.stringify({ type: 'room.snapshot', protocolVersion: 1, roomId: ws.novelId, serverSequence: roomSequences.get(ws.novelId) || 0, serverTimestamp: Date.now(), people: serializePresenceRows(presenceRowsFor(ws.novelId)) }))
     ws.on('message', (raw) => {
       try {
         const message = safeJson(String(raw))
+        if (['room.join', 'presence.update', 'awareness.cursor', 'awareness.selection'].includes(message?.type)) {
+          const p = message.presence || message
+          const safeStatus = ['online', 'idle', 'dnd'].includes(p.status) ? p.status : 'online'
+          const safeActivity = ['viewing', 'writing'].includes(p.activity) ? p.activity : 'viewing'
+          database.prepare(`INSERT INTO share_presence_sessions (session_id, novel_id, user_id, chapter_id, tab_id, tab_name, workspace, activity, status, line_number, cursor_offset, selection_from, selection_to, client_version, last_seen_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET chapter_id=excluded.chapter_id, tab_id=excluded.tab_id, tab_name=excluded.tab_name, workspace=excluded.workspace, activity=excluded.activity, status=excluded.status, line_number=excluded.line_number, cursor_offset=excluded.cursor_offset, selection_from=excluded.selection_from, selection_to=excluded.selection_to, client_version=excluded.client_version, last_seen_at=excluded.last_seen_at`)
+            .run(ws.sessionId, ws.novelId, ws.userId, p.chapterId ? String(p.chapterId) : null, p.tabId ? String(p.tabId).slice(0, 120) : null, String(p.tabName || '').slice(0, 120), String(p.workspace || 'manuscript').slice(0, 60), safeActivity, safeStatus, Number.isFinite(Number(p.lineNumber)) ? Number(p.lineNumber) : null, Number.isFinite(Number(p.cursorOffset)) ? Number(p.cursorOffset) : null, Number.isFinite(Number(p.selectionFrom)) ? Number(p.selectionFrom) : null, Number.isFinite(Number(p.selectionTo)) ? Number(p.selectionTo) : null, String(p.clientVersion || '').slice(0, 80), Date.now())
+          broadcastPresence(ws.novelId)
+          return
+        }
         const record = message?.type === 'record:update' ? message.record : null
         if (!record || String(record.novelId || '') !== ws.novelId || !STORES.has(record.store) || !record.id || typeof record.updatedAt !== 'number') return
         if (ws.role !== 'owner' && !websocketHostIsLive(ws.novelId, ws.ownerUserId)) {
@@ -1970,7 +2226,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'record:error', error: 'The live update could not be saved.' }))
       }
     })
-    ws.on('close', () => untrack())
+    ws.on('close', () => { removeSession(); untrack(); broadcastPresence(ws.novelId) })
   })
 
   return { server, db: database, limiter, stopBabyLoveGrowthSync }

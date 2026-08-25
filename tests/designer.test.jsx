@@ -76,6 +76,21 @@ describe('Book designer (cover studio)', () => {
     }
     expect(labels).not.toContain('Design packs')
     expect(container.querySelector('.studio-rail-head strong').textContent).toContain('Cover text')
+    expect(container.querySelector('.designer-workflow-bar')).not.toBeNull()
+    expect([...container.querySelectorAll('.designer-workflow-step')].map((button) => button.textContent)).toHaveLength(5)
+    expect(container.querySelector('.designer-book-system')).not.toBeNull()
+  })
+
+  it('switches preview modes and toggles print guides', async () => {
+    await renderDesigner()
+    const compare = [...container.querySelectorAll('.ds-stage-tab')].find((button) => button.textContent.includes('Compare'))
+    compare.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(container.querySelector('.designer-comparison-preview')).not.toBeNull()
+    const guides = [...container.querySelectorAll('.ds-action-btn')].find((button) => button.textContent.includes('Guides'))
+    guides.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(container.querySelector('.ds-canvas').classList.contains('show-print-guides')).toBe(true)
   })
 
   it('targets the front, spine and back from the book stage', async () => {

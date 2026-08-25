@@ -27,6 +27,7 @@ import { AppProvider } from './context/AppContext'
 import { ContextMenuProvider } from './components/ContextMenu'
 import App from './App'
 import { registerDesktopAuthLinks } from './api/desktopAuth'
+import { registerDesktopFileOpen } from './platform/fileOpen'
 
 const legacyDesignerFontOptions = [
   { key: 'cormorant', label: 'Cormorant italic' },
@@ -39,6 +40,11 @@ if (typeof window !== 'undefined' && !window.designerFontOptions) {
 }
 
 registerDesktopAuthLinks().catch((error) => console.error('[Desktop auth link]', error))
+registerDesktopFileOpen((paths) => {
+  const jsonBackups = paths.filter((path) => /\.json$/i.test(path))
+  if (jsonBackups.length) sessionStorage.setItem('moonscribe:pending-backup-path', jsonBackups[0])
+  window.dispatchEvent(new CustomEvent('moonscribe:desktop-files-opened', { detail: { paths } }))
+}).catch((error) => console.error('[Desktop file open]', error))
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>

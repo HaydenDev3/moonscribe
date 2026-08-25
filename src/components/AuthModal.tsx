@@ -628,7 +628,7 @@ export default function AuthModal({
 
     if (typeof sendMagicLink !== 'function') {
       toast?.(
-        'Magic Link is not connected to the MoonScribe backend yet.',
+        'Magic Link is unavailable in this build. Choose another sign-in method.',
       )
       return
     }

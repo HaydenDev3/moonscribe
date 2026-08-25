@@ -18,7 +18,7 @@ MoonScribe is a local-first novel-writing, worldbuilding, planning, and book-des
 
 ## Current release status
 
-The web app is functional and locally stores manuscripts in IndexedDB. Automated tests, TypeScript, production dependency audit, web build, and lint error gates pass as of 2026-08-22. MoonScribe must not yet be represented as production-ready 1.0: normalized linked identities, real Magic Link and passkey flows, desktop SQLite/keyring/updater support, and full manual accessibility/device QA remain incomplete.
+The web app stores manuscripts in IndexedDB; the desktop shell uses native SQLite as its authoritative profile-scoped repository and provides OS keychain credentials, window state, tray behavior, global Quick Capture, notifications, backups, guarded restore, and WebAuthn passkeys. Automated tests, TypeScript, web build, lint, and native compile gates pass. MoonScribe must not yet be represented as production-ready 1.0 until the updater has real production signing credentials and full packaged accessibility/device QA is recorded.
 
 ## Documentation principles
 
@@ -27,4 +27,3 @@ The web app is functional and locally stores manuscripts in IndexedDB. Automated
 - Local-first does not mean “backed up.” Writers should keep independent exports.
 - No claim of end-to-end encryption is made. Optional backup files can be passphrase-encrypted.
 - Commands assume PowerShell on Windows unless otherwise stated.
-

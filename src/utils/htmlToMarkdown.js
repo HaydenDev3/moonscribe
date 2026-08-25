@@ -29,6 +29,7 @@ function block(el, depth = 0) {
   }
   const tag = el.tagName
   if (isSceneBreak(el)) return '\n***\n\n'
+  if (el.classList?.contains('pg-break') || el.classList?.contains('page-break') || el.dataset?.pageBreak || el.dataset?.autoPageBreak) return '\n\\newpage\n\n'
   if (tag === 'H1') return `# ${inline(el).trim()}\n\n`
   if (tag === 'H2') return `## ${inline(el).trim()}\n\n`
   if (tag === 'H3') return `### ${inline(el).trim()}\n\n`

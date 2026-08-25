@@ -4,7 +4,7 @@ Audit date: 2026-08-22
 
 ## Release decision
 
-**NOT READY FOR PUBLIC 1.0.** The web application builds and its automated tests pass, but production authentication, desktop local-first storage, signed updates, and several release gates are incomplete. Visible unavailable features must stay clearly labelled unavailable until their server flows exist.
+**Historical audit snapshot.** This document records an earlier pre-release assessment. For the current desktop/native status, see [desktop.md](desktop.md) and run `npm run desktop:release-check`; the audit findings below should not be read as a current inventory without re-verification.
 
 ## Release blockers
 

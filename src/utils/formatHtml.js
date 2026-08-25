@@ -339,7 +339,7 @@ export function sanitizeStoredHtml(input) {
   const allowedTags = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'UL', 'OL', 'LI', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'CODE', 'BR', 'HR', 'DIV', 'SPAN', 'A', 'IMG'])
   const dropTags = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'SVG', 'MATH', 'VIDEO', 'AUDIO'])
   const allowedClasses = new Set(['scene-break', 'page-break', 'pg-break', 'hl-name', 'hl-term', 'hl-entity', 'comment-anchor'])
-  const allowedData = new Set(['data-scene-break', 'data-page-break', 'data-char-id', 'data-term-id', 'data-entity-id', 'data-entity-kind', 'data-comment-id'])
+  const allowedData = new Set(['data-scene-break', 'data-page-break', 'data-auto-page-break', 'data-auto-page-index', 'data-auto-page-source', 'data-auto-page-layout', 'data-auto-page-generated', 'data-char-id', 'data-term-id', 'data-entity-id', 'data-entity-kind', 'data-comment-id'])
   const safeUrl = (value, image = false) => {
     if (image) {
       const url = String(value || '').trim()

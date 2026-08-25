@@ -16,8 +16,8 @@ Test date: 2026-08-22 19:04 AEST
 | Landing page load | PASS | Navigation, hero, product sections, and footer render. |
 | Start writing → auth modal | PASS | Modal has one close control, accessible dialog name, provider choices, and future-provider labels. |
 | Auth modal → password view | PASS | Back navigation, labelled email/password fields, and submit controls render. |
-| Auth modal → Magic Link view | PASS WITH LIMITATION | Secure one-time copy and email field render; server endpoint is not implemented, so no send was attempted. |
-| Passkey action | PASS WITH LIMITATION | UI reports that passkey support is not connected rather than failing silently. |
+| Auth modal → Magic Link view | PASS WITH LIMITATION | Secure one-time copy and email field render; sending depends on deployed Resend configuration and was not exercised in this local browser pass. |
+| Passkey action | SUPERSEDED | Passkey registration and sign-in are now implemented; a real-device Windows Hello/security-key ceremony remains required in packaged QA. |
 | Close auth modal | PASS | Dialog is removed cleanly. |
 | Direct `#dashboard` route without account | PASS | Redirects to `#/?signin=1` and opens the sign-in flow. |
 | Mobile landing at 390×844 | PASS | No horizontal overflow (`scrollWidth` 380, viewport 390); no browser console errors. |

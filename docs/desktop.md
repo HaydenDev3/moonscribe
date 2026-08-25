@@ -2,9 +2,9 @@
 
 ## Current status
 
-MoonScribe uses Tauri 2 to package the shared React/Vite frontend. The current Rust layer creates the main window and enables the shell plugin. It is a development shell, not the requested production local-first desktop architecture.
+MoonScribe uses Tauri 2 to package the shared React/Vite frontend. Desktop uses native SQLite as its authoritative repository, with WAL settings, versioned migrations, profile-scoped records, backups, OS keyring credential commands, deep-link plumbing, window-size/position persistence, tray access, native notifications, and backup-before-update hooks. On first launch after the migration, existing IndexedDB and earlier native-mirror records are merged into profile-scoped SQLite records; subsequent desktop reads and writes use SQLite only. Web/PWA builds continue to use IndexedDB.
 
-Missing release requirements include native SQLite, versioned migrations, OS keyring credentials, deep links, browser OAuth return, signed updater, native notifications, tray, global Quick Capture shortcut, file associations, window-state persistence, backup locations, migration backups, and an explicit CSP.
+Release configuration still required includes the GitHub secrets `TAURI_PUBLIC_KEY`, `TAURI_SIGNING_PRIVATE_KEY`, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, plus full packaged-app QA. Quick Capture is available by Ctrl/Cmd+Shift+K even when the desktop window is unfocused, and from the command palette. The release workflow now refuses to package without the signing secrets and injects the public key into the updater configuration for the build. The installer registers Markdown, DOCX, EPUB, and JSON backup associations; OS-opened Markdown, plain-text, RTF, DOCX, and EPUB files route into the active novel’s chapter importer. JSON backup restore remains available through the dedicated recovery flow.
 
 ## Windows toolchain
 

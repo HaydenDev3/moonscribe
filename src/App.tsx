@@ -1,5 +1,5 @@
 // App shell: routing, onboarding gate, PWA registration, theme wiring.
-import { lazy, Suspense, useEffect, type ReactNode } from 'react'
+import React, { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import { useApp } from './context/AppContext'
@@ -13,7 +13,6 @@ import CommandPalette from './components/CommandPalette'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Novel = lazy(() => import('./pages/Novel'))
 const Settings = lazy(() => import('./components/Settings'))
-import ConflictModal from './components/ConflictModal'
 import Onboarding from './pages/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
 import FeatureGuard from './components/FeatureGuard'
@@ -28,6 +27,9 @@ import './styles/scrollrail.css'
 import './styles/announcements.css'
 import './styles/responsive.css'
 import AnnouncementBanner from './components/AnnouncementBanner'
+import StartupDigest from './components/StartupDigest'
+import Icon from './components/Icon'
+import { createNote } from './db/notes'
 
 const PrintView = lazy(() => import('./pages/PrintView'))
 
@@ -98,8 +100,11 @@ export default function App() {
     syncUsername?: string | null
     accountReady?: boolean
     guestMode?: boolean
+    hasRole?: (role: string) => boolean
+    novels?: Array<{ id: string; title: string }>
+    toast?: (message: string) => void
   }
-  const { onboardingDone, appLock, locked, unlockApp, syncUsername, accountReady, guestMode } = appState
+  const { onboardingDone, appLock, locked, unlockApp, syncUsername, accountReady, guestMode, hasRole } = appState
 
   useEffect(() => {
     registerSW({ immediate: true })
@@ -146,6 +151,7 @@ export default function App() {
     const discordCallback = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('discord_exchange')
     if (!syncUsername && !oauthCallback && !discordCallback) return <Navigate to="/?signin=1" replace />
     if (!onboardingDone) return <Onboarding />
+    if (isDesktopRuntime() && !guestMode && syncUsername && !hasRole?.('admin') && !hasRole?.('developer') && !hasRole?.('beta_tester')) return <DesktopGateway />
     return content
   }
 
@@ -153,7 +159,11 @@ export default function App() {
   return (
     <Router>
       <ErrorBoundary>
+        <a className="skip-link" href="#main-content">Skip to main content</a>
         <AnnouncementBanner />
+        <StartupDigest />
+        <GlobalQuickCapture novels={appState.novels || []} toast={appState.toast} />
+        <div id="main-content" tabIndex={-1}>
         <Suspense fallback={<Loading />}><Routes>
           <Route path="/" element={isDesktopRuntime() && !syncUsername && !guestMode ? <DesktopGateway /> : <Landing />} />
           <Route path="/privacy" element={<PublicPage page="privacy" />} />
@@ -181,11 +191,70 @@ export default function App() {
           <Route path="/novel/:id/binder/:section" element={enterStudio(<FeatureGuard featureName="binder" title="Binder unavailable"><Novel /></FeatureGuard>)} />
           <Route path="*" element={<NotFound />} />
         </Routes></Suspense>
+        </div>
         <CommandPalette />
         <Settings />
-        <ConflictModal />
         <Toasts />
       </ErrorBoundary>
     </Router>
   )
+}
+
+function GlobalQuickCapture({ novels, toast }) {
+  const [open, setOpen] = React.useState(false)
+  const [value, setValue] = React.useState('')
+  const [novelId, setNovelId] = React.useState('')
+  React.useEffect(() => {
+    const onKeyDown = (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        setOpen(true)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
+  React.useEffect(() => {
+    const openFromPalette = () => setOpen(true)
+    window.addEventListener('moonscribe:quick-capture-open', openFromPalette)
+    let unlisten: (() => void) | undefined
+    if (isDesktopRuntime()) {
+      void import('@tauri-apps/api/event').then(({ listen }) => listen('moonscribe:quick-capture-open', openFromPalette)).then((dispose) => { unlisten = dispose })
+    }
+    return () => {
+      window.removeEventListener('moonscribe:quick-capture-open', openFromPalette)
+      unlisten?.()
+    }
+  }, [])
+  React.useEffect(() => {
+    if (!open) return undefined
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); setOpen(false) }
+      if (event.key === 'Tab') {
+        const dialog = document.querySelector('.quick-capture-modal')
+        const focusable = dialog ? [...dialog.querySelectorAll<HTMLElement>('button, textarea, select, input, [tabindex]:not([tabindex="-1"])')].filter((element) => !(element as HTMLButtonElement).disabled) : []
+        if (!focusable.length) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [open])
+  React.useEffect(() => {
+    if (!novelId && novels[0]?.id) setNovelId(novels[0].id)
+  }, [novelId, novels])
+  if (!open || !novels.length) return null
+  const close = () => { setOpen(false); setValue('') }
+  const save = async () => {
+    const novel = novels.find((item) => item.id === novelId)
+    if (!novel || !value.trim()) return
+    const title = value.trim().split(/\r?\n/, 1)[0].slice(0, 72) || 'Quick capture'
+    await createNote(novel.id, { title, content: value.trim() })
+    toast?.(`Saved to ${novel.title}.`)
+    close()
+  }
+  return <div className="quick-capture-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><section className="quick-capture-modal" role="dialog" aria-modal="true" aria-labelledby="quick-capture-title"><header><div><span className="settings-panel-kicker">Capture</span><h2 id="quick-capture-title">Quick capture</h2></div><button className="button button-quiet" type="button" onClick={close} aria-label="Close quick capture"><Icon icon="fa-solid fa-xmark" /></button></header><textarea autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="A line, scene idea, or detail before it disappears…" aria-label="Quick capture note" rows={6} /><label>Save to<select value={novelId} onChange={(event) => setNovelId(event.target.value)}>{novels.map((novel) => <option key={novel.id} value={novel.id}>{novel.title}</option>)}</select></label><footer><span>Ctrl/Cmd + Shift + K anytime</span><button className="button button-primary" type="button" disabled={!value.trim() || !novelId} onClick={() => void save()}>Save capture</button></footer></section></div>
 }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Modal from './Modal'
 import Icon from './Icon'
-import { acceptShareInvite, createShareInvite, listNovelMembers, revokeNovelMember, sync, updateShareRoom } from '../sync/engine'
+import { acceptShareInvite, createShareInvite, listNovelMembers, markNovelShared, revokeNovelMember, sync, updateShareRoom } from '../sync/engine'
 import ProfileAvatar from './ProfileAvatar'
 import Select from './Select'
 import { useContextMenu } from './ContextMenu'
@@ -31,7 +31,13 @@ export default function ShareWritingModal({ open, onClose, novelId, novelTitle, 
 
   const load = useCallback(async () => {
     if (!open) return
-    try { const result = await listNovelMembers(novelId); setDetails(result); setMaxUsers(result.room?.maxUsers || 4); setRole(result.room?.defaultRole || 'editor') } catch (error) { setDetails({ error: error.message }) }
+    try {
+      const result = await listNovelMembers(novelId)
+      setDetails(result)
+      if ((result.members || []).length) await markNovelShared(novelId)
+      setMaxUsers(result.room?.maxUsers || 4)
+      setRole(result.room?.defaultRole || 'editor')
+    } catch (error) { setDetails({ error: error.message }) }
   }, [open, novelId])
 
   useEffect(() => { load() }, [load])

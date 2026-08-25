@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { clearPresence, getConfig, listPresence, subscribePresence, updatePresence } from '../sync/engine'
+import { clearPresence, getConfig, getPresenceSessionId, listPresence, subscribePresence, updatePresence } from '../sync/engine'
+import { subscribeSupabasePresence } from '../sync/supabaseCollaboration'
 import ProfileAvatar from './ProfileAvatar'
 import Icon from './Icon'
 
@@ -32,8 +33,10 @@ function cursorContext() {
 export default function CollaborationPresence({ novelId, chapterId, chapterTitle, workspace = 'manuscript', onPresenceChange, onRecord }) {
   const [people, setPeople] = useState([])
   const accountIdRef = useRef(null)
+  const sessionIdRef = useRef(getPresenceSessionId())
   const allPeopleRef = useRef([])
   const [open, setOpen] = useState(false)
+  const [statusOpen, setStatusOpen] = useState(false)
   const presenceMetaRef = useRef({ novelId: null, chapterId: null, chapterTitle: '', workspace: 'manuscript' })
   const [manualStatus, setManualStatus] = useState(() => {
     try {
@@ -46,7 +49,7 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
 
   const applyPeople = useCallback((next) => {
     allPeopleRef.current = next || []
-    const visible = allPeopleRef.current.filter((person) => person?.id && person.id !== accountIdRef.current)
+    const visible = allPeopleRef.current.filter((person) => person?.id && person.sessionId !== sessionIdRef.current)
     setPeople(visible)
     onPresenceChange?.(visible)
   }, [onPresenceChange])
@@ -63,10 +66,17 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
     let live = true
     let selectionTimer
     let unsubscribe = () => {}
+    let closeSupabase = async () => {}
+    let publishSupabase = async (_context: Record<string, unknown>) => {}
+    let supabaseLive = false
     const heartbeat = async () => {
       try {
-        const inferred = manualStatus === 'dnd' ? 'dnd' : (document.hidden || Date.now() - lastAction.current > 5 * 60_000 ? 'idle' : 'online')
-        await updatePresence(novelId, chapterId, { status: inferred, workspace, tabName: chapterTitle || workspace, ...cursorContext() })
+        const inferred = manualStatus === 'dnd' ? 'dnd' : manualStatus === 'idle' ? 'idle' : (document.hidden || Date.now() - lastAction.current > 5 * 60_000 ? 'idle' : 'online')
+        const context = { status: inferred, workspace, tabName: chapterTitle || workspace, tabId: chapterId, ...cursorContext() }
+        globalThis.__moonscribeLatestPresence = { novelId, context }
+        window.dispatchEvent(new CustomEvent('moonscribe:presence-update', { detail: { novelId, context } }))
+        publishSupabase({ sessionId: getPresenceSessionId(), userId: String(accountIdRef.current || ''), chapterId, tabId: chapterId, tabName: chapterTitle || workspace, workspace, ...context, lastSeenAt: Date.now() })
+        await updatePresence(novelId, chapterId, context)
         const result = await listPresence(novelId)
         if (live) {
           applyPeople(result.people || [])
@@ -83,9 +93,24 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
       accountIdRef.current = config.accountId || null
       applyPeople(allPeopleRef.current)
     }).catch(() => {})
+    subscribeSupabasePresence(novelId, {
+      sessionId: getPresenceSessionId(),
+      userId: String(accountIdRef.current || ''),
+      chapterId,
+      tabId: chapterId,
+      tabName: chapterTitle || workspace,
+      workspace,
+      activity: 'viewing',
+      status: manualStatus === 'dnd' ? 'dnd' : manualStatus === 'idle' ? 'idle' : 'online',
+    }, {
+      onPeople: (next) => { if (live) applyPeople(next) },
+      onStatus: (status, detail) => window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status, detail, novelId } }))
+    }).then((connection) => {
+      if (connection) { supabaseLive = true; closeSupabase = connection.close; publishSupabase = connection.publish }
+    }).catch(() => {})
     subscribePresence(novelId, {
       onMessage: (next) => {
-        if (!live) return
+        if (!live || supabaseLive) return
         applyPeople(next)
       },
       onRecord
@@ -104,6 +129,7 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
       document.removeEventListener('selectionchange', selectionChanged)
       document.removeEventListener('input', selectionChanged, true)
       unsubscribe()
+      closeSupabase()
     }
   }, [novelId, chapterId, chapterTitle, workspace, manualStatus, onPresenceChange, onRecord, applyPeople])
 
@@ -129,16 +155,16 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
     }
     setManualStatus(status)
   }
-  if (!people.length) return null
+  const currentStatus = STATUS[manualStatus] || STATUS.online
   return <div className="collab-presence-wrap">
     <button className="collab-presence" onClick={() => setOpen((value) => !value)} aria-label={`${people.length} active writer${people.length === 1 ? '' : 's'}`} aria-expanded={open}>
       {people.slice(0, 4).map((person) => <span key={person.id} className={person.chapterId === chapterId ? 'same-chapter' : ''}><ProfileAvatar src={person.avatar} name={person.username} /><i style={{ background: STATUS[person.status]?.color }} /></span>)}
-      <b>{people.length}</b>
+      <b>{people.length || 'Live'}</b>
     </button>
     {open && <div className="collab-presence-panel">
-      <header><div><small>LIVE WORKSPACE</small><strong>{people.length} active now</strong></div><Icon icon="fa-solid fa-wave-square" /></header>
-      <div className="collab-status-picker">{['online','idle','dnd'].map((status) => <button key={status} className={manualStatus === status ? 'active' : ''} onClick={() => chooseStatus(status)}><i style={{ background: STATUS[status].color }} />{STATUS[status].label}</button>)}</div>
-      <div className="collab-live-list">{people.map((person) => <article key={person.id}><span><ProfileAvatar src={person.avatar} name={person.username} /><i style={{ background: STATUS[person.status]?.color }} /></span><div><strong>{person.username}</strong><small>{person.activity === 'writing' ? 'Writing' : 'Viewing'} · {person.tabName || person.workspace}</small>{person.lineNumber && <em>Line {person.lineNumber} · cursor {person.cursorOffset}</em>}</div><b>{STATUS[person.status]?.label || 'Online'}</b></article>)}</div>
+      <header><div><small>LIVE WORKSPACE</small><strong>{people.length} collaborator{people.length === 1 ? '' : 's'} active</strong></div><Icon icon="fa-solid fa-wave-square" /></header>
+      <div className="collab-status-control"><button className="collab-status-current" onClick={() => setStatusOpen((value) => !value)} aria-expanded={statusOpen}><i style={{ background: currentStatus.color }} />{currentStatus.label}<Icon icon="fa-solid fa-chevron-down" /></button>{statusOpen && <div className="collab-status-menu">{['online','idle','dnd'].map((status) => <button key={status} className={manualStatus === status ? 'active' : ''} onClick={() => { chooseStatus(status); setStatusOpen(false) }}><i style={{ background: STATUS[status].color }} /><span>{STATUS[status].label}</span>{manualStatus === status && <Icon icon="fa-solid fa-check" />}</button>)}</div>}</div>
+      {people.length ? <div className="collab-live-list">{people.map((person) => <article key={person.sessionId || `${person.id}-${person.tabId || person.chapterId || 'room'}`}><span><ProfileAvatar src={person.avatar} name={person.username} /><i style={{ background: STATUS[person.status]?.color }} /></span><div><strong>{person.username}</strong><small>{person.activity === 'writing' ? 'Writing' : 'Viewing'} · {person.tabName || person.workspace}</small>{person.lineNumber && <em>Line {person.lineNumber} · cursor {person.cursorOffset}</em>}</div><b>{STATUS[person.status]?.label || 'Online'}</b></article>)}</div> : <div className="collab-empty">You are the only collaborator here.</div>}
     </div>}
   </div>
 }

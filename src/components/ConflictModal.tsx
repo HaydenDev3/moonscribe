@@ -3,12 +3,12 @@ import { createPortal } from 'react-dom'
 import { useApp } from '../context/AppContext'
 import Icon from './Icon'
 
-// Shown when sync finds a record edited both here and elsewhere. The author
-// decides — nothing is discarded silently.
+// Shared live chapters are resolved by the collaboration stream. Local and
+// chapter-aware sync conflicts remain visible so writers can review them.
 const STORE_LABEL = {
   chapters: 'Chapter', characters: 'Character', notes: 'Note',
   world: 'Worldbuilding', relationships: 'Relationship', novels: 'Novel',
-  glossary: 'Term', moodboard: 'Moodboard tile'
+  glossary: 'Term', moodboard: 'Moodboard tile', projectFiles: 'Project file', workspacePreferences: 'Workspace preferences'
 }
 
 function titleOf(store, rec) {
@@ -33,17 +33,21 @@ function summarize(store, rec) {
 }
 
 export default function ConflictModal() {
-  const { conflicts, resolveConflict } = useApp()
+  const { conflicts, novels, resolveConflict } = useApp()
   const [busy, setBusy] = useState(null)
 
-  if (!conflicts || conflicts.length === 0) return null
-  const c = conflicts[0]
+  const c = conflicts?.[0] || null
+  const sharedNovel = c ? novels?.find((novel) => String(novel.id) === String(c.mine?.novelId || c.theirs?.novelId)) : null
+  if (!c || (sharedNovel && (sharedNovel.sharedRole || sharedNovel.sharedRoom))) return null
   const preview = (rec) => (c.store === 'chapters' ? plain(rec?.content).slice(0, 600) : summarize(c.store, rec))
 
   const resolve = async (choice) => {
     setBusy(choice)
-    await resolveConflict(c.cid, choice)
-    setBusy(null)
+    try {
+      await resolveConflict(c.cid, choice)
+    } finally {
+      setBusy(null)
+    }
   }
 
   const whenMine = c.mine?.updatedAt ? new Date(c.mine.updatedAt).toLocaleString() : ''
@@ -87,12 +91,9 @@ export default function ConflictModal() {
           <button className="button button-ghost" disabled={!!busy} onClick={() => resolve('theirs')}>
             {busy === 'theirs' ? 'Keeping…' : 'Keep the other'}
           </button>
-          <button className="button button-primary" disabled={!!busy} onClick={() => resolve('both')} title="Keep this version and save the other alongside it">
-            {busy === 'both' ? 'Saving both…' : 'Keep both'}
-          </button>
         </div>
         <p className="muted small" style={{ textAlign: 'center', margin: 'var(--space-3) 0 0' }}>
-          “Keep both” saves the other version as a separate copy so nothing is lost.
+          Live shared chapters resolve through collaboration and do not use this dialog.
         </p>
       </div>
     </div>,

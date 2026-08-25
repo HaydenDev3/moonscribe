@@ -127,7 +127,15 @@ export const DESIGNS = [
     swatches: ['#9858b8', '#f8f0f8', '#4a2860'],
     editorClass: 'design-dusk',
     cover: { coverStyle: 'moonstone', titleColor: '#ffffff', ornament: '✦' }
-  }
+  },
+  { id: 'page-title', name: 'Title Page', blurb: 'Centered title with an ornamental opening', tags: ['editor'], swatches: ['#f5ecd0', '#c9a86a', '#4a3d28'], editorClass: 'design-parchment', pageTemplate: 'title-page' },
+  { id: 'page-copyright', name: 'Copyright Page', blurb: 'Quiet publication details on warm paper', tags: ['editor'], swatches: ['#f2eee5', '#b7a482', '#584a38'], editorClass: 'design-ivory', pageTemplate: 'copyright-page' },
+  { id: 'page-dedication', name: 'Dedication Page', blurb: 'A minimal dedication with a centered flourish', tags: ['editor'], swatches: ['#faf3e7', '#c9a86a', '#6f5b41'], editorClass: 'design-sand', pageTemplate: 'dedication-page' },
+  { id: 'page-epigraph', name: 'Epigraph / Quote', blurb: 'A framed quotation layout', tags: ['editor'], swatches: ['#f5ecd0', '#a08040', '#4a3d28'], editorClass: 'design-parchment', pageTemplate: 'epigraph-page' },
+  { id: 'page-chapter', name: 'Chapter Opening', blurb: 'A spacious decorative chapter opener', tags: ['editor'], swatches: ['#f2f7fc', '#7ba3c9', '#3a4f66'], editorClass: 'design-moonlight', pageTemplate: 'chapter-opening' },
+  { id: 'page-scene', name: 'Scene Break', blurb: 'A centered divider for scene transitions', tags: ['editor'], swatches: ['#232a33', '#9bb8d4', '#e8e4dc'], editorClass: 'design-midnight', pageTemplate: 'scene-break' },
+  { id: 'page-character', name: 'Character Profile', blurb: 'A structured page for character notes', tags: ['editor'], swatches: ['#f1f6ef', '#8aa97f', '#43594a'], editorClass: 'design-moss', pageTemplate: 'character-profile' },
+  { id: 'page-map', name: 'Map / Notes Page', blurb: 'A grid-based reference page', tags: ['editor'], swatches: ['#f2eee5', '#8a7c68', '#3d3a35'], editorClass: 'design-slate', pageTemplate: 'map-notes' }
 ]
 
 export function designById(id) {

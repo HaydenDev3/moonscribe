@@ -130,12 +130,22 @@ export async function restoreSupabaseToSqlite(db) {
   return { users: users?.length || 0, sessions: sessions?.length || 0, records: records?.length || 0 }
 }
 
-export async function mirrorRecords(records) {
+export async function mirrorRecords(records, db = null) {
   if (!supabasePersistence || !records?.length) return
-  const rows = records.filter((r) => r?.userId).map((r) => ({
+  let rows = records.filter((r) => r?.userId).map((r) => ({
     user_id: String(r.userId), store: String(r.store), id: String(r.id), novel_id: r.novelId || null,
     payload: r.deleted ? {} : (r.payload ?? {}), updated_at: Number(r.updatedAt) || 0, deleted: Boolean(r.deleted)
   }))
+  if (!rows.length) return
+  // Records can arrive immediately after local account creation. The FK on
+  // moonscribe_records is intentional, so make the parent rows durable before
+  // mirroring the child records instead of relying on request ordering.
+  if (db) {
+    for (const userId of [...new Set(rows.map((row) => row.user_id))]) {
+      await mirrorUserProfile(db, userId)
+    }
+    rows = rows.filter((row) => db.prepare('SELECT id FROM users WHERE id = ?').get(row.user_id))
+  }
   if (!rows.length) return
   const { error } = await supabasePersistence.from('moonscribe_records').upsert(rows, { onConflict: 'user_id,store,id' })
   if (error) throw error

@@ -4,6 +4,8 @@ import Icon from '../components/Icon'
 import AuthModal from '../components/AuthModal'
 import { useApp } from '../context/AppContext'
 import { detectPlatform, platformDownload, platformLabel } from '../utils/platform'
+import InstallPrompt from '../components/InstallPrompt'
+import UserPill from '../components/UserPill'
 
 const FEATURES = [
   ['fa-solid fa-file-lines', 'A real manuscript studio', 'Paginated writing, formatting, comments, replay and print-ready exports in one focused workspace.'],
@@ -20,7 +22,7 @@ const CONSTELLATION_NODES = [
 ]
 
 export default function Landing() {
-  const { syncUsername, accountReady, toast, hasRole } = useApp()
+  const { syncUsername, toast, hasRole } = useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const [authOpen, setAuthOpen] = useState(() => new URLSearchParams(location.search).get('signin') === '1')
@@ -36,10 +38,6 @@ export default function Landing() {
     setPlatform(detectPlatform(navigator.userAgent, navigator.platform, navigator.maxTouchPoints))
   }, [])
 
-  useEffect(() => {
-    if (accountReady && syncUsername && platform !== 'mobile') navigate('/dashboard', { replace: true })
-  }, [accountReady, syncUsername, navigate, platform])
-
   const signIn = () => {
     if (syncUsername) navigate('/dashboard')
     else setAuthOpen(true)
@@ -50,11 +48,13 @@ export default function Landing() {
   const downloadLabel = `Download for ${platformLabel(platform)}`
   const desktopUnlocked = hasRole('admin') || hasRole('developer') || hasRole('beta_tester')
   const lockedDownload = Boolean(downloadUrl && !desktopUnlocked)
+  const signedIn = Boolean(syncUsername)
 
   return <main className="landing">
+    <InstallPrompt />
     <nav className="landing-nav">
       <Link className="landing-brand" to="/"><img src="/moonscribelogo.png" alt="MoonScribe logo" className="landing-brand-logo" /><span className="landing-brand-copy">MoonScribe<span>✦</span></span></Link>
-      <div className="landing-nav-links"><a href="#studio">Studio</a><a href="#features">Features</a><a href="#brand">Our brand</a><Link to="/privacy">Privacy</Link><button className="landing-nav-login" onClick={signIn}>Sign in</button>{cloudOnly || lockedDownload ? <button className={`button button-primary ${lockedDownload ? 'beta-locked-button' : ''}`} onClick={lockedDownload ? signIn : signIn}><Icon icon={lockedDownload ? 'fa-solid fa-lock' : 'fa-solid fa-cloud'} /> {lockedDownload ? 'Desktop beta access' : 'Open Cloud'}</button> : <a className="button button-primary" href={downloadUrl} download>{downloadLabel}</a>}</div>
+      <div className="landing-nav-links"><a href="#studio">Studio</a><a href="#features">Features</a><a href="#brand">Our brand</a><Link to="/privacy">Privacy</Link>{signedIn ? <UserPill onConnectClick={() => navigate('/dashboard')} /> : <button className="landing-nav-login" onClick={signIn}>Sign in</button>}{!signedIn && (cloudOnly || lockedDownload ? <button className={`button button-primary ${lockedDownload ? 'beta-locked-button' : ''}`} onClick={signIn}><Icon icon={lockedDownload ? 'fa-solid fa-lock' : 'fa-solid fa-cloud'} /> {lockedDownload ? 'Desktop beta access' : 'Open Cloud'}</button> : <a className="button button-primary" href={downloadUrl} download>{downloadLabel}</a>)}</div>
     </nav>
     <section className="landing-hero">
       <div className="landing-hero-grid" aria-hidden="true" />
@@ -62,7 +62,7 @@ export default function Landing() {
       <p className="landing-kicker">Where stories become books</p>
       <h1>Write worlds worth<br /><em>remembering.</em></h1>
       <p>Draft with the familiarity of Word and Docs, then go further—living story intelligence, visual planning, collaboration and a professional cover studio in one beautiful place.</p>
-      <div className="landing-actions">{mobileCloudDisabled ? <button className="button button-secondary landing-primary" disabled><Icon icon="fa-solid fa-mobile-screen-button" /> Mobile web temporarily paused</button> : cloudOnly || lockedDownload ? <button className={`button button-primary landing-primary ${lockedDownload ? 'beta-locked-button' : ''}`} onClick={signIn}><Icon icon={lockedDownload ? 'fa-solid fa-lock' : 'fa-solid fa-cloud'} /> {lockedDownload ? 'Desktop beta access' : 'Open MoonScribe Cloud'}</button> : <a className="button button-primary landing-primary" href={downloadUrl} download><Icon icon="fa-solid fa-download" /> {downloadLabel}</a>}<button className="button button-secondary" onClick={signIn} disabled={mobileCloudDisabled}>{mobileCloudDisabled ? 'Check back soon' : cloudOnly || lockedDownload ? 'Sign in' : 'Use Cloud instead'}</button><a className="button button-secondary" href="#studio"><Icon icon="fa-solid fa-play" /> See the studio</a></div>
+      <div className="landing-actions">{signedIn ? <button className="button button-primary landing-primary" onClick={signIn}><Icon icon="fa-solid fa-arrow-right" /> Continue to your studio</button> : mobileCloudDisabled ? <button className="button button-secondary landing-primary" disabled><Icon icon="fa-solid fa-mobile-screen-button" /> Mobile web temporarily paused</button> : cloudOnly || lockedDownload ? <button className={`button button-primary landing-primary ${lockedDownload ? 'beta-locked-button' : ''}`} onClick={signIn}><Icon icon={lockedDownload ? 'fa-solid fa-lock' : 'fa-solid fa-cloud'} /> {lockedDownload ? 'Desktop beta access' : 'Open MoonScribe Cloud'}</button> : <a className="button button-primary landing-primary" href={downloadUrl} download><Icon icon="fa-solid fa-download" /> {downloadLabel}</a>}<button className="button button-secondary" onClick={signIn} disabled={mobileCloudDisabled}>{signedIn ? 'Open dashboard' : mobileCloudDisabled ? 'Check back soon' : cloudOnly || lockedDownload ? 'Sign in' : 'Use Cloud instead'}</button><a className="button button-secondary" href="#studio"><Icon icon="fa-solid fa-play" /> See the studio</a></div>
       <p className="landing-platform-note">{downloadUrl ? `MoonScribe detected ${platformLabel(platform)}. Cloud remains available in any modern browser.` : `A ${platformLabel(platform)} desktop build is not published yet. MoonScribe Cloud is ready now.`}</p>
       <div className="landing-trust"><span><Icon icon="fa-solid fa-cloud" /> Synced everywhere</span><span><Icon icon="fa-solid fa-shield-halved" /> Private by default</span><span><Icon icon="fa-solid fa-users" /> Write together live</span></div>
       <div className="landing-product-tabs" id="studio">{(['write', 'plan', 'design'] as const).map((mode) => <button key={mode} className={previewMode === mode ? 'active' : ''} onClick={() => setPreviewMode(mode)}><Icon icon={mode === 'write' ? 'fa-solid fa-pen-nib' : mode === 'plan' ? 'fa-solid fa-diagram-project' : 'fa-solid fa-book'} /> {mode[0].toUpperCase() + mode.slice(1)}</button>)}</div>

@@ -3,14 +3,19 @@ import type { CSSProperties } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getNovel, updateNovel } from '../db/novels'
 import { listChapters, updateChapter, createChapter, trashChapter, moveChapter, mergeChapters, tidyChapter, reorderChapter } from '../db/chapters'
+import { createFolder, listFolders, deleteFolder, moveFolder, updateFolder } from '../db/folders'
 import { listCharacters } from '../db/characters'
 import { listEntities } from '../db/entities'
 import { listWorld } from '../db/world'
 import { todayWords, addTodayWords, recordSession } from '../db/stats'
 import { useApp } from '../context/AppContext'
+import { readDesktopFile } from '../platform/fileOpen'
+import { docxToChapters, epubToChapters } from '../utils/zipReader'
+import { isDesktopRuntime } from '../api/config'
 import Editor from '../components/Editor'
 import Sidebar from '../components/Sidebar'
 import Modal from '../components/Modal'
+import Select from '../components/Select'
 import ConfirmDialog from '../components/ConfirmDialog'
 import AuthModal from '../components/AuthModal'
 import MergeModal from '../components/MergeModal'
@@ -40,6 +45,8 @@ import { listAnnotations, createAnnotation, updateAnnotation, deleteAnnotation }
 const Analytics = lazy(() => import('./Analytics'))
 const BookDesigner = lazy(() => import('./BookDesigner'))
 const MediaLibrary = lazy(() => import('./MediaLibrary'))
+const ProjectFiles = lazy(() => import('./ProjectFiles'))
+const PlanningCockpit = lazy(() => import('./PlanningCockpit'))
 const Trash = lazy(() => import('./Trash'))
 const Corkboard = lazy(() => import('./Corkboard'))
 const Timeline = lazy(() => import('./Timeline'))
@@ -60,6 +67,7 @@ import NotificationBell from '../components/NotificationBell'
 import CollaborationPresence from '../components/CollaborationPresence'
 import { publishLiveRecord } from '../sync/engine'
 import { sentenceDiff } from '../utils/sentenceDiff'
+import { listMoodboard, deleteTile } from '../db/moodboard'
 
 const GOAL_PRESETS = [300, 500, 1000]
 
@@ -72,6 +80,8 @@ const BINDER_SECTIONS = ['characters', 'relationships', 'world', 'glossary', 'mo
 const SECTION_LABELS = {
   characters: 'Characters',
   relationships: 'Relationships',
+  planning: 'Planning cockpit',
+  files: 'Project files',
   world: 'Worldbuilding',
   glossary: 'Glossary',
   moodboard: 'Moodboard',
@@ -93,13 +103,15 @@ export default function Novel() {
   const { id, mode, section } = useParams()
   const activeSection = section || mode || 'write'
   const location = useLocation()
-  const { focusMode, setFocusMode, toast, openSettings, isNovelUnlocked, unlockNovel, settings, hasRole } = useApp()
+  const { focusMode, setFocusMode, toast, openSettings, isNovelUnlocked, unlockNovel, settings, hasRole, syncNow } = useApp()
   const canShare = hasRole('admin') || hasRole('developer') || hasRole('beta_tester')
   const { openContextMenu } = useContextMenu()
 
   const [novel, setNovel] = useState(null)
   const [notFound, setNotFound] = useState(false)
   const [chapters, setChapters] = useState([])
+  const [folders, setFolders] = useState([])
+  const [mediaFiles, setMediaFiles] = useState([])
   const [chapter, setChapter] = useState(null)
   const [wordCount, setWordCount] = useState(0)
   const [metaDraft, setMetaDraft] = useState(EMPTY_META)
@@ -128,6 +140,10 @@ export default function Novel() {
   const [relationships, setRelationships] = useState([])
   const [connectOpen, setConnectOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
+  const refreshMediaFiles = useCallback(async () => { setMediaFiles((await listMoodboard(id)).filter((item) => item.kind === 'image' && item.image)) }, [id])
+  const refreshFolders = useCallback(async () => { setFolders(await listFolders(id)) }, [id])
+  useEffect(() => { void refreshMediaFiles() }, [refreshMediaFiles])
+  useEffect(() => { void refreshFolders() }, [refreshFolders])
   const [editorDesign, setEditorDesign] = useState(null)
   const [customDesignBg, setCustomDesignBg] = useState('#ffffff')
   const [customDesignText, setCustomDesignText] = useState('#1a1a18')
@@ -139,6 +155,8 @@ export default function Novel() {
   const [openChapterTabs, setOpenChapterTabs] = useState([])
   const [workspacePaneIds, setWorkspacePaneIds] = useState([])
   const [collaboratorPresence, setCollaboratorPresence] = useState([])
+  const [sessionTick, setSessionTick] = useState(0)
+  const [sessionPaused, setSessionPaused] = useState(false)
 
   // refs for save flow (avoid stale closures in debounce)
   const currentIdRef = useRef(null)
@@ -148,6 +166,8 @@ export default function Novel() {
   const lastCountRef = useRef({})
   const sessionStartRef = useRef(0)
   const sessionStartAtRef = useRef(Date.now())
+  const sessionPausedAtRef = useRef(0)
+  const sessionPausedMsRef = useRef(0)
   const currentWordsRef = useRef(0)
   const saveTimer = useRef(null)
   const closeSessionRef = useRef(null)
@@ -160,6 +180,12 @@ export default function Novel() {
   const persistedRevisionRef = useRef(0)
   const queuedRevisionRef = useRef(0)
   const saveQueueRef = useRef(Promise.resolve())
+  const isEditorFocusedRef = useRef(false)
+  const hasLocalDraftRef = useRef(false)
+  const saveInFlightRef = useRef(false)
+  const localEditRevisionRef = useRef(0)
+  const pendingRemoteChapterRef = useRef(null)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
 
   const captureReplaySnapshot = useCallback(async () => {
     const chId = currentIdRef.current
@@ -284,7 +310,11 @@ export default function Novel() {
     }
 
     saveQueueRef.current = saveQueueRef.current.catch(() => {}).then(async () => {
-      await updateChapter(chId, patch)
+      saveInFlightRef.current = true
+      // Shared-room chapter edits are persisted by the live collaboration
+      // socket. Keeping them out of the ordinary pending-sync queue prevents
+      // the same edit from being treated as a two-device conflict.
+      await updateChapter(chId, patch, { sync: !novelRef.current.sharedRole })
       persistedRevisionRef.current = Math.max(persistedRevisionRef.current, revision)
 
       const prev = lastCountRef.current[chId]
@@ -302,12 +332,15 @@ export default function Novel() {
         setTodayW(await todayWords(novelId))
         setSavedAt(now)
         setDirty(false)
+        hasLocalDraftRef.current = false
       }
+      saveInFlightRef.current = false
     }).catch((error) => {
       // Keep the draft in memory and make a later autosave/manual save retry the
       // same revision. A local write failure must never look like a saved chapter.
       queuedRevisionRef.current = persistedRevisionRef.current
       setDirty(true)
+      saveInFlightRef.current = false
       toast(error?.message || 'MoonScribe could not save this change locally. Your draft is still open — try Save again.')
     })
     return saveQueueRef.current
@@ -322,16 +355,21 @@ export default function Novel() {
     if (!chId || !n) return
     const words = Math.max(0, currentWordsRef.current - sessionStartRef.current)
     const startedAt = sessionStartAtRef.current
-    const endAt = Date.now()
-    if (words > 0 && endAt - startedAt > 15000) {
-      await recordSession(n.id, startedAt, endAt, words)
+    const now = Date.now()
+    const endAt = sessionPaused ? sessionPausedAtRef.current || now : now
+    const pausedMs = sessionPausedMsRef.current + (sessionPaused ? now - sessionPausedAtRef.current : 0)
+    if (words > 0 && endAt - startedAt - pausedMs > 15000) {
+      await recordSession(n.id, startedAt, endAt - pausedMs, words)
     }
-  }, [])
+  }, [sessionPaused])
 
   const resetSession = useCallback((wordCount) => {
     currentWordsRef.current = wordCount
     sessionStartRef.current = wordCount
     sessionStartAtRef.current = Date.now()
+    sessionPausedAtRef.current = 0
+    sessionPausedMsRef.current = 0
+    setSessionPaused(false)
   }, [])
 
   closeSessionRef.current = closeSession
@@ -385,6 +423,8 @@ export default function Novel() {
   const handleReport = useCallback(
     (html, words) => {
       editRevisionRef.current += 1
+      localEditRevisionRef.current += 1
+      hasLocalDraftRef.current = true
       contentRef.current = html
       currentWordsRef.current = words
       setWordCount(words)
@@ -397,7 +437,7 @@ export default function Novel() {
           store: 'chapters', id: current.id, novelId: id, updatedAt, deleted: false,
           payload: { ...current, content: html, wordCount: words, updatedAt }
         })
-      }, 120)
+      }, 650)
       scheduleSave()
       clearTimeout(snapshotCaptureTimer.current)
       snapshotCaptureTimer.current = setTimeout(captureReplaySnapshot, 1400)
@@ -437,6 +477,26 @@ export default function Novel() {
     setSidebarOpen(false)
     updateNovel(novelRef.current.id, { lastChapterId: chId, lastOpened: Date.now() }, { sync: false })
   }, [captureReplaySnapshot, resetSession, toast, openChapterTabs])
+
+  const handleMobileTouchStart = useCallback((event) => {
+    if (activeSection !== 'write' || event.touches.length !== 1) return
+    const touch = event.touches[0]
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY }
+  }, [activeSection])
+
+  const handleMobileTouchEnd = useCallback((event) => {
+    const start = touchStartRef.current
+    touchStartRef.current = null
+    if (!start || activeSection !== 'write' || event.changedTouches.length !== 1) return
+    const touch = event.changedTouches[0]
+    const dx = touch.clientX - start.x
+    const dy = touch.clientY - start.y
+    if (Math.abs(dx) < 72 || Math.abs(dx) < Math.abs(dy) * 1.35) return
+    const writable = chaptersRef.current.filter((item) => item.kind === 'chapter' || item.kind === 'subchapter')
+    const currentIndex = writable.findIndex((item) => item.id === currentIdRef.current)
+    const next = writable[currentIndex + (dx < 0 ? 1 : -1)]
+    if (next) void selectChapter(next)
+  }, [activeSection, selectChapter])
 
   const closeChapterTab = useCallback(async (tabId) => {
     const remaining = openChapterTabs.filter((item) => item !== tabId)
@@ -580,7 +640,13 @@ export default function Novel() {
         return
       }
       const incoming = record.payload
-      if (!incoming) return
+      if (!incoming || typeof incoming !== 'object' || typeof incoming.content !== 'string') return
+      // The live socket can echo this tab's own optimistic chapter update.
+      // Treating that echo as a remote restore remounts Editor while its
+      // autosave timer is active, which creates a save/reload loop.
+      if (String(incoming.id) === String(currentIdRef.current)
+        && contentRef.current === (incoming.content || '')
+        && currentWordsRef.current === (Number(incoming.wordCount) || 0)) return
       setChapters((items) => {
         let matched = false
         const next = items.map((item) => {
@@ -591,13 +657,17 @@ export default function Novel() {
         return matched ? next : [...next, incoming]
       })
       if (String(incoming.id) === String(currentIdRef.current)) {
+        // Never remount or replace an editor while it has local input in
+        // flight. Doing so interrupts the contenteditable transaction and
+        // was the source of the shared-room crash screen.
+        pendingRemoteChapterRef.current = incoming
+        if (isEditorFocusedRef.current || hasLocalDraftRef.current || saveInFlightRef.current || dirty) return
         contentRef.current = incoming.content || ''
         currentWordsRef.current = Number(incoming.wordCount) || 0
         lastCountRef.current[incoming.id] = Number(incoming.wordCount) || 0
         setChapter((prev) => prev && String(prev.id) === String(incoming.id) ? { ...prev, ...incoming } : incoming)
         setWordCount(Number(incoming.wordCount) || 0)
         setTitleDraft(incoming.title || '')
-        setRestoreTick((tick) => tick + 1)
         setDirty(false)
         setSavedAt(new Date())
       }
@@ -608,8 +678,10 @@ export default function Novel() {
       }
     } else if (record.store === 'novels' && record.payload) {
       setNovel(record.payload)
+    } else if (record.store === 'moodboard') {
+      window.dispatchEvent(new CustomEvent('moonscribe:shared-media-refresh', { detail: { novelId: id, record } }))
     }
-  }, [id, chapter?.id])
+  }, [id, chapter?.id, dirty])
 
   const commitMeta = useCallback((meta) => {
     const chId = currentIdRef.current
@@ -643,12 +715,23 @@ export default function Novel() {
 
   const addNode = useCallback(
     async (kind, parentId = null) => {
-      const ch = await createChapter(id, { title: '', kind, parentId })
+      if (kind === 'folder') {
+        const rootOrders = [...chapters.filter((chapter) => !chapter.parentId).map((chapter) => Number(chapter.order) || 0), ...folders.filter((folder) => !folder.parentId).map((folder) => Number(folder.order) || 0)]
+        await createFolder(id, { name: 'New folder', order: (rootOrders.length ? Math.max(...rootOrders) : 0) + 1 })
+        await refreshFolders()
+        toast('Folder created at the manuscript root.')
+        return
+      }
+      // Folders are manuscript-level containers by default. Chapters/scenes
+      // may still be explicitly created inside a selected folder.
+      const folderParent = parentId && folders.some((folder) => folder.id === parentId) ? parentId : null
+      const resolvedParentId = kind === 'part' || folderParent ? null : parentId
+      const ch = await createChapter(id, { title: '', kind, parentId: resolvedParentId, folderId: folderParent })
       const chs = await listChapters(id)
       setChapters(chs)
       selectChapter(ch)
     },
-    [id, selectChapter]
+    [chapters, folders, id, refreshFolders, selectChapter, toast]
   )
 
   const handleReorder = useCallback(
@@ -701,7 +784,10 @@ export default function Novel() {
       part: editChapter.part,
       kind: editChapter.kind,
       parentId: editChapter.parentId || null,
-      status: editChapter.status
+      status: editChapter.status,
+      icon: editChapter.icon || null,
+      color: editChapter.color || null,
+      folderTheme: editChapter.folderTheme || null
     })
     setChapters(await listChapters(id))
     setEditChapter(null)
@@ -923,9 +1009,106 @@ export default function Novel() {
     [importChapters, toast]
   )
 
+  const handleMoveToFolder = useCallback(async (chapterId, folderId) => {
+    const chapter = chapters.find((item) => item.id === chapterId)
+    if (!chapter || ['book', 'part', 'act'].includes(chapter.kind)) return
+    await updateChapter(chapterId, { folderId, parentId: null })
+    setChapters(await listChapters(id))
+    toast('Chapter moved into folder.')
+  }, [chapters, id, toast])
+
+  const handleMoveFolder = useCallback(async (folderId, targetId, position = 'inside') => {
+    if (targetId == null) {
+      await moveFolder(folderId, null, null)
+      await refreshFolders()
+      toast('Folder moved to manuscript root.')
+      return
+    }
+    if (folderId === targetId) return
+    const source = folders.find((folder) => folder.id === folderId)
+    const target = folders.find((folder) => folder.id === targetId)
+    if (!source || !target) return
+    const siblings = folders.filter((folder) => (folder.parentId || null) === (target.parentId || null) && folder.id !== folderId).sort((a, b) => (a.order || 0) - (b.order || 0))
+    const index = position === 'after' ? siblings.findIndex((folder) => folder.id === targetId) + 1 : Math.max(0, siblings.findIndex((folder) => folder.id === targetId))
+    await moveFolder(folderId, position === 'inside' ? targetId : target.parentId || null, position === 'inside' ? null : index)
+    await refreshFolders()
+    toast('Folder moved.')
+  }, [folders, refreshFolders, toast])
+
+  const handleFolderAppearance = useCallback(async (folder, kind) => {
+    const colors = ['#c9953d', '#d85ab5', '#78a6d8', '#82b879', '#b78bd6']
+    const icons = ['fa-solid fa-folder', 'fa-solid fa-folder-open', 'fa-solid fa-star', 'fa-solid fa-moon', 'fa-solid fa-feather-pointed']
+    const themes = ['plain', 'soft', 'outline', 'glow']
+    const values = kind === 'color' ? colors : kind === 'icon' ? icons : themes
+    const field = kind === 'color' ? 'color' : kind === 'icon' ? 'icon' : 'theme'
+    const current = folder[field]
+    const next = values[(Math.max(0, values.indexOf(current)) + 1) % values.length]
+    await updateFolder(folder.id, { [field]: next })
+    await refreshFolders()
+    toast(`${kind === 'color' ? 'Folder colour' : kind === 'icon' ? 'Folder icon' : 'Folder theme'} updated.`)
+  }, [refreshFolders, toast])
+
+  const handleImportFile = useCallback(async (file) => {
+    if (!file) return
+    const name = file.name || 'imported manuscript'
+    const extension = name.split('.').pop()?.toLowerCase()
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      if (extension === 'docx') await importChapters(await docxToChapters(bytes), name)
+      else if (extension === 'epub') await importChapters(await epubToChapters(bytes), name)
+      else {
+        const text = new TextDecoder().decode(bytes)
+        const imported = extension === 'rtf' ? rtfToChapters(text) : markdownToChapters(text)
+        if (imported) await importChapters(imported, name)
+      }
+    } catch (error) { toast(error instanceof Error ? error.message : `Could not import “${name}”.`) }
+  }, [importChapters, toast])
+
+  useEffect(() => {
+    if (!isDesktopRuntime()) return
+    const onDesktopFiles = (event: Event) => {
+      const paths = (event as CustomEvent<{ paths?: string[] }>).detail?.paths || []
+      void (async () => {
+        for (const path of paths) {
+          const name = path.split(/[\\/]/).pop() || path
+          try {
+            const bytes = await readDesktopFile(path)
+            await handleImportFile(new File([bytes], name))
+          } catch (error) {
+            toast(error instanceof Error ? error.message : `Could not open “${name}”.`)
+          }
+        }
+      })()
+    }
+    window.addEventListener('moonscribe:desktop-files-opened', onDesktopFiles)
+    return () => window.removeEventListener('moonscribe:desktop-files-opened', onDesktopFiles)
+  }, [handleImportFile, importChapters, toast])
+
+  useEffect(() => {
+    if (activeSection !== 'write' || !chapter?.id) return
+    const timer = window.setInterval(() => setSessionTick((tick) => tick + 1), 1000)
+    return () => window.clearInterval(timer)
+  }, [activeSection, chapter?.id])
+
+  const toggleSessionPause = useCallback(() => {
+    const now = Date.now()
+    if (sessionPaused) {
+      sessionPausedMsRef.current += Math.max(0, now - sessionPausedAtRef.current)
+      sessionPausedAtRef.current = 0
+      setSessionPaused(false)
+    } else {
+      sessionPausedAtRef.current = now
+      setSessionPaused(true)
+    }
+  }, [sessionPaused])
+
   const totalWords = chapters.reduce((s, c) => s + (c.wordCount || 0), 0)
   const sessionWords = Math.max(0, wordCount - sessionStartRef.current)
-  const sessionElapsed = Date.now() - sessionStartAtRef.current
+  const sessionElapsed = Math.max(0, Date.now() - sessionStartAtRef.current - sessionPausedMsRef.current - (sessionPaused ? Date.now() - sessionPausedAtRef.current : 0))
+  void sessionTick
+  const sessionMinutes = Math.floor(sessionElapsed / 60000)
+  const sessionSeconds = Math.floor(sessionElapsed / 1000) % 60
+  const sessionClock = `${sessionMinutes}:${String(sessionSeconds).padStart(2, '0')}`
   const sessionWpm = sessionElapsed > 30000 ? Math.round(sessionWords / (sessionElapsed / 60000)) : null
   const goalPct = goalWords > 0 ? Math.min(100, Math.round((todayW / goalWords) * 100)) : 0
 
@@ -972,6 +1155,15 @@ export default function Novel() {
         novel={novel}
         totalWords={totalWords}
         chapters={chapters}
+        folders={folders}
+        onFolderDelete={async (folder) => { await deleteFolder(folder.id); await refreshFolders(); toast('Folder deleted.') }}
+        onMoveToFolder={handleMoveToFolder}
+        onMoveFolder={handleMoveFolder}
+        onFolderAppearance={handleFolderAppearance}
+        onFolderSettings={async (folder) => { await updateFolder(folder.id, { name: folder.name.trim() || 'New folder', icon: folder.icon || null, color: folder.color || null, theme: folder.theme || 'plain' }); await refreshFolders(); toast('Folder settings saved.') }}
+        mediaFiles={mediaFiles}
+        onMediaSelect={() => navigate(`/novel/${id}/media`)}
+        onMediaDelete={async (file) => { await deleteTile(file.id); await refreshMediaFiles(); toast('Media file deleted.') }}
         collaborators={collaboratorPresence}
         currentId={currentIdRef.current}
         onSelect={selectChapter}
@@ -985,10 +1177,11 @@ export default function Novel() {
         onOpenLibrary={() => setLibraryOpen(true)}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
-        onSyncClick={() => setConnectOpen(true)}
+        onSyncClick={async () => { try { await syncNow?.(); toast('Synced.') } catch { toast('Sync needs attention.') } }}
         onTitleChange={(title) => setNovel((n) => n ? { ...n, title } : n)}
         onTitleSave={() => novel && updateNovel(novel.id, { title: novel.title })}
       />
+      {sidebarOpen && <button type="button" className="mobile-sidebar-backdrop" aria-label="Close chapters sidebar" onClick={() => setSidebarOpen(false)} />}
 
       <ChapterLibrary
         open={libraryOpen}
@@ -1007,6 +1200,8 @@ export default function Novel() {
 
       <div
         className={`main ${activeSection === 'write' && designOver ? 'design-dropzone drag-over' : ''}`}
+        onTouchStart={handleMobileTouchStart}
+        onTouchEnd={handleMobileTouchEnd}
         {...(activeSection === 'write'
           ? {
               onDragOver: (e) => {
@@ -1021,6 +1216,11 @@ export default function Novel() {
               onDragLeave: () => setDesignOver(false),
               onDrop: (e) => {
                 if (e.dataTransfer.types.includes(DESIGN_MIME)) return onDropDesign(e)
+                if (e.dataTransfer.files?.length) {
+                  e.preventDefault()
+                  Array.from(e.dataTransfer.files).forEach((file) => void handleImportFile(file))
+                  return
+                }
                 e.preventDefault()
                 const chapterId = e.dataTransfer.getData('text/plain')
                 if (chaptersRef.current.some((item) => item.id === chapterId)) {
@@ -1096,7 +1296,11 @@ export default function Novel() {
         </div>}
 
         <Suspense fallback={<div className="workspace-loading">Loading workspace…</div>}>
-        {activeSection === 'design' ? (
+        {activeSection === 'planning' ? (
+          <div className="mode-body"><PlanningCockpit novelId={id} embedded /></div>
+        ) : activeSection === 'files' ? (
+          <div className="mode-body"><ProjectFiles novelId={id} embedded /></div>
+        ) : activeSection === 'design' ? (
           <div className="mode-body">
             <BookDesigner novelId={id} embedded />
           </div>
@@ -1272,6 +1476,8 @@ export default function Novel() {
                     key={`${chapter.id}-${restoreTick}`}
                     initialHtml={chapter.content}
                     onReport={handleReport}
+                    onEditorFocus={() => { isEditorFocusedRef.current = true }}
+                    onEditorBlur={() => { isEditorFocusedRef.current = false }}
                     title={titleDraft}
                     onTitleChange={setTitleDraft}
                     onTitleBlur={commitTitle}
@@ -1292,6 +1498,7 @@ export default function Novel() {
                     novelId={id}
                     placeholder="The first sentence is the hardest. Start anywhere."
                     onDesigns={() => setDesignsOpen((o) => !o)}
+                    onApplyDesign={applyEditorDesign}
                     onLineSpacingChange={(spacing) => {
                       const WPP_MAP = { '1.0': 500, '1.15': 430, '1.5': 333, '2.0': 250 }
                       setLineSpacingWpp(WPP_MAP[spacing] || 333)
@@ -1319,6 +1526,7 @@ export default function Novel() {
                     chapter={paneChapter}
                     paneIndex={paneIndex}
                     novelId={id}
+                    sharedRole={novel?.sharedRole}
                     layout={novel.layout || {}}
                     settings={settings}
                     characters={characters}
@@ -1337,6 +1545,8 @@ export default function Novel() {
             <div className="editor-footer">
               <span className="stat"><b>{formatWords(wordCount)}</b> words</span>
               <span className="stat">+<b>{formatWords(sessionWords)}</b> this session</span>
+              <span className="stat" title="Elapsed writing session"><Icon icon="fa-regular fa-clock" /> <b>{sessionClock}</b></span>
+              <button className="button button-quiet" onClick={toggleSessionPause} title={sessionPaused ? 'Resume writing session' : 'Pause writing session'}><Icon icon={sessionPaused ? 'fa-solid fa-play' : 'fa-solid fa-pause'} /> {sessionPaused ? 'Resume' : 'Pause'}</button>
               {wordCount > 0 && (
                 <span className="stat" title={`~${lineSpacingWpp} words per page at current spacing`}>
                   ~<b>{Math.ceil(wordCount / lineSpacingWpp)}</b> {Math.ceil(wordCount / lineSpacingWpp) === 1 ? 'page' : 'pages'}
@@ -1361,7 +1571,7 @@ export default function Novel() {
                 </span>
               )}
               <span className="saved-indicator">
-                {dirty ? <><span className="dot" style={{ background: 'var(--rose)' }} /> saving…</> : <><span className="dot" /> saved {timeAgo(savedAt)}</>}
+                {dirty ? <><span className="dot" style={{ background: 'var(--rose)' }} /> <span role="status" aria-live="polite">Saving locally…</span></> : <><span className="dot" /> <span role="status" aria-live="polite">Saved locally {savedAt ? timeAgo(savedAt) : ''}</span></>}
               </span>
               <button className="button button-quiet" onClick={() => saveNowRef.current?.()} title="Save now (Ctrl+S)"><Icon icon="fa-regular fa-floppy-disk" /> Save</button>
               {chapter.versions?.length > 0 && (
@@ -1475,11 +1685,29 @@ export default function Novel() {
         setHistoryOpen(false)
         toast('Brought back a previous version.')
       }} />
+      <nav className="mobile-workspace-nav" aria-label="Mobile workspace navigation">
+        <button type="button" className={activeSection === 'write' ? 'active' : ''} onClick={() => navigate(`/novel/${id}`)}>
+          <Icon icon="fa-solid fa-pen-nib" /><span>Write</span>
+        </button>
+        <button type="button" onClick={() => navigate('/dashboard')}>
+          <Icon icon="fa-solid fa-books" /><span>Library</span>
+        </button>
+        <button type="button" className="mobile-workspace-nav-primary" onClick={() => { navigate(`/novel/${id}`); setFocusMode(true) }}>
+          <Icon icon="fa-solid fa-feather-pointed" /><span>Focus</span>
+        </button>
+        <button type="button" className={activeSection === 'writing-journal' ? 'active' : ''} onClick={() => navigate(`/novel/${id}/writing-journal`)}>
+          <Icon icon="fa-solid fa-book-open" /><span>Journal</span>
+        </button>
+        <button type="button" onClick={() => setSidebarOpen(true)}>
+          <Icon icon="fa-solid fa-ellipsis" /><span>More</span>
+        </button>
+      </nav>
     </div>
   )
 }
 
 function ChapterEditModal({ chapter, onChange, onClose, onSave }) {
+  const [tab, setTab] = useState('overview')
   const kinds = [
     ['book', 'Book'],
     ['part', 'Part'],
@@ -1488,35 +1716,47 @@ function ChapterEditModal({ chapter, onChange, onClose, onSave }) {
     ['subchapter', 'Subchapter']
   ]
   return (
-    <Modal open={!!chapter} onClose={onClose} title="Chapter settings" width={440}>
+      <Modal open={!!chapter} onClose={onClose} title="Chapter settings" width={680} className="folder-settings-modal">
       {chapter && (
         <>
-          <div className="field">
-            <label>Title <span className="hint">(leave blank to use the derived name)</span></label>
-            <input value={chapter.title || ''} onChange={(e) => onChange({ ...chapter, title: e.target.value })} />
-          </div>
-          <div className="field">
-            <label>Kind</label>
-            <select value={chapter.kind || 'chapter'} onChange={(e) => onChange({ ...chapter, kind: e.target.value })}>
-              {kinds.map(([k, label]) => (
-                <option key={k} value={k}>{label}</option>
-              ))}
-            </select>
-            <p className="small muted" style={{ margin: '6px 0 0' }}>
-              Books, parts and acts become outline headers; chapters are numbered, and subchapters nest beneath a chapter.
-            </p>
-          </div>
+          <nav className="folder-settings-tabs" aria-label="Chapter settings sections">
+            {[['overview', 'Overview', 'fa-solid fa-feather-pointed'], ['appearance', 'Appearance', 'fa-solid fa-palette'], ['details', 'Details', 'fa-solid fa-sliders']].map(([value, label, icon]) => <button key={value} type="button" className={tab === value ? 'active' : ''} onClick={() => setTab(value)}><Icon icon={icon} /><span>{label}</span></button>)}
+          </nav>
+          <div className="folder-settings-panel">
+          {tab === 'overview' && <>
+            <div className="folder-settings-intro"><span>MANUSCRIPT NODE</span><strong>Shape how this item appears in your book.</strong></div>
+            <div className="field">
+              <label>Title <span className="hint">(blank uses the derived name)</span></label>
+              <input value={chapter.title || ''} onChange={(e) => onChange({ ...chapter, title: e.target.value })} />
+            </div>
+            <div className="field">
+              <label>Kind</label>
+              <Select ariaLabel="Chapter kind" width="100%" value={chapter.kind || 'chapter'} onChange={(value) => onChange({ ...chapter, kind: value })} options={kinds.map(([value, label]) => ({ value, label }))} />
+              <p className="small muted">Books, parts and acts become outline headers; chapters are numbered, and subchapters nest beneath chapters.</p>
+            </div>
+          </>}
+          {['book', 'part', 'act'].includes(chapter.kind) && <>
+          {tab === 'appearance' && <>
+            <div className="field">
+              <label>Folder icon</label>
+              <Select ariaLabel="Folder icon" width="100%" value={chapter.icon || ''} onChange={(value) => onChange({ ...chapter, icon: value || null })} options={[['', 'Automatic'], ['fa-solid fa-folder', 'Folder'], ['fa-solid fa-folder-open', 'Open folder'], ['fa-solid fa-book', 'Book'], ['fa-solid fa-layer-group', 'Layers'], ['fa-solid fa-box-archive', 'Archive'], ['fa-solid fa-star', 'Starred'], ['fa-solid fa-moon', 'Moon'], ['fa-solid fa-feather-pointed', 'Writing']].map(([value, label]) => ({ value, label }))} />
+            </div>
+            <div className="field" style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <label style={{ flex: 1 }}>Folder colour<input className="folder-color-input" type="color" value={chapter.color || '#c79b53'} onChange={(e) => onChange({ ...chapter, color: e.target.value })} /></label>
+              <label style={{ flex: 1 }}>Theme<Select ariaLabel="Folder theme" width="100%" value={chapter.folderTheme || 'plain'} onChange={(value) => onChange({ ...chapter, folderTheme: value })} options={[{ value: 'plain', label: 'Plain' }, { value: 'soft', label: 'Soft tint' }, { value: 'outline', label: 'Outline' }, { value: 'glow', label: 'Glow' }]} /></label>
+            </div>
+          </>}
+          </>}
+          {tab === 'details' && <>
           <div className="field">
             <label>Part / volume</label>
             <input value={chapter.part || ''} onChange={(e) => onChange({ ...chapter, part: e.target.value })} placeholder="Legacy part label — mostly unused now" />
           </div>
           <div className="field">
             <label>Status</label>
-            <select value={chapter.status || 'draft'} onChange={(e) => onChange({ ...chapter, status: e.target.value })}>
-              <option value="draft">Draft</option>
-              <option value="revised">Revised</option>
-              <option value="final">Final</option>
-            </select>
+            <Select ariaLabel="Chapter status" width="100%" value={chapter.status || 'draft'} onChange={(value) => onChange({ ...chapter, status: value })} options={[{ value: 'draft', label: 'Draft' }, { value: 'revised', label: 'Revised' }, { value: 'final', label: 'Final' }]} />
+          </div>
+          </>}
           </div>
           <div className="modal-foot">
             <button className="button button-ghost" onClick={onClose}>Cancel</button>
@@ -1532,6 +1772,7 @@ function SecondarySplitEditor({
   chapter,
   paneIndex = 0,
   novelId,
+  sharedRole,
   layout,
   settings,
   characters,
@@ -1579,12 +1820,12 @@ function SecondarySplitEditor({
       content: nextHtml,
       wordCount: nextWords,
       updatedAt,
-    })
+    }, { sync: !sharedRole })
     savedRevisionRef.current = revisionRef.current
     onPatch(chapter.id, { content: nextHtml, wordCount: nextWords, updatedAt })
     setSavedAt(updatedAt)
     setDirty(false)
-  }, [chapter?.id, onPatch])
+  }, [chapter?.id, onPatch, sharedRole])
 
   const scheduleSave = useCallback(() => {
     setDirty(true)

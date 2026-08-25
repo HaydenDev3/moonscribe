@@ -81,13 +81,18 @@ export default function Select({ value, onChange, options = [], ariaLabel = 'Sel
     }
   }
 
+  const estimatedHeight = Math.min(420, Math.max(48, options.length * 42 + 8))
+  const opensUp = !!rect && rect.bottom + estimatedHeight > window.innerHeight - 12 && rect.top - estimatedHeight > 12
   const popupStyle: React.CSSProperties = rect
     ? {
         position: 'fixed',
-        top: rect.bottom + 6,
-        left: rect.left,
+        top: opensUp ? undefined : rect.bottom + 6,
+        bottom: opensUp ? window.innerHeight - rect.top + 6 : undefined,
+        left: Math.min(rect.left, Math.max(12, window.innerWidth - rect.width - 12)),
         width: rect.width,
-        minWidth: rect.width,
+        minWidth: Math.max(rect.width, 180),
+        maxHeight: `calc(100dvh - 24px)`,
+        overflowY: 'auto',
         zIndex: 9999,
       }
     : { position: 'fixed', top: -9999, left: -9999 }

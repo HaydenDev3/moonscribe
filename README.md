@@ -1,63 +1,71 @@
-# MoonScribe
+# ✦ MoonScribe
 
 <p align="center">
-  <img src="docs/moonscribe-banner.svg" width="100%" alt="MoonScribe banner" />
+  <img src="docs/moonscribe-banner.svg" width="100%" alt="Animated MoonScribe banner with a moonlit writing studio" />
 </p>
 
 <p align="center">
-  <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" />
-  <img alt="Vite 8" src="https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-Strict-3178C6?logo=typescript&logoColor=white" />
-  <img alt="PWA" src="https://img.shields.io/badge/PWA-Installable-FFB000?logo=pwa&logoColor=white" />
+  <strong>A private, local-first writing studio for long-form fiction, worldbuilding, collaboration, and book design.</strong>
 </p>
 
-> A private, local-first writing studio for long-form fiction, worldbuilding, collaboration, and book design.
+<p align="center">
+  <a href="https://github.com/HaydenDev3/moonscribe"><img alt="Version 1.1.0" src="https://img.shields.io/badge/version-1.1.0-8b7cf6?style=for-the-badge&logo=semver&logoColor=white" /></a>
+  <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white" />
+  <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
+  <img alt="PWA installable" src="https://img.shields.io/badge/PWA-installable-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white" />
+</p>
 
-MoonScribe gives novelists one calm place to draft a manuscript, understand its story world, collaborate with another writer, and design the finished book. Writing starts locally in the browser and can optionally sync to the self-hosted Node/SQLite service.
+<p align="center">
+  <a href="#-experience-the-studio">Experience the studio</a> ·
+  <a href="#-run-locally">Run locally</a> ·
+  <a href="docs/README.md">Read the docs</a> ·
+  <a href="https://github.com/HaydenDev3/moonscribe/issues">Report an issue</a>
+</p>
 
-## What it includes
+> **The quiet promise:** your manuscript remains yours, even when the network disappears.
 
-### Write
+MoonScribe brings drafting, story memory, collaboration, and finished-book design into one calm workspace. Your work starts in the browser, stays useful offline, and can optionally sync to a self-hosted Node/SQLite service.
 
-- Rich-text chapter editor with headings, lists, links, highlights, scene breaks, and page breaks.
-- Focus and typewriter modes, autosave, draft recovery, word counts, search, analytics, and chapter history.
-- Export workflows for Markdown, HTML, EPUB, DOCX, and print-oriented output.
+## ✨ Experience the studio
 
-### Plan and remember
+| 🖋️ Write | 🧭 Remember | 🎨 Design |
+| --- | --- | --- |
+| Rich-text chapters, focus mode, typewriter mode, autosave, recovery, search, analytics, history, and export. | Characters, relationships, glossary, timeline, continuity, milestones, moodboards, and corkboard planning. | Cover presets, palettes, typography, ornaments, trim settings, print preview, and a 3D book mockup. |
 
-- Character cards, relationships, glossary, timeline, continuity, milestones, moodboards, and corkboard planning.
-- Story-aware reference tools that keep important details near the manuscript.
+<details>
+<summary><strong>🌙 What makes it feel different?</strong></summary>
 
-### Design
+- **Local-first by default** — IndexedDB keeps drafts available when the connection is not.
+- **Made for the whole arc** — move from first sentence to world bible to finished cover without changing tools.
+- **Private collaboration** — optional accounts, rooms, presence, realtime updates, and session controls.
+- **A living interface** — animated startup moments, optional interface sounds, accessible focus states, and a visual language designed to stay out of the way.
 
-- Cover presets, palettes, typography, ornaments, spine/back-cover controls, trim settings, and print preview.
-- Three-dimensional book mockup preview for checking the finished object before export.
+</details>
 
-### Sync and security
+## 🧩 Built with
 
-- Local-first IndexedDB storage with offline-safe drafts and backup/restore tools.
-- Optional account sync, multi-device sessions, private collaboration rooms, presence, and realtime record updates.
-- Email/password, Discord OAuth, Google OAuth, email verification, email 2FA, app lock, session revocation, account disabling, and administrator controls.
-- Admin users can manage roles, disable or restore non-admin accounts, and permanently delete non-admin accounts with audited confirmation.
+<p>
+  <img alt="React" src="https://img.shields.io/badge/React-19-20232A?logo=react&logoColor=61DAFB" />
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white" />
+  <img alt="Tiptap" src="https://img.shields.io/badge/Tiptap-editor-171717?logo=prosemirror&logoColor=white" />
+  <img alt="Three.js" src="https://img.shields.io/badge/Three.js-3D-000000?logo=threedotjs&logoColor=white" />
+</p>
 
-## Architecture
-
-| Area | Technology |
+| Layer | Choice |
 | --- | --- |
 | Web UI | React 19, TypeScript, Vite 8 |
-| Web routing | React Router 7; crawlable routes on web, hash routing in desktop runtime |
+| Routing | React Router 7; crawlable web routes and desktop hash routing |
 | Local storage | IndexedDB through `idb` |
-| Sync API | Node.js HTTP server with SQLite (`node:sqlite`) |
-| Realtime | WebSocket presence, notifications, and collaboration updates |
+| Sync | Node.js HTTP server, SQLite, and WebSockets |
 | Book preview | Three.js |
-| PWA | `vite-plugin-pwa` |
-| Exports | Markdown, HTML, EPUB, DOCX, PDF/print workflows |
-| Email | Resend |
-| Tests | Vitest, happy-dom, Node integration tests |
+| Exports | Markdown, HTML, EPUB, DOCX, and print-oriented output |
+| Desktop | Tauri |
+| Verification | Vitest, happy-dom, Node integration tests |
 
-## Run locally
+## 🚀 Run locally
 
-Requirements: Node.js 24 or newer and npm.
+**Requirements:** Node.js 24+ and npm.
 
 ```bash
 npm ci
@@ -65,62 +73,27 @@ copy .env.example .env.local
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). The development helper starts Vite and the sync server together. To run the API alone:
+Then open [localhost:5173](http://localhost:5173). The development helper starts the Vite frontend and sync server together. To run the API by itself:
 
 ```bash
 npm run server
 ```
 
-The local API listens on port `3001` by default and stores SQLite data under `DATA_DIR`.
+## 🛡️ Sync, security, and deployment
 
-## Environment configuration
+Optional account sync supports email/password, Discord OAuth, Google OAuth, email verification, email 2FA, app lock, session revocation, account disabling, and administrator controls. Keep provider secrets and `OAUTH_STATE_SECRET` server-only.
 
-`.env.example` is the source of truth for available variables. The minimum production values are:
-
-```env
-APP_ORIGIN=https://moonscribe.cc
-API_ORIGIN=https://moonscribe.cc
-OAUTH_STATE_SECRET=<long-random-server-secret>
-DATA_DIR=/app/data
-RESEND_API_KEY=<server-only-resend-key>
-```
-
-Optional provider credentials enable Discord and Google sign-in. Keep OAuth secrets, the Resend key, and `OAUTH_STATE_SECRET` server-only; never prefix them with `VITE_`.
-
-Generate the OAuth state secret with:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
-```
-
-For local development, use `APP_ORIGIN=http://localhost:5173` and `API_ORIGIN=http://localhost:3001`. For production, use HTTPS origins and register the exact callback paths with each OAuth provider:
-
-```text
-https://your-api-host/auth/discord/callback
-https://your-api-host/auth/google/callback
-```
-
-## Railway deployment
-
-MoonScribe’s backend is a stateful Node/SQLite service with WebSockets. Deploy the included Dockerfile to Railway as one service.
+The included Dockerfile is designed for a stateful Railway deployment:
 
 1. Create a Railway service from this repository.
-2. Use the included `railway.json` and Dockerfile.
-3. Create a Railway Volume and mount it at `/app/data`.
-4. Set `DATA_DIR=/app/data`.
-5. Configure the production environment variables from `.env.example`.
-6. Use `/api/health` as the health-check path.
-7. Keep the service at one replica; SQLite is not a multi-replica database.
-8. Attach the HTTPS domain and set `APP_ORIGIN`/`API_ORIGIN` to the final public origin.
-9. Register the final OAuth callback URLs and verify the Resend sending domain.
+2. Mount a Railway Volume at `/app/data` and set `DATA_DIR=/app/data`.
+3. Configure the production values from `.env.example`.
+4. Use `/api/health` as the health check.
+5. Keep the service at one replica because SQLite is not a multi-replica database.
 
-The Dockerfile intentionally does not contain a Docker `VOLUME` instruction. Persistence belongs to the Railway Volume so it can be managed, backed up, and restored by Railway.
+See the [deployment runbook](docs/deployment.md) for the complete production checklist.
 
-Vercel can host the static frontend, but the current sync API should remain on a stateful host unless the backend is migrated to a managed database and a realtime service. See [deployment documentation](docs/deployment.md) for the production runbook.
-
-## Verify before release
-
-Run the release checks from the repository root:
+## ✅ Verify before release
 
 ```bash
 npm run lint
@@ -130,46 +103,25 @@ npm run build
 npm audit --omit=dev --audit-level=moderate
 ```
 
-The server integration suite covers authentication, authorization, account lifecycle, rate limiting, record isolation, collaboration permissions, realtime sync, realtime notifications, health checks, disabling, restoring, and deletion cleanup.
-
-For a live deployment, additionally verify:
-
-- `GET /api/health` returns database health.
-- HTTPS redirects and secure callback URLs work.
-- Email verification, password reset/notification delivery, and 2FA arrive through Resend.
-- Two separate sessions see the same collaboration update.
-- Railway Volume data survives a redeploy.
-- Backups can be restored before allowing real manuscripts onto the service.
-
-## Public routes
-
-The web app includes crawlable public pages for trust and search indexing:
-
-- `/privacy`
-- `/terms`
-- `/cookies`
-- `/acceptable-use`
-- `/community`
-- `/contact`
-
-SEO metadata, Open Graph previews for Discord/Facebook, X/Twitter card metadata, `robots.txt`, and `sitemap.xml` are included in the web build.
-
-## Documentation
+## 📚 Documentation
 
 - [Documentation index](docs/README.md)
+- [User guide](docs/user-guide.md)
+- [Development guide](docs/development.md)
 - [Deployment and operations](docs/deployment.md)
 - [Server guide and API reference](docs/server-guide.md)
 - [Security notes](docs/security.md)
 - [Data safety and backups](docs/data-safety.md)
 - [Release-candidate audit](docs/release-candidate-audit.md)
-- [Browser QA notes](docs/browser-qa.md)
 
-## Data and licensing
+## 🗺️ Public routes
 
-The browser library is local-first, but synced data is stored by the configured server. Back up `DATA_DIR` and export important manuscripts before migrations, bulk deletion, or infrastructure changes.
+The web app includes crawlable trust and community pages: `/privacy`, `/terms`, `/cookies`, `/acceptable-use`, `/community`, and `/contact`. SEO metadata, Open Graph previews, X/Twitter cards, `robots.txt`, and `sitemap.xml` are included in the build.
 
-This repository’s exact license terms should be checked before redistribution or commercial deployment.
-
-## Why it exists
+## 💫 Why it exists
 
 MoonScribe is for the long-form work that needs more than a blank document: the unfinished chapter, the complicated character, the world that keeps growing, and the finished book waiting at the end.
+
+<p align="center">
+  <sub>Made for the stories that take time.</sub>
+</p>

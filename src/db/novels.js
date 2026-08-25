@@ -1,6 +1,7 @@
-import { getDB, uid, putRecord, removeRecord } from './db'
+import { getDB, uid, putRecord, removeRecord, waitForNativeHydration } from './db'
 
 export async function listNovels() {
+  await waitForNativeHydration()
   const db = await getDB()
   const novels = await db.getAll('novels')
   // Backup v2 encoded Blob covers as `{}`. Repair those legacy records while

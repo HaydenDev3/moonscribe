@@ -1,5 +1,9 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import * as THREE from 'three'
+import { canUseWebGL, rendererDiagnostics } from '../utils/bookRenderer'
+
+export type BookSurface = 'front' | 'spine' | 'back'
+export type BookRendererStatus = 'loading' | 'ready' | 'fallback' | 'context-lost' | 'error'
 
 const PALETTES = {
   moonstone: ['#8fb2d4', '#5a80a8', '#30435f'], rose: ['#e0b9b9', '#c49090', '#633f48'],
@@ -28,15 +32,18 @@ function drawCropped(ctx, image, w, h, crop: any = {}, alpha = 1) {
   const y = -(dh - h) * ((Number(crop.y) || 50) / 100)
   ctx.save(); ctx.globalAlpha = alpha; ctx.drawImage(image, x, y, dw, dh); ctx.restore()
 }
-function loadTextureImage(src, map, draw) {
+function loadTextureImage(src, map, draw, onError) {
   if (!src) { draw(null); return }
   const image = new Image()
   image.decoding = 'async'
   if (/^https?:/i.test(src)) image.crossOrigin = 'anonymous'
   image.onload = () => { draw(image); map.needsUpdate = true }
-  image.onerror = () => { draw(null); map.needsUpdate = true }
+  image.onerror = () => { onError?.(); draw(null); map.needsUpdate = true }
   image.src = src
   draw(null)
+}
+function drawComponents(ctx, components = [], w, h, color = '#fff') {
+  components.forEach((item) => { const x = w * (Number(item.x) || 50) / 100; const y = h * (Number(item.y) || 50) / 100; const size = Math.max(18, Math.min(110, 42 * (Number(item.scale) || 1))); ctx.save(); ctx.fillStyle = item.color || color; ctx.globalAlpha = .9; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `${size}px Georgia, serif`; ctx.fillText(item.glyph || '', x, y); ctx.restore() })
 }
 function frontTexture(settings: any) {
   const colors = palette(settings.coverStyle, settings.gradient)
@@ -54,9 +61,9 @@ function frontTexture(settings: any) {
       const lineHeight = size * 1.2; const top = h * .48 - (lines.length - 1) * lineHeight / 2; lines.forEach((entry, index) => ctx.fillText(entry, w / 2, top + index * lineHeight)); ctx.shadowBlur = 0
       if (settings.subtitle) { ctx.globalAlpha = .78; ctx.font = `30px ${FONT_MAP.cormorant}`; ctx.fillText(settings.subtitle, w / 2, top + lines.length * lineHeight + 18); ctx.globalAlpha = 1 }
       if (settings.ornament) { ctx.globalAlpha = .68; ctx.font = `42px ${typeface}`; ctx.fillText(settings.ornament, w / 2, top + lines.length * lineHeight + 38); ctx.globalAlpha = 1 }
-      ctx.globalAlpha = .78; ctx.font = `italic 27px ${FONT_MAP.cormorant}`; ctx.fillText(settings.byline || 'for Storm Tattersall', w / 2, h - 118); ctx.globalAlpha = 1
+      ctx.globalAlpha = .78; ctx.font = `italic 27px ${FONT_MAP.cormorant}`; ctx.fillText(settings.byline || 'for Storm Tattersall', w / 2, h - 118); ctx.globalAlpha = 1; drawComponents(ctx, settings.frontComponents, w, h, settings.titleColor || '#fff')
     }
-    loadTextureImage(settings.coverImage, map, draw)
+    loadTextureImage(settings.coverImage, map, draw, settings.onTextureError)
   })
 }
 function spineTexture(settings: any, aspect = .08) {
@@ -76,7 +83,7 @@ function spineTexture(settings: any, aspect = .08) {
       const typeface = settings.titleFontFamily || FONT_MAP[settings.titleFont] || FONT_MAP.cormorant
       ctx.save(); ctx.translate(w / 2, h / 2); ctx.rotate(-Math.PI / 2); ctx.fillStyle = settings.titleColor || '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `italic ${settings.titleWeight || 600} ${fontSize}px ${typeface}`; ctx.fillText(settings.title || 'Untitled', 0, 0, h * .82); ctx.restore()
     }
-    loadTextureImage(settings.spineImage, map, draw)
+    loadTextureImage(settings.spineImage, map, (image) => { draw(image); drawComponents(ctx, settings.spineComponents, width, height, settings.titleColor || '#fff') }, settings.onTextureError)
   }, width, height)
 }
 function backTexture(settings: any) {
@@ -91,9 +98,9 @@ function backTexture(settings: any) {
       ctx.fillStyle = `${settings.titleColor || '#fff'}cc`; ctx.textAlign = 'center'; ctx.font = `italic 34px ${FONT_MAP.cormorant}`; ctx.fillText(settings.title || 'Untitled', w / 2, 150)
       const words = (settings.backCopy || 'A MoonScribe edition.').split(/\s+/); const lines = []; let line = ''; ctx.font = `28px ${FONT_MAP.lora}`
       words.forEach(word => { const next = `${line} ${word}`.trim(); if (ctx.measureText(next).width > w * .68 && line) { lines.push(line); line = word } else line = next }); if (line) lines.push(line)
-      ctx.fillStyle = `${settings.titleColor || '#fff'}b8`; lines.slice(0, 12).forEach((entry, index) => ctx.fillText(entry, w / 2, h * .35 + index * 46)); ctx.globalAlpha = .62; ctx.font = `26px ${FONT_MAP.cormorant}`; ctx.fillText(settings.byline || '', w / 2, h - 120); ctx.globalAlpha = 1
+      ctx.fillStyle = `${settings.titleColor || '#fff'}b8`; lines.slice(0, 12).forEach((entry, index) => ctx.fillText(entry, w / 2, h * .35 + index * 46)); ctx.globalAlpha = .62; ctx.font = `26px ${FONT_MAP.cormorant}`; ctx.fillText(settings.byline || '', w / 2, h - 120); ctx.globalAlpha = 1; drawComponents(ctx, settings.backComponents, w, h, settings.titleColor || '#fff')
     }
-    loadTextureImage(settings.backImage, map, draw)
+    loadTextureImage(settings.backImage, map, draw, settings.onTextureError)
   })
 }
 function pageTexture() { return texture((ctx, w, h) => { ctx.fillStyle = '#eee8da'; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = 'rgba(119,91,54,.16)'; ctx.lineWidth = 2; for (let y = 12; y < h; y += 18) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke() } }) }
@@ -101,18 +108,28 @@ function boardTexture() { return texture((ctx, w, h) => { const gradient = ctx.c
 
 export default function CoverMockup3D(props) {
   const mountRef = useRef(null); const sceneRef = useRef(null); const propsRef = useRef(props); propsRef.current = props
+  const viewStateRef = useRef({ yaw: 0, pitch: .08, zoom: 1 })
+  const contextLossesRef = useRef(0)
+  const textureFailuresRef = useRef(0)
+  const reportStatus = useCallback((status, error = null) => propsRef.current.onStatusChange?.(status, rendererDiagnostics({ webgl: status !== 'fallback', quality: propsRef.current.quality || 'balanced', contextLosses: contextLossesRef.current, textureFailures: textureFailuresRef.current, lastError: error })), [])
   useEffect(() => {
     const mount = mountRef.current; if (!mount) return undefined
+    if (props.reducedMotion || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) propsRef.current.autoSpin = false
+    if (!canUseWebGL()) { mount.dataset.webglUnavailable = 'true'; reportStatus('fallback', 'webgl-unavailable'); return undefined }
+    reportStatus('loading')
     const scene = new THREE.Scene(); const camera = new THREE.PerspectiveCamera(30, 1, .1, 100); camera.position.set(0, .05, 8.9)
     let renderer
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
     } catch {
       mount.dataset.webglUnavailable = 'true'
+      reportStatus('fallback', 'renderer-init-failed')
       return undefined
     }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; mount.appendChild(renderer.domElement)
-    const book = new THREE.Group(); scene.add(book); const width = 2.7, height = width * ((Number(propsRef.current.trimHeightMm) || 228.6) / (Number(propsRef.current.trimWidthMm) || 152.4)); const physicalSpineMm = Number(propsRef.current.spineMm) || 2; const previewSpineMm = Math.max(8, physicalSpineMm); const depth = Math.max(.22, width * (previewSpineMm / (Number(propsRef.current.trimWidthMm) || 152.4))); const pages = pageTexture(); const board = boardTexture(); const material = (map, roughness = .7) => new THREE.MeshStandardMaterial({ map, roughness, metalness: .03 })
+    const quality = props.quality || 'balanced'
+    const pixelCap = quality === 'crisp' ? 2 : quality === 'battery-saver' ? 1 : 1.5
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, pixelCap)); renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.shadowMap.enabled = quality !== 'battery-saver'; renderer.shadowMap.type = THREE.PCFSoftShadowMap; mount.appendChild(renderer.domElement)
+    const book = new THREE.Group(); book.position.x = -.7; scene.add(book); const width = 2.7, height = width * ((Number(propsRef.current.trimHeightMm) || 228.6) / (Number(propsRef.current.trimWidthMm) || 152.4)); const physicalSpineMm = Number(propsRef.current.spineMm) || 2; const previewSpineMm = Math.max(8, physicalSpineMm); const depth = Math.max(.22, width * (previewSpineMm / (Number(propsRef.current.trimWidthMm) || 152.4))); const pages = pageTexture(); const board = boardTexture(); const material = (map, roughness = .7) => new THREE.MeshStandardMaterial({ map, roughness, metalness: .03 })
     const block = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), Array.from({ length: 6 }, () => material(pages))); block.castShadow = true; block.receiveShadow = true; book.add(block)
     const boardGeometry = new THREE.BoxGeometry(width + .045, height + .09, .075)
     // BoxGeometry order: +x, -x, +y, -y, +z, -z. Keep artwork on the
@@ -131,14 +148,14 @@ export default function CoverMockup3D(props) {
     const spine = new THREE.Mesh(new THREE.BoxGeometry(.055, height + .09, depth + .04), spineMaterials); spine.userData.surface = 'spine'; spine.position.x = -width / 2 - .045; spine.castShadow = true; book.add(spine)
     const bandMaterial = new THREE.MeshStandardMaterial({ color: '#9a7a43', roughness: .45 }); const headband = new THREE.Mesh(new THREE.BoxGeometry(.075, .035, depth), bandMaterial); headband.position.set(-width / 2 + .03, height / 2 + .012, 0); book.add(headband); const tailband = headband.clone(); tailband.position.y = -height / 2 - .012; book.add(tailband)
     const key = new THREE.DirectionalLight('#fff0dc', 3.1); key.position.set(-3, 5, 6); key.castShadow = true; scene.add(key); const rim = new THREE.DirectionalLight('#9fb5ff', 1.8); rim.position.set(4, 1, -4); scene.add(rim); const ambient = new THREE.AmbientLight('#90a0c5', 1.35); scene.add(ambient); const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 20), new THREE.ShadowMaterial({ opacity: .32 })); floor.rotation.x = -Math.PI / 2; floor.position.y = -2.45; floor.receiveShadow = true; scene.add(floor)
-    const refresh = () => { const settings = propsRef.current; const swap = (mesh, map, materialIndex = null) => { const target = materialIndex === null ? mesh.material : mesh.material[materialIndex]; const old = target.map; target.map = map; target.needsUpdate = true; if (old !== pages) old?.dispose() }; swap(front, frontTexture(settings), 4); swap(back, backTexture(settings), 4); swap(spine, spineTexture(settings, (depth + .04) / (height + .09)), 1) }
-    let down = false, lastX = 0, lastY = 0, yaw = -.46, pitch = .08, frame, previous = performance.now()
-    let zoomLevel = 1
+    const refresh = () => { const settings = { ...propsRef.current, onTextureError: () => { textureFailuresRef.current += 1; reportStatus('ready', 'texture-load-failed') } }; const swap = (mesh, map, materialIndex = null) => { const target = materialIndex === null ? mesh.material : mesh.material[materialIndex]; const old = target.map; target.map = map; target.needsUpdate = true; if (old !== pages) old?.dispose() }; swap(front, frontTexture(settings), 4); swap(back, backTexture(settings), 4); swap(spine, spineTexture(settings, (depth + .04) / (height + .09)), 1) }
+    let down = false, lastX = 0, lastY = 0, yaw = viewStateRef.current.yaw, pitch = viewStateRef.current.pitch, frame, previous = performance.now()
+    let zoomLevel = viewStateRef.current.zoom
     let fitCameraDistance = camera.position.z
     const pointers = new Map<number, { x: number; y: number }>()
     let pinchDistance = 0
     const applyZoom = () => { camera.position.z = fitCameraDistance / zoomLevel; camera.updateProjectionMatrix() }
-    const focusSurface = surface => { yaw = surface === 'back' ? Math.PI : surface === 'spine' ? Math.PI / 2 : -.08; pitch = .04 }
+    const focusSurface = surface => { yaw = surface === 'back' ? Math.PI : surface === 'spine' ? Math.PI / 2 : 0; pitch = .04 }
     const applyEnvironment = () => {
       const environment = propsRef.current.environment || 'studio'
       const lighting = {
@@ -151,7 +168,7 @@ export default function CoverMockup3D(props) {
       key.color.set(lighting[0]); rim.color.set(lighting[1]); ambient.color.set(lighting[2])
       key.intensity = lighting[3]; rim.intensity = lighting[4]; ambient.intensity = lighting[5]; floor.material.opacity = lighting[6]
     }
-    refresh(); focusSurface(propsRef.current.activeSurface); applyEnvironment(); sceneRef.current = { refresh, focusSurface, applyEnvironment }
+    refresh(); focusSurface(propsRef.current.surface || propsRef.current.activeSurface); applyEnvironment(); sceneRef.current = { refresh, focusSurface, applyEnvironment }
     const resize = () => {
       const rect = mount.getBoundingClientRect()
       const aspect = Math.max(.2, rect.width / Math.max(1, rect.height))
@@ -170,17 +187,30 @@ export default function CoverMockup3D(props) {
     const onZoomStep = (event: any) => setZoom(zoomLevel + Number(event.detail || 0))
     const onDown = event => { pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.size === 2) { const points = [...pointers.values()]; pinchDistance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); down = false; return } down = true; travel = 0; lastX = event.clientX; lastY = event.clientY; mount.setPointerCapture?.(event.pointerId); mount.style.cursor = 'grabbing' }
     const onMove = event => { if (pointers.has(event.pointerId)) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.size === 2) { const points = [...pointers.values()]; const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y); if (pinchDistance > 0) setZoom(zoomLevel * (distance / pinchDistance)); pinchDistance = distance; return } if (!down) return; const dx = event.clientX - lastX; const dy = event.clientY - lastY; travel += Math.abs(dx) + Math.abs(dy); yaw += dx * .009; pitch = Math.max(-.45, Math.min(.45, pitch - dy * .006)); lastX = event.clientX; lastY = event.clientY }
-    const onUp = event => { pointers.delete(event.pointerId); if (pointers.size < 2) pinchDistance = 0; if (down && travel < 7) { const surface = surfaceAt(event); if (surface) propsRef.current.onSurfaceSelect?.(surface) } down = false; mount.style.cursor = 'grab' }
+    const releasePointer = event => {
+      const pointerId = event?.pointerId
+      if (pointerId != null) pointers.delete(pointerId)
+      down = false
+      pinchDistance = 0
+      if (pointerId != null && mount.hasPointerCapture?.(pointerId)) {
+        try { mount.releasePointerCapture(pointerId) } catch { /* pointer ended before blur cleanup */ }
+      }
+      mount.style.cursor = 'grab'
+    }
+    const onUp = event => { pointers.delete(event.pointerId); if (pointers.size < 2) pinchDistance = 0; if (down && travel < 7) { const surface = surfaceAt(event); if (surface) propsRef.current.onSurfaceSelect?.(surface) } releasePointer(event) }
     const onWheel = event => { event.preventDefault(); setZoom(zoomLevel * (event.deltaY < 0 ? 1.08 : .92)) }
-    const onDouble = () => { yaw = -.46; pitch = .08 }
+    const onDouble = () => { yaw = 0; pitch = .08 }
     const onContext = event => { const surface = surfaceAt(event); if (!surface) return; event.preventDefault(); propsRef.current.onSurfaceContext?.(event, surface) }
-    mount.addEventListener('pointerdown', onDown); mount.addEventListener('pointermove', onMove); mount.addEventListener('pointerup', onUp); mount.addEventListener('pointercancel', onUp); mount.addEventListener('wheel', onWheel, { passive: false }); mount.addEventListener('moonscribe:designer-zoom-step', onZoomStep); mount.addEventListener('dblclick', onDouble); mount.addEventListener('contextmenu', onContext)
-    const draw = now => { const elapsed = now - previous; previous = now; if (!down && propsRef.current.autoSpin) yaw += elapsed * .00032; book.rotation.set(pitch, yaw, 0); renderer.render(scene, camera); frame = requestAnimationFrame(draw) }; frame = requestAnimationFrame(draw)
-    return () => { cancelAnimationFrame(frame); observer.disconnect(); mount.removeEventListener('pointerdown', onDown); mount.removeEventListener('pointermove', onMove); mount.removeEventListener('pointerup', onUp); mount.removeEventListener('pointercancel', onUp); mount.removeEventListener('wheel', onWheel); mount.removeEventListener('moonscribe:designer-zoom-step', onZoomStep); mount.removeEventListener('dblclick', onDouble); mount.removeEventListener('contextmenu', onContext); mount.replaceChildren(); renderer.dispose(); pages.dispose(); board.dispose(); block.geometry.dispose(); boardGeometry.dispose(); frontMaterials.forEach((entry) => entry.dispose()); backMaterials.forEach((entry) => entry.dispose()); spine.geometry.dispose(); spineMaterials.forEach((entry) => entry.dispose()); headband.geometry.dispose(); floor.geometry.dispose() }
-  }, [])
+    const onContextLost = event => { event.preventDefault(); contextLossesRef.current += 1; reportStatus('context-lost', 'webgl-context-lost'); releasePointer(event) }
+    const onContextRestored = () => { reportStatus('ready'); sceneRef.current?.refresh() }
+    const onBlur = () => releasePointer({})
+    mount.addEventListener('pointerdown', onDown); mount.addEventListener('pointermove', onMove); mount.addEventListener('pointerup', onUp); mount.addEventListener('pointercancel', onUp); mount.addEventListener('wheel', onWheel, { passive: false }); mount.addEventListener('moonscribe:designer-zoom-step', onZoomStep); mount.addEventListener('dblclick', onDouble); mount.addEventListener('contextmenu', onContext); renderer.domElement.addEventListener('webglcontextlost', onContextLost); renderer.domElement.addEventListener('webglcontextrestored', onContextRestored); window.addEventListener('blur', onBlur)
+    const draw = now => { const elapsed = now - previous; previous = now; if (!document.hidden && !down && propsRef.current.autoSpin && !propsRef.current.reducedMotion) yaw += elapsed * .00032; book.rotation.set(pitch, yaw, 0); renderer.render(scene, camera); frame = requestAnimationFrame(draw) }; frame = requestAnimationFrame(draw); reportStatus('ready')
+    return () => { viewStateRef.current = { yaw, pitch, zoom: zoomLevel }; cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('blur', onBlur); mount.removeEventListener('pointerdown', onDown); mount.removeEventListener('pointermove', onMove); mount.removeEventListener('pointerup', onUp); mount.removeEventListener('pointercancel', onUp); mount.removeEventListener('wheel', onWheel); mount.removeEventListener('moonscribe:designer-zoom-step', onZoomStep); mount.removeEventListener('dblclick', onDouble); mount.removeEventListener('contextmenu', onContext); renderer.domElement.removeEventListener('webglcontextlost', onContextLost); renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored); mount.replaceChildren(); renderer.dispose(); pages.dispose(); board.dispose(); block.geometry.dispose(); boardGeometry.dispose(); frontMaterials.forEach((entry) => entry.dispose()); backMaterials.forEach((entry) => entry.dispose()); spine.geometry.dispose(); spineMaterials.forEach((entry) => entry.dispose()); headband.geometry.dispose(); floor.geometry.dispose() }
+  }, [props.trimWidthMm, props.trimHeightMm, props.spineMm, props.quality, props.reducedMotion, reportStatus])
   useEffect(() => { sceneRef.current?.refresh() }, [props.title, props.subtitle, props.byline, props.coverStyle, props.gradient, props.coverImage, props.frontCrop, props.backImage, props.backCrop, props.spineImage, props.spineCrop, props.ornament, props.titleColor, props.titleFont, props.titleSize, props.titleWeight, props.titleSpacing, props.titleTransform, props.showText, props.showBackText, props.showSpineText])
   useEffect(() => { sceneRef.current?.focusSurface(props.activeSurface) }, [props.activeSurface])
   useEffect(() => { sceneRef.current?.applyEnvironment() }, [props.environment])
   const stepZoom = (amount: number) => mountRef.current?.dispatchEvent(new CustomEvent('moonscribe:designer-zoom-step', { detail: amount }))
-  return <div ref={mountRef} className={`cover-mockup-3d cover-mockup-webgl environment-${props.environment || 'studio'}`} style={{ cursor: 'grab' }}><div className="cover-mockup-zoom" aria-label="Designer zoom controls"><button type="button" onClick={() => stepZoom(.1)} aria-label="Zoom in">+</button><button type="button" onClick={() => stepZoom(-.1)} aria-label="Zoom out">−</button></div><span className="cover-mockup-3d-hint">drag to inspect · pinch or wheel to zoom · double-click to reset</span></div>
+  return <div ref={mountRef} className={`cover-mockup-3d cover-mockup-webgl environment-${props.environment || 'studio'}`} style={{ cursor: 'grab' }}><div className="cover-mockup-zoom" aria-label="Designer zoom controls"><button type="button" onClick={() => stepZoom(.1)} aria-label="Zoom in">+</button><button type="button" onClick={() => stepZoom(-.1)} aria-label="Zoom out">−</button><button type="button" onClick={() => { sceneRef.current?.focusSurface(props.activeSurface || 'front') }} aria-label="Reset rotation">↺</button></div><span className="cover-mockup-3d-hint">drag to inspect · pinch or wheel to zoom · double-click to reset</span></div>
 }

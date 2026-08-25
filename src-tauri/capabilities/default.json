@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "MoonScribe desktop window permissions",
   "windows": ["main"],
-  "permissions": ["core:default", "opener:default", "deep-link:default", "updater:default", "process:allow-restart"]
+  "permissions": ["core:default", "opener:default", "deep-link:default", "updater:default", "process:allow-restart", "notification:default"]
 }

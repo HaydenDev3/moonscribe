@@ -106,18 +106,25 @@ export default function Relationships({ novelId, embedded }) {
           <div className="rel-list">
             {relationships.map((r) => (
               <div className="rel-item" key={r.id} onContextMenu={(e) => relMenu(e, r)}>
+                <div className="rel-card-head">
+                  <span className="rel-card-kicker"><Icon icon="fa-solid fa-link" /> STORY THREAD</span>
+                  <span className="rel-card-index">{String(relationships.indexOf(r) + 1).padStart(2, '0')}</span>
+                </div>
                 <div className="names">
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                     <span className="rel-avatar" style={{ background: charColor(r.a) }}>{initials(charName(r.a))}</span>
-                    {charName(r.a)}
+                    <span className="rel-person-name">{charName(r.a)}</span>
                   </span>
-                  <span className="rel-symbol">❦</span>
+                  <span className="rel-thread-line"><i /><span className="rel-symbol">❦</span><i /></span>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                     <span className="rel-avatar" style={{ background: charColor(r.b) }}>{initials(charName(r.b))}</span>
-                    {charName(r.b)}
+                    <span className="rel-person-name">{charName(r.b)}</span>
                   </span>
                 </div>
-                {r.description && <div className="rel-desc">— {r.description}</div>}
+                <div className="rel-card-body">
+                  <div className="rel-desc">{r.description || 'This connection is waiting for its first note.'}</div>
+                  {!r.description && <span className="rel-unwritten">Unwritten</span>}
+                </div>
                 {r.stages?.length > 0 && (
                   <ol className="rel-timeline">
                     {r.stages.map((s, i) => (
@@ -128,9 +135,12 @@ export default function Relationships({ novelId, embedded }) {
                     ))}
                   </ol>
                 )}
-                <div className="actions-row">
-                  <button className="button button-quiet" onClick={() => setEditing({ ...r })}>Edit</button>
-                  <button className="button button-quiet" onClick={() => setDeleting(r)}>✕</button>
+                <div className="rel-card-footer">
+                  <span className="rel-stage-count">{r.stages?.length || 0} {r.stages?.length === 1 ? 'chapter' : 'stages'} mapped</span>
+                  <div className="actions-row">
+                    <button className="button button-quiet" onClick={() => setEditing({ ...r })}><Icon icon="fa-solid fa-pen" /> Edit thread</button>
+                    <button className="button button-quiet rel-delete" aria-label="Delete relationship" onClick={() => setDeleting(r)}><Icon icon="fa-solid fa-xmark" /></button>
+                  </div>
                 </div>
               </div>
             ))}

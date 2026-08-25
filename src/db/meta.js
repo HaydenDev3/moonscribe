@@ -1,6 +1,7 @@
-import { getDB } from './db'
+import { getDB, waitForNativeHydration } from './db'
 
 export async function getMeta(key, fallback = null) {
+  await waitForNativeHydration()
   const db = await getDB()
   const row = await db.get('meta', key)
   return row ? row.value : fallback

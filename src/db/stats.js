@@ -104,6 +104,15 @@ export async function todaySessionStats(novelId, now = new Date()) {
   return { words, minutes }
 }
 
+export async function recentSessions(novelId, limit = 8) {
+  const db = await getDB()
+  const all = await db.getAllFromIndex('stats', 'by-novel', novelId)
+  return all
+    .filter((row) => row.kind === 'session')
+    .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))
+    .slice(0, limit)
+}
+
 export async function monthlyWordsAllNovels() {
   const db = await getDB()
   const all = await db.getAll('stats')

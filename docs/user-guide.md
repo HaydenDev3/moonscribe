@@ -43,3 +43,29 @@ If a form or editor offers recovered content, review it before discarding. For a
 ## Accessibility and responsive use
 
 Keyboard navigation, focus styles, reduced motion, contrast, readable font, larger targets, transparency reduction, and colour-vision preferences are available in varying depth. Phone layouts use fluid editing instead of attempting to preserve desktop paper geometry. Critical release QA still requires screen-reader and full device-matrix verification.
+# MoonScribe user guide · 1.1
+
+> **Write softly. Keep every version.**
+
+MoonScribe is a local-first writing studio. The interface is intentionally compact: the manuscript tree is the source of truth for chapters, folders, and media, while the editor remains the place for uninterrupted writing.
+
+## The manuscript tree
+
+- New folders are created at the manuscript root.
+- Drag a chapter or folder onto another folder to place it inside.
+- While dragging, use **Move outside folder** to return an item to the manuscript root.
+- Media is a normal manuscript folder. Its children use image thumbnails and can be opened or deleted from the context menu.
+
+Structural folder moves are treated as outline changes and are merged automatically. Prose edits still receive a conflict review when two devices changed the same chapter.
+
+## Designer controls
+
+The **Guides** control toggles print-safe guides on the active preview. It is independent from the book environment, trim size, surface selector, freeze, and full-screen controls.
+
+## Motion and sound
+
+Open Settings → Sound to enable or disable interface categories and adjust their volumes independently. Motion follows the system reduced-motion preference, so animations become still when requested.
+
+## Offline and sync
+
+Write offline, export locally, and reconnect when ready. Sync status is shown in the account pill. A sync conflict is reserved for meaningful content differences; ordinary folder reordering should never interrupt the writing session.

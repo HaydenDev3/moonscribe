@@ -1,16 +1,50 @@
 let audioContext
 let ambience = null
+let ambienceFadeTimer = null
+const audioCache = new Map()
 
-function getContext() {
+const SOUND_FILES = {
+  'ui.click': '/sounds/ui/soundshelfstudio-ui-tap-light-513023.mp3',
+  'ui.toggle': '/sounds/ui/liecio-menu_beep_accept_soft-533780.mp3',
+  'ui.error': '/sounds/ui/soundshelfstudio-ui-error-pop-515668.mp3',
+  'ui.navigation': '/sounds/ui/47313572-ui-navigation-sound-270299.mp3',
+  'ui.open': '/sounds/ui/soundshelfstudio-ui-pop-up-open-516939.mp3',
+  'ui.close': '/sounds/ui/soundshelfstudio-ui-menu-slide-out-516941.mp3',
+  'ui.focus': '/sounds/ui/soundshelfstudio-ui-focus-519789.mp3',
+  'ui.drag': '/sounds/ui/soundshelfstudio-ui-drag-drop-518781.mp3',
+  'ui.cancel': '/sounds/ui/47313572-ui-sound-off-270300.mp3',
+  'ui.trash': '/sounds/ui/litupsubway-ui-trash-518621.mp3',
+  'writing.key': '/sounds/ui/liecio-menu_beep_short_snap-533778.mp3',
+  'writing.return': '/sounds/ui/soundshelfstudio-ui-swipe-confirm-522221.mp3',
+  'notification.normal': '/sounds/ui/soundshelfstudio-ui-notification-pop-minimal-523149.mp3',
+  'notification.success': '/sounds/ui/soundshelfstudio-ui-app-notification-524745.mp3',
+  'notification.warning': '/sounds/ui/soundshelfstudio-ui-soft-glass-ping-526562.mp3',
+  milestone: '/sounds/ui/soundshelfstudio-ui-swipe-navigation-soft-523625.mp3',
+  startup: '/sounds/ui/47313572-startup-sound-variation-6-316850.mp3',
+}
+
+function playFile(event, volume) {
+  if (typeof window === 'undefined' || !volume || !SOUND_FILES[event]) return false
+  const source = SOUND_FILES[event]
+  let audio = audioCache.get(source)
+  if (!audio) { audio = new Audio(source); audio.preload = 'auto'; audioCache.set(source, audio) }
+  audio.pause(); audio.currentTime = 0; audio.volume = Math.max(0, Math.min(1, volume))
+  audio.play().catch(() => {})
+  return true
+}
+
+function getContext(create = true) {
   if (typeof window === 'undefined') return null
+  if (create && window.navigator?.userActivation && !window.navigator.userActivation.hasBeenActive) return null
   const AudioContext = window.AudioContext || window.webkitAudioContext
   if (!AudioContext) return null
+  if (!audioContext && !create) return null
   audioContext ||= new AudioContext()
   return audioContext
 }
 
 export function unlockAudio() {
-  const ctx = getContext()
+  const ctx = getContext(true)
   if (ctx?.state === 'suspended') ctx.resume().catch(() => {})
 }
 
@@ -54,6 +88,7 @@ export function playFeedback(event, {
   channelVolume = 100,
 } = {}) {
   if (!masterEnabled || !channelEnabled) return
+  if (playFile(event, level(masterVolume, 35) * level(channelVolume, 100))) return
   const profile = EFFECTS[event] || EFFECTS['ui.click']
   tone({ ...profile(), volume: level(masterVolume, 35) * level(channelVolume, 100) })
 }
@@ -64,60 +99,44 @@ export function playAppSound(kind = 'click', volume = 35) {
   playFeedback(event, { masterVolume: volume })
 }
 
-const AMBIENCE = {
-  moonlit: { bed: 164.81, shimmer: 329.63, pulse: 82.41, filter: 780 },
-  rainglass: { bed: 174.61, shimmer: 392, pulse: 98, filter: 1100 },
-  hearth: { bed: 146.83, shimmer: 293.66, pulse: 73.42, filter: 600 },
-  forest: { bed: 130.81, shimmer: 261.63, pulse: 65.41, filter: 920 },
-  ocean: { bed: 110, shimmer: 220, pulse: 55, filter: 720 },
-  library: { bed: 155.56, shimmer: 311.13, pulse: 77.78, filter: 680 },
-  cafe: { bed: 146.83, shimmer: 349.23, pulse: 87.31, filter: 860 },
+const AMBIENCE_TRACKS = {
+  moonlit: '/sounds/room-tone.mp3',
+  rainglass: '/sounds/rain-on-glass.mp3',
+  hearth: '/sounds/fireplace.mp3',
+  forest: '/sounds/forest-night.mp3',
+  ocean: '/sounds/room-tone.mp3',
+  library: '/sounds/library.mp3',
+  cafe: '/sounds/room-tone.mp3',
+  clockwork: '/sounds/alex_jauk-clock-ticking-ambience-202980.mp3',
+  underwater: '/sounds/dragon-studio-deep-sea-underwater-ambience-472383.mp3',
+  treetop: '/sounds/traian1984-ambience-wind-blowing-through-trees-01-186986.mp3',
+}
+
+export function playStartupSound({ masterEnabled = true, channelEnabled = true, masterVolume = 35, channelVolume = 100 } = {}) {
+  if (!masterEnabled || !channelEnabled) return
+  playFile('startup', level(masterVolume, 35) * level(channelVolume, 100))
 }
 
 function createAmbience(mood, volume) {
-  const ctx = getContext()
-  if (!ctx) return null
-  const preset = AMBIENCE[mood] || AMBIENCE.moonlit
-  const master = ctx.createGain()
-  const bed = ctx.createOscillator()
-  const shimmer = ctx.createOscillator()
-  const pulse = ctx.createOscillator()
-  const filter = ctx.createBiquadFilter()
-  const shimmerGain = ctx.createGain()
-  const pulseGain = ctx.createGain()
-  const lfo = ctx.createOscillator()
-  const lfoGain = ctx.createGain()
-  const now = ctx.currentTime
-
-  master.gain.setValueAtTime(0.0001, now)
-  master.gain.linearRampToValueAtTime(0.11 * volume, now + 1.1)
-  filter.type = 'lowpass'
-  filter.frequency.setValueAtTime(preset.filter, now)
-  filter.Q.value = 0.3
-  bed.type = 'sine'
-  shimmer.type = 'triangle'
-  pulse.type = 'sine'
-  lfo.type = 'sine'
-  bed.frequency.setValueAtTime(preset.bed, now)
-  shimmer.frequency.setValueAtTime(preset.shimmer, now)
-  pulse.frequency.setValueAtTime(preset.pulse, now)
-  lfo.frequency.setValueAtTime(mood === 'ocean' ? 0.045 : 0.075, now)
-  shimmerGain.gain.setValueAtTime(0.028, now)
-  pulseGain.gain.setValueAtTime(0.018, now)
-  lfoGain.gain.setValueAtTime(120, now)
-
-  lfo.connect(lfoGain).connect(filter.frequency)
-  bed.connect(filter).connect(master)
-  shimmer.connect(shimmerGain).connect(master)
-  pulse.connect(pulseGain).connect(master)
-  master.connect(ctx.destination)
-  ;[bed, shimmer, pulse, lfo].forEach((node) => node.start(now))
-  return { ctx, master, nodes: [bed, shimmer, pulse, lfo] }
+  if (typeof window === 'undefined') return null
+  const audio = new Audio(AMBIENCE_TRACKS[mood] || AMBIENCE_TRACKS.moonlit)
+  audio.loop = true
+  audio.addEventListener('ended', () => {
+    // Keep looping even when a browser ignores the loop flag after a media
+    // suspension or a codec recovery.
+    if (ambience?.audio === audio) { audio.currentTime = 0; audio.play().catch(() => {}) }
+  })
+  audio.preload = 'auto'
+  audio.volume = 0
+  const play = audio.play()
+  if (play?.catch) play.catch(() => {})
+  const fadeTimer = window.setTimeout(() => {
+    audio.volume = Math.max(0, Math.min(1, volume * 0.8))
+  }, 50)
+  return { audio, fadeTimer }
 }
 
 export function startAmbientSound(volume = 35, mood = 'moonlit') {
-  const ctx = getContext()
-  if (!ctx) return
   const target = level(volume, 35)
   if (!target) return stopAmbientSound()
   const next = createAmbience(mood, target)
@@ -126,32 +145,25 @@ export function startAmbientSound(volume = 35, mood = 'moonlit') {
   ambience = next
   unlockAudio()
   if (!previous) return
-  const now = previous.ctx.currentTime
-  previous.master.gain.cancelScheduledValues(now)
-  previous.master.gain.setValueAtTime(Math.max(previous.master.gain.value, 0.0001), now)
-  previous.master.gain.linearRampToValueAtTime(0.0001, now + 0.9)
-  setTimeout(() => previous.nodes.forEach((node) => {
-    try { node.stop() } catch {
-      // Already-stopped oscillator nodes are safe to ignore.
-    }
-  }), 1000)
+  window.clearTimeout(ambienceFadeTimer)
+  previous.audio.volume = 0
+  previous.audio.pause()
+  previous.audio.currentTime = 0
+  window.clearTimeout(previous.fadeTimer)
+}
+
+export function resumeAmbientSound() {
+  if (!ambience?.audio) return
+  unlockAudio()
+  if (ambience.audio.paused) ambience.audio.play().catch(() => {})
 }
 
 export function stopAmbientSound() {
   if (!ambience) return
   const current = ambience
   ambience = null
-  const now = current.ctx.currentTime
-  try {
-    current.master.gain.cancelScheduledValues(now)
-    current.master.gain.setValueAtTime(Math.max(current.master.gain.value, 0.0001), now)
-    current.master.gain.linearRampToValueAtTime(0.0001, now + 0.45)
-    setTimeout(() => current.nodes.forEach((node) => {
-      try { node.stop() } catch {
-        // Already-stopped oscillator nodes are safe to ignore.
-      }
-    }), 550)
-  } catch {
-    // Audio contexts may be suspended or closed by the browser.
-  }
+  window.clearTimeout(ambienceFadeTimer)
+  window.clearTimeout(current.fadeTimer)
+  current.audio.pause()
+  current.audio.currentTime = 0
 }

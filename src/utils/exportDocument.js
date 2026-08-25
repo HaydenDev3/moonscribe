@@ -94,7 +94,7 @@ export function buildStyledHtml(novel, items, options = {}) {
 .title-page,.chapter,.part{width:min(100% - 32px,760px);min-height:calc(100vh - 48px);margin:24px auto;padding:12% 11%;background:var(--paper);box-shadow:0 12px 40px #342b211c}
 .title-page,.part{display:grid;place-content:center;text-align:center}.title-page h1,.part h1{font-size:clamp(2.4rem,7vw,5rem);line-height:1.02;margin:.2em 0}.eyebrow{font:600 .72rem/1.2 system-ui;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
 .byline{font-style:italic;color:var(--muted)}.chapter h2{text-align:center;font-size:2rem;line-height:1.15;margin:0 0 3em}.prose p{margin:0 0 1em}.prose blockquote{border-left:2px solid var(--rule);margin:1.5em 0;padding-left:1.25em;color:var(--muted)}
-.scene-break{text-align:center;margin:2em 0}.page-break,.pg-break,[data-page-break="true"]{break-after:page;page-break-after:always;height:0;overflow:hidden}footer{width:min(100% - 32px,760px);margin:24px auto;color:var(--muted);font:500 .8rem system-ui;text-align:center}
+.scene-break{text-align:center;margin:2em 0}.page-break,.pg-break,.pg-auto-break,[data-page-break="true"],[data-auto-page-break="true"]{break-after:page;page-break-after:always;height:0;overflow:hidden}footer{width:min(100% - 32px,760px);margin:24px auto;color:var(--muted);font:500 .8rem system-ui;text-align:center}
 @page{size:${page.w}mm ${page.h}mm;margin:${margin}mm}
 @media print{body{background:white}.title-page,.chapter,.part{width:auto;min-height:auto;margin:0;padding:0;box-shadow:none;break-after:page}.chapter:last-of-type{break-after:auto}footer{display:none}}
 </style></head><body>${frontMatter}${sections}${stats}</body></html>`

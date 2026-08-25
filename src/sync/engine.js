@@ -8,6 +8,7 @@ import { toWire, fromWire } from './serialize'
 import { todayKey, addTodayWords } from '../db/stats'
 import { hasDesktopCredentialVault, readDesktopCredential, writeDesktopCredential } from '../security/credentials'
 import { apiBaseUrl, websocketOrigin } from '../api/config'
+import { trashRecord } from '../db/trash'
 
 let statusListeners = []
 // Sync requests can arrive together (initial app sync, focus, invite accept).
@@ -94,6 +95,16 @@ export async function setConfig(patch) {
   if (patch.state !== undefined) await setMeta('syncState', next.state)
   if (patch.accountId !== undefined) await setMeta('syncAccountId', next.accountId)
   return next
+}
+
+export async function pendingSyncCount() {
+  const db = await getDB()
+  let count = 0
+  for (const store of [...listStores(), 'tombstones']) {
+    const rows = await db.getAll(store)
+    count += rows.filter((row) => row?.pendingSync).length
+  }
+  return count
 }
 
 function apiBase(cfg) {
@@ -256,6 +267,20 @@ export function recordsDiffer(a, b) {
   return stableString(a) !== stableString(b)
 }
 
+function isOutlineOnlyChapterChange(a, b) {
+  if (!a || !b || a.store !== undefined || b.store !== undefined) return false
+  const strip = (record) => {
+    const copy = { ...record }
+    delete copy.parentId
+    delete copy.order
+    delete copy.pendingSync
+    delete copy.updatedAt
+    delete copy.rev
+    return JSON.stringify(copy)
+  }
+  return strip(a) === strip(b)
+}
+
 function emitConflicts(list) {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('moonscribe:conflicts', { detail: { count: list.length } }))
@@ -263,11 +288,29 @@ function emitConflicts(list) {
 }
 
 export async function listConflicts() {
-  return (await getMeta('conflicts', [])) || []
+  const list = (await getMeta('conflicts', [])) || []
+  if (!list.length) return list
+  const db = await getDB()
+  const kept = []
+  for (const conflict of list) {
+    const novelId = conflict.novelId || conflict.mine?.novelId || conflict.theirs?.novelId
+    const novel = novelId ? await db.get('novels', novelId) : null
+    if (!novel?.sharedRole) kept.push(conflict)
+  }
+  if (kept.length !== list.length) {
+    await setMeta('conflicts', kept)
+    emitConflicts(kept)
+  }
+  return kept
 }
 
 async function recordConflict(store, id, mine, theirs) {
   const list = await listConflicts()
+  const existing = list.find((c) => c.store === store && c.id === id)
+  // Pulls can replay the same remote row while a push is in flight. Do not
+  // replace the active comparison card with an identical conflict; doing so
+  // made the dialog feel like it was reopening every second.
+  if (existing && stableString(existing.mine) === stableString(mine) && stableString(existing.theirs) === stableString(theirs)) return
   const next = list.filter((c) => !(c.store === store && c.id === id))
   next.push({
     cid: `${store}:${id}:${theirs?.updatedAt || Date.now()}`,
@@ -280,6 +323,41 @@ async function recordConflict(store, id, mine, theirs) {
   })
   await setMeta('conflicts', next)
   emitConflicts(next)
+}
+
+async function clearRecordConflict(store, id) {
+  const list = await listConflicts()
+  const next = list.filter((conflict) => !(conflict.store === store && conflict.id === id))
+  if (next.length !== list.length) {
+    await setMeta('conflicts', next)
+    emitConflicts(next)
+  }
+}
+
+async function isSharedRecord(db, record) {
+  const novelId = record?.novelId || record?.payload?.novelId
+  if (!novelId) return false
+  if (record.store === 'novels' && record.payload?.sharedRole) return true
+  const novel = await db.get('novels', novelId)
+  return Boolean(novel?.sharedRole || novel?.sharedRoom)
+}
+
+export async function markNovelShared(novelId) {
+  if (!novelId) return
+  const db = await getDB()
+  const novel = await db.get('novels', novelId)
+  if (novel && !novel.sharedRoom) await db.put('novels', { ...novel, sharedRoom: true })
+
+  // Older conflict resolution could create real chapters named
+  // "(their version)". Once this novel is shared, retire only exact-content
+  // forks so they cannot be mistaken for manuscript chapters by collaborators.
+  const chapters = await db.getAllFromIndex('chapters', 'by-novel', novelId)
+  const originals = chapters.filter((chapter) => !chapter.trashedAt && !/\s*\(their version\)\s*$/i.test(chapter.title || ''))
+  for (const fork of chapters.filter((chapter) => !chapter.trashedAt && /\s*\(their version\)\s*$/i.test(chapter.title || ''))) {
+    const baseTitle = String(fork.title || '').replace(/\s*\(their version\)\s*$/i, '').trim()
+    const duplicate = originals.find((chapter) => chapter.title.trim() === baseTitle && (chapter.content || '') === (fork.content || ''))
+    if (duplicate) await trashRecord('chapters', fork.id)
+  }
 }
 
 // choice: 'mine' | 'theirs' | 'both'
@@ -295,7 +373,7 @@ export async function resolveConflict(cid, choice) {
     // Keep mine (already local, pending). Fork theirs into a new record so both survive.
     const now = Date.now()
     const forkTitle = (t) => `${t || 'Untitled'} (their version)`
-    const fork = { ...c.theirs, id: uid(), updatedAt: now, pendingSync: true }
+    const fork = { ...c.theirs, id: uid(), updatedAt: now, pendingSync: true, conflictFork: true }
     if ('title' in fork) fork.title = forkTitle(fork.title)
     else if ('name' in fork) fork.name = forkTitle(fork.name)
     if (c.store === 'chapters') fork.order = (c.mine?.order || 0) + 0.5
@@ -357,14 +435,24 @@ export async function applyIncoming(records) {
     }
 
     const incoming = fromWire(r.payload)
+    const sharedRecord = await isSharedRecord(db, { ...r, payload: incoming })
 
     // Both sides changed since the last sync: this device has unpushed edits
     // (pendingSync) and the remote differs. Capture both rather than pick a
     // silent winner.
-    if (local && local.pendingSync && incoming && recordsDiffer(local, incoming)) {
+    if (!sharedRecord && local && local.pendingSync && incoming && recordsDiffer(local, incoming)) {
+      // Outline moves (folder membership/order) are structural metadata, not
+      // manuscript prose. Merge them automatically so dragging a folder out
+      // of another folder never interrupts the writer with a prose conflict.
+      if (r.store === 'chapters' && isOutlineOnlyChapterChange(local, incoming)) {
+        await db.put(r.store, { ...incoming, parentId: local.parentId || null, order: local.order, updatedAt: Date.now(), pendingSync: true })
+        continue
+      }
       await recordConflict(r.store, key, local, incoming)
       continue
     }
+
+    if (sharedRecord) await clearRecordConflict(r.store, key)
 
     if (local && (local.updatedAt || 0) >= r.updatedAt) {
       // Local copy is at least as new. Make sure the server gets it back.
@@ -618,7 +706,11 @@ async function shareRequest(path, { method = 'GET', body, keepalive = false } = 
   return data
 }
 
-export const createShareInvite = (novelId, role, accessDurationMs = null) => shareRequest('/api/shares/invite', { method: 'POST', body: { novelId, role, accessDurationMs } })
+export async function createShareInvite(novelId, role, accessDurationMs = null) {
+  const result = await shareRequest('/api/shares/invite', { method: 'POST', body: { novelId, role, accessDurationMs } })
+  await markNovelShared(novelId)
+  return result
+}
 export function inviteCode(value) {
   const raw = String(value || '').trim()
   if (!raw) return ''
@@ -652,6 +744,7 @@ export async function acceptShareInvite(code) {
   if (!novel) {
     throw new Error('The invitation was accepted, but the shared manuscript could not be saved on this device.')
   }
+  await markNovelShared(result.novelId)
 
   // Keep subsequent incremental syncs aligned with the completed bootstrap.
   if (bootstrap.serverTime) {
@@ -664,8 +757,16 @@ export async function acceptShareInvite(code) {
 export const listNovelMembers = (novelId) => shareRequest(`/api/shares?novelId=${encodeURIComponent(novelId)}`)
 export const revokeNovelMember = (novelId, memberId) => shareRequest('/api/shares/revoke', { method: 'POST', body: { novelId, memberId } })
 export const updateShareRoom = (novelId, settings) => shareRequest('/api/shares/room', { method: 'POST', body: { novelId, ...settings } })
-export const updatePresence = (novelId, chapterId, context = {}) => shareRequest('/api/shares/presence', { method: 'POST', body: { novelId, chapterId, ...context }, keepalive: context.status === 'offline' })
-export const clearPresence = (novelId, chapterId = null, context = {}) => shareRequest('/api/shares/presence', { method: 'POST', body: { novelId, chapterId, status: 'offline', activity: 'viewing', workspace: context.workspace, tabName: context.tabName, lineNumber: null, cursorOffset: null }, keepalive: true })
+const presenceSessionKey = 'moonscribe.collaboration.session'
+export const getPresenceSessionId = () => {
+  try {
+    let value = globalThis.sessionStorage?.getItem(presenceSessionKey)
+    if (!value) { value = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`; globalThis.sessionStorage?.setItem(presenceSessionKey, value) }
+    return value
+  } catch { return `fallback-${Date.now()}-${Math.random().toString(36).slice(2)}` }
+}
+export const updatePresence = (novelId, chapterId, context = {}) => shareRequest('/api/shares/presence', { method: 'POST', body: { novelId, chapterId, sessionId: getPresenceSessionId(), ...context }, keepalive: context.status === 'offline' })
+export const clearPresence = (novelId, chapterId = null, context = {}) => shareRequest('/api/shares/presence', { method: 'POST', body: { novelId, chapterId, sessionId: getPresenceSessionId(), status: 'offline', activity: 'viewing', workspace: context.workspace, tabName: context.tabName, lineNumber: null, cursorOffset: null }, keepalive: true })
 export const listPresence = (novelId) => shareRequest(`/api/shares/presence?novelId=${encodeURIComponent(novelId)}`)
 
 export function publishLiveRecord(record) {
@@ -677,7 +778,8 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
   const cfg = await getConfig()
   if (!cfg.server || !cfg.token || !novelId || typeof WebSocket === 'undefined') return () => {}
   const base = apiBase(cfg)
-  const wsUrl = websocketOrigin(base) + `/ws/presence?novelId=${encodeURIComponent(novelId)}&token=${encodeURIComponent(cfg.token)}`
+  const sessionId = getPresenceSessionId()
+  const wsUrl = websocketOrigin(base) + `/ws/presence?novelId=${encodeURIComponent(novelId)}&token=${encodeURIComponent(cfg.token)}&sessionId=${encodeURIComponent(sessionId)}`
   let closed = false
   let retryTimer = null
   let retryAttempt = 0
@@ -694,10 +796,15 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
     if (String(record?.novelId || '') !== String(novelId)) return
     if (!sendRecord(record)) pendingRecords.set(`${record.store}:${record.id}`, record)
   }
+  const publishPresence = (event) => {
+    if (String(event?.detail?.novelId || '') !== String(novelId) || socket?.readyState !== WebSocket.OPEN) return
+    socket.send(JSON.stringify({ type: 'presence.update', protocolVersion: 1, roomId: String(novelId), sessionId, presence: { ...event.detail.context, clientVersion: import.meta.env?.VITE_APP_VERSION || 'web' } }))
+  }
   window.addEventListener('moonscribe:record-written', publishRecord)
+  window.addEventListener('moonscribe:presence-update', publishPresence)
 
   const connectSocket = () => {
-    if (closed || !online) return
+    if (closed || !online || socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return
     window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: retryAttempt ? 'reconnecting' : 'connecting', novelId } }))
     socket = new WebSocket(wsUrl)
     socket.addEventListener('open', () => {
@@ -705,13 +812,15 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
       for (const [key, record] of pendingRecords) {
         if (sendRecord(record)) pendingRecords.delete(key)
       }
+      const latest = globalThis.__moonscribeLatestPresence
+      if (latest?.novelId === novelId) publishPresence({ detail: latest })
       window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: 'connected', novelId } }))
     })
     socket.addEventListener('message', async (event) => {
       try {
         const data = JSON.parse(event.data)
-        if (data?.type === 'presence') onMessage?.(data.people || [])
-        if (data?.type === 'record:update' && data.record) {
+        if (data?.type === 'presence' || data?.type === 'room.snapshot') onMessage?.(data.people || [])
+        if ((data?.type === 'record:update' || data?.type === 'document.update') && data.record) {
           onRecord?.(data.record)
           window.dispatchEvent(new CustomEvent('moonscribe:remote-record', { detail: data.record }))
           await applyIncoming([data.record])
@@ -726,9 +835,10 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
         // Ignore malformed events and keep the connection alive.
       }
     })
-    socket.addEventListener('close', () => {
+    socket.addEventListener('close', (event) => {
       if (closed) return
-      window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: 'reconnecting', novelId } }))
+      const reason = event?.reason || (event?.code ? `Socket closed (${event.code}).` : 'The collaboration connection closed.')
+      window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: 'reconnecting', novelId, detail: reason } }))
       const delay = Math.min(30000, 800 * (2 ** Math.min(retryAttempt++, 6))) + Math.round(Math.random() * 250)
       retryTimer = setTimeout(connectSocket, delay)
     })
@@ -739,7 +849,7 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
   }
 
   const onOnline = () => { online = true; retryAttempt = 0; connectSocket() }
-  const onOffline = () => { online = false; clearTimeout(retryTimer); try { socket?.close() } catch {} ; window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: 'offline', novelId } })) }
+  const onOffline = () => { online = false; clearTimeout(retryTimer); try { socket?.close() } catch { /* socket may already be closed */ } ; window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: 'offline', novelId } })) }
   window.addEventListener('online', onOnline)
   window.addEventListener('offline', onOffline)
 
@@ -747,6 +857,7 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
   return () => {
     closed = true
     window.removeEventListener('moonscribe:record-written', publishRecord)
+    window.removeEventListener('moonscribe:presence-update', publishPresence)
     window.removeEventListener('online', onOnline)
     window.removeEventListener('offline', onOffline)
     clearTimeout(retryTimer)

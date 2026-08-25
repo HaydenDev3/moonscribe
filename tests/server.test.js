@@ -145,7 +145,30 @@ describe('accounts', () => {
   it('reports which authentication providers are configured', async () => {
     const response = await get('/api/auth/status')
     expect(response.status).toBe(200)
-    expect(await response.json()).toMatchObject({ online: true, emailAuth: true, appOrigin: 'http://localhost:5173' })
+    expect(await response.json()).toMatchObject({ online: true, emailAuth: true, passkeyAuth: true, appOrigin: 'http://localhost:5173' })
+  })
+
+  it('issues expiring passkey authentication challenges', async () => {
+    const response = await post('/api/auth/passkey/options', {})
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.challengeId).toBeTruthy()
+    expect(body.options.challenge).toBeTruthy()
+    expect(body.options.rpId).toBe('localhost')
+    const stored = db.prepare('SELECT purpose, challenge, expires_at, used_at FROM webauthn_challenges WHERE id = ?').get(body.challengeId)
+    expect(stored).toMatchObject({ purpose: 'authentication', challenge: body.options.challenge, used_at: null })
+    expect(stored.expires_at).toBeGreaterThan(Date.now())
+  })
+
+  it('requires an authenticated account before issuing passkey registration options', async () => {
+    expect((await post('/api/auth/passkeys/register/options', {})).status).toBe(401)
+    const account = await register('passkey-writer')
+    const response = await post('/api/auth/passkeys/register/options', {}, account.body.token)
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.options.user.name).toBe('passkey-writer')
+    expect(body.options.authenticatorSelection).toMatchObject({ residentKey: 'required', userVerification: 'required' })
+    expect(db.prepare('SELECT user_id, purpose FROM webauthn_challenges WHERE id = ?').get(body.challengeId)).toMatchObject({ user_id: account.body.accountId, purpose: 'registration' })
   })
 
   it('uses a trusted development tunnel as the browser-visible app origin', async () => {

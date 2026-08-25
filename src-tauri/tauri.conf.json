@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "MoonScribe",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "identifier": "com.moonscribe",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -40,6 +40,13 @@
       "icons/icon-256.png",
       "icons/icon-512.png",
       "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      { "ext": ["md"], "mimeType": "text/markdown", "description": "MoonScribe Markdown manuscript" },
+      { "ext": ["markdown"], "mimeType": "text/markdown", "description": "MoonScribe Markdown manuscript" },
+      { "ext": ["docx"], "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "description": "MoonScribe Word manuscript" },
+      { "ext": ["epub"], "mimeType": "application/epub+zip", "description": "MoonScribe EPUB manuscript" },
+      { "ext": ["json"], "mimeType": "application/json", "description": "MoonScribe backup" }
     ]
   },
   "plugins": {
@@ -47,7 +54,7 @@
       "endpoints": [
         "https://updates.moonscribe.cc/{{target}}/{{arch}}/{{current_version}}"
       ],
-      "pubkey": ""
+      "pubkey": "REPLACE_WITH_PRODUCTION_TAURI_PUBLIC_KEY"
     },
     "deep-link": {
       "desktop": {

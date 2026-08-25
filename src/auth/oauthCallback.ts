@@ -25,6 +25,6 @@ export function readOAuthCallback(search: string): OAuthCallback {
   return { provider, exchangeCode, error, linked: params.get('linked') === '1' }
 }
 
-export function clearOAuthCallback(location: Location) {
+export function clearOAuthCallback(location: globalThis.Location) {
   window.history.replaceState({}, '', `${location.pathname}${location.hash}`)
 }

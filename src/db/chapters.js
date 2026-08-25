@@ -1,13 +1,36 @@
-import { getDB, uid, putRecord, removeRecord } from './db'
+import { getDB, uid, putRecord, removeRecord, waitForNativeHydration } from './db'
 import { countWords } from '../utils/words'
 import { composeMergedContent, tidyHtml } from '../utils/formatHtml'
 import { KINDS, flatOrder } from '../utils/numbering'
 import { trashRecord } from './trash'
 
 export async function listChapters(novelId) {
+  await waitForNativeHydration()
   const db = await getDB()
   const all = await db.getAllFromIndex('chapters', 'by-novel', novelId)
-  return all.filter((c) => !c.trashedAt).sort((a, b) => a.order - b.order)
+  const byId = new Map(all.map((chapter) => [chapter.id, chapter]))
+  const containers = new Set(['book', 'part', 'act'])
+  const repairs = []
+  const validParent = (chapter) => {
+    if (!chapter.parentId) return null
+    const parent = byId.get(chapter.parentId)
+    if (!parent) return null
+    if (chapter.kind === 'subchapter') return parent.kind === 'chapter' ? parent.id : null
+    if (chapter.kind === 'chapter') return containers.has(parent.kind) ? parent.id : null
+    if (containers.has(chapter.kind)) return containers.has(parent.kind) ? parent.id : null
+    return null
+  }
+  for (const chapter of all) {
+    const parentId = validParent(chapter)
+    const folderKind = chapter.folderId && ['book', 'part', 'act'].includes(chapter.kind) ? 'chapter' : chapter.kind
+    if ((chapter.parentId || null) !== parentId || folderKind !== chapter.kind) {
+      const repaired = { ...chapter, parentId, kind: folderKind, updatedAt: Date.now() }
+      repairs.push(repaired)
+      byId.set(chapter.id, repaired)
+    }
+  }
+  if (repairs.length) await Promise.all(repairs.map((chapter) => db.put('chapters', chapter)))
+  return all.map((chapter) => byId.get(chapter.id)).filter((c) => !c.trashedAt).sort((a, b) => a.order - b.order)
 }
 
 export async function getChapter(id) {
@@ -15,11 +38,22 @@ export async function getChapter(id) {
   return db.get('chapters', id)
 }
 
-export async function createChapter(novelId, { title = '', part = '', content = '', kind = 'chapter', parentId = null } = {}) {
+export async function createChapter(novelId, { title = '', part = '', content = '', kind = 'chapter', parentId = null, folderId = null } = {}) {
   const all = await listChapters(novelId)
-  const parent = parentId ? all.find((c) => c.id === parentId) : null
-  const siblings = parentId
-    ? all.filter((c) => (c.parentId || null) === parentId)
+  // A manuscript folder can contain writing documents, never outline
+  // containers. This prevents a stale/menu-supplied kind from turning a new
+  // folder child into a Part/Book/Act that behaves like another folder.
+  const normalizedKind = folderId ? 'chapter' : (KINDS.includes(kind) ? kind : 'chapter')
+  const requestedParent = parentId ? all.find((c) => c.id === parentId) : null
+  const allowedParent = normalizedKind === 'subchapter'
+    ? requestedParent?.kind === 'chapter'
+    : normalizedKind === 'chapter'
+      ? ['book', 'part', 'act'].includes(requestedParent?.kind)
+      : ['book', 'part', 'act'].includes(requestedParent?.kind)
+  const safeParentId = allowedParent ? requestedParent.id : null
+  const parent = safeParentId ? requestedParent : null
+  const siblings = safeParentId
+    ? all.filter((c) => (c.parentId || null) === safeParentId)
     : all.filter((c) => !c.parentId)
   const order = siblings.length ? Math.max(...siblings.map((c) => c.order || 0)) + 1 : 1
   const inheritedPart = parent?.part || ''
@@ -29,8 +63,9 @@ export async function createChapter(novelId, { title = '', part = '', content = 
     novelId,
     title: title || '',
     part: part || inheritedPart,
-    kind: KINDS.includes(kind) ? kind : 'chapter',
-    parentId: parentId || null,
+    kind: normalizedKind,
+    parentId: safeParentId,
+    folderId: folderId || null,
     content,
     order,
     status: 'draft',
@@ -47,12 +82,12 @@ export async function trashChapter(id) {
   return trashRecord('chapters', id)
 }
 
-export async function updateChapter(id, patch) {
+export async function updateChapter(id, patch, options = {}) {
   const db = await getDB()
   const chapter = await db.get('chapters', id)
   if (!chapter) return null
   const next = { ...chapter, ...patch, id: chapter.id }
-  return putRecord('chapters', next)
+  return putRecord('chapters', next, options)
 }
 
 export async function deleteChapter(id) {
@@ -114,6 +149,15 @@ export async function reorderChapter(novelId, id, { parentId = null, index = nul
   if (!target) return listChapters(novelId)
   const newParent = parentId ? all.find((c) => c.id === parentId) : null
   if (parentId && !newParent) return listChapters(novelId)
+  if (newParent) {
+    const containers = new Set(['book', 'part', 'act'])
+    const allowed = target.kind === 'subchapter'
+      ? newParent.kind === 'chapter'
+      : target.kind === 'chapter'
+        ? containers.has(newParent.kind)
+        : containers.has(newParent.kind)
+    if (!allowed) return listChapters(novelId)
+  }
   if (isAncestor(target, parentId, all)) return listChapters(novelId)
 
   target.parentId = parentId || null

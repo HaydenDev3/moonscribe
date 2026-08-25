@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import Icon from './Icon'
 import ProfileAvatar from './ProfileAvatar'
 
 export default function UserPill({ onConnectClick }) {
   const { syncUsername, syncServer, syncStatus, syncDiscordAvatar, syncProvider, disconnectSync, syncNow, openSettings, toast } = useApp()
+  const navigate = useNavigate()
+  const location = useLocation()
   const [open, setOpen] = useState(false)
   const [menuPosition, setMenuPosition] = useState({ top: 0, right: 16, width: 220 })
   const ref = useRef(null)
@@ -73,6 +76,12 @@ export default function UserPill({ onConnectClick }) {
 
   const initials = (syncUsername || '?')[0].toUpperCase()
   const isDiscord = syncProvider === 'discord'
+  const onDashboard = location.pathname === '/dashboard' || location.pathname === '/dashboard/'
+  // The bare novel route is the editor. Workspace modes such as characters,
+  // relationships, and designer should still offer a quick route back to the
+  // Studio dashboard.
+  const editorRoute = /^\/novel\/[^/]+\/?$/.test(location.pathname)
+  const showOpenStudio = !onDashboard && !editorRoute
   const statusColor = syncStatus === 'synced' ? '#22c55e' : syncStatus === 'error' ? '#ef4444' : '#94a3b8'
 
   return (
@@ -83,7 +92,7 @@ export default function UserPill({ onConnectClick }) {
             ? <ProfileAvatar src={syncDiscordAvatar} name={syncUsername} className="user-pill-img" />
             : <span className="user-pill-initials">{initials}</span>
           }
-          <span className="user-pill-dot" style={{ background: statusColor }} />
+          <span className="user-pill-dot" style={{ background: statusColor }} aria-label={`Sync status: ${syncStatus || 'unknown'}`} />
         </span>
         <span className="user-pill-name">{syncUsername}</span>
         {isDiscord && <span className="user-pill-discord" title="Discord account"><Icon icon="fa-brands fa-discord" /></span>}
@@ -91,7 +100,7 @@ export default function UserPill({ onConnectClick }) {
       </button>
 
       {open && createPortal(
-        <div ref={menuRef} className="user-pill-menu" style={{ top: menuPosition.top, right: menuPosition.right, width: menuPosition.width }}>
+        <div ref={menuRef} className="user-pill-menu user-pill-account-card" style={{ top: menuPosition.top, right: menuPosition.right, width: menuPosition.width }}>
           <div className="user-pill-header">
             <div className="user-pill-header-avatar">
               {isDiscord
@@ -104,9 +113,16 @@ export default function UserPill({ onConnectClick }) {
               <div className="user-pill-header-server">{syncServer?.replace(/https?:\/\//, '')}</div>
             </div>
           </div>
+          <div className="user-pill-account-status"><span className="user-pill-account-status-dot" style={{ background: statusColor }} />{syncStatus === 'synced' ? 'Synced across your devices' : syncStatus === 'error' ? 'Sync needs attention' : 'Local changes are safe'}</div>
           <div className="user-pill-sep" />
           <button className="user-pill-item" onClick={() => { openSettings(); setOpen(false) }}>
             <Icon icon="fa-solid fa-gear" /> Settings
+          </button>
+          {showOpenStudio && <button className="user-pill-item" onClick={() => { navigate('/dashboard'); setOpen(false) }}>
+            <Icon icon="fa-solid fa-arrow-right" /> Open Studio
+          </button>}
+          <button className="user-pill-item" onClick={() => { navigate('/'); setOpen(false) }}>
+            <Icon icon="fa-solid fa-house" /> Home
           </button>
           <button className="user-pill-item" onClick={sync}>
             <Icon icon="fa-solid fa-rotate" /> Sync now

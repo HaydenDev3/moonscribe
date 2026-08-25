@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react'
 import { useParams } from 'react-router-dom'
 import { getNovel } from '../db/novels'
 import { listChapters } from '../db/chapters'
-import { dailyHistory, monthlyHistory, todaySessionStats } from '../db/stats'
+import { dailyHistory, monthlyHistory, todaySessionStats, recentSessions } from '../db/stats'
 import { useApp } from '../context/AppContext'
 import SubPageTopbar from '../components/SubPageTopbar'
 import EmptyState from '../components/EmptyState'
@@ -18,6 +18,7 @@ export default function Analytics({ embedded }) {
   const [history, setHistory] = useState([])
   const [monthly, setMonthly] = useState([])
   const [todaySessions, setTodaySessions] = useState({ words: 0, minutes: 0 })
+  const [sessions, setSessions] = useState([])
 
   const load = useCallback(async () => {
     setNovel(await getNovel(id))
@@ -25,6 +26,7 @@ export default function Analytics({ embedded }) {
     setHistory(await dailyHistory(id, 90))
     setMonthly(await monthlyHistory(id, 12))
     setTodaySessions(await todaySessionStats(id))
+    setSessions(await recentSessions(id))
   }, [id])
 
   useEffect(() => {
@@ -212,6 +214,11 @@ export default function Analytics({ embedded }) {
                   {writingDays} writing days in the last 30. {streak > 0 ? `A quiet streak of ${streak}.` : 'A fresh beginning.'}
                 </p>
               </div>
+            </div>
+
+            <div className="card chart-card analytics-session-history">
+              <div className="analytics-card-head"><div><span className="analytics-eyebrow">Practice</span><h3>Recent writing sessions</h3></div><span className="analytics-range">This device</span></div>
+              {sessions.length === 0 ? <p className="muted small">Completed sessions will appear here after you write for a little while.</p> : <div className="session-history-list">{sessions.map((session) => <div className="session-history-row" key={session.id}><span><strong>{new Date(session.startedAt).toLocaleDateString()}</strong><small>{new Date(session.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {Math.round(session.minutes)} min</small></span><b>{formatWords(session.words)} words</b></div>)}</div>}
             </div>
           </>
         )}

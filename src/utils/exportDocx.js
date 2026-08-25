@@ -83,7 +83,7 @@ export function buildDocxDocument(novel, chapters, layout) {
             children: [new TextRun({ text: symbol, color: 'D4A5A5', size: 26 })]
           })
         )
-      } else if (child.matches?.('.page-break, .pg-break, [data-page-break="true"]')) {
+      } else if (child.matches?.('.page-break, .pg-break, .pg-auto-break, [data-page-break="true"], [data-auto-page-break="true"]')) {
         paragraphs.push(new Paragraph({ pageBreakBefore: true, children: [] }))
       } else if (tag === 'H2' || tag === 'H3') {
         paragraphs.push(

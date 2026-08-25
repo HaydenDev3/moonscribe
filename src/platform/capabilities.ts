@@ -24,7 +24,7 @@ export const capabilities: Readonly<AppCapabilities> = Object.freeze({
   filesystem: desktop,
   localBackups: true,
   nativeNotifications: desktop,
-  systemTray: false,
+  systemTray: desktop,
   cloudSync: true,
   collaboration: true,
   webAuth: true,

@@ -9,8 +9,12 @@ import ScrollRail from './ScrollRail'
 import Modal from './Modal'
 import { useApp } from '../context/AppContext'
 import { buildEditorFontOptions } from '../utils/fonts'
+import { PAGE_TEMPLATES, TEMPLATE_MIME } from '../designs/pageTemplates'
 import { listMoodboard } from '../db/moodboard'
 import { editorPageGeometry, PAGE_MARGIN_PRESETS, PAGE_PRESETS } from '../utils/pageSize'
+
+type TypographyStyle = { fontFamily?: string; color?: string; [key: string]: unknown }
+type TypographyConfig = { bodyStyle?: TypographyStyle; chapterTitleStyle?: TypographyStyle; [key: string]: unknown }
 
 const FONT_SIZES = [
   '9', '10', '11', '12', '13', '14',
@@ -93,6 +97,8 @@ function initials(name) {
 export default function Editor({
   initialHtml,
   onReport,
+  onEditorFocus = () => {},
+  onEditorBlur = () => {},
   placeholder = '',
   title = '',
   onTitleChange = (_value: string) => {},
@@ -106,10 +112,11 @@ export default function Editor({
   terms = [],
   entities = [],
   onDesigns = undefined,
+  onApplyDesign = undefined,
   onLineSpacingChange = undefined,
   pageLayout,
   onPageLayoutChange = (_patch: any) => {},
-  typography = {},
+  typography = {} as TypographyConfig,
   onTypographyChange = (_patch: any) => {},
   canEdit = false,
   readOnly = false,
@@ -119,7 +126,7 @@ export default function Editor({
   chapterId = null,
   novelId = null,
 }) {
-  const ref = useRef(null)
+  const ref = useRef<HTMLDivElement | null>(null)
   const wrapRef = useRef(null)
   const titleRef = useRef(null)
   const onReportRef = useRef(onReport)
@@ -127,6 +134,7 @@ export default function Editor({
   const editorFontOptions = useMemo(() => buildEditorFontOptions({ systemFonts, customFonts }), [systemFonts, customFonts])
   const [libraryImages, setLibraryImages] = useState<any[]>([])
   const [mediaOpen, setMediaOpen] = useState(false)
+  const [pageTemplatesOpen, setPageTemplatesOpen] = useState(false)
   useEffect(() => {
     if (!novelId) return
     listMoodboard(novelId).then((tiles) => setLibraryImages(tiles.filter((tile) => tile.kind === 'image' && tile.image))).catch(() => {})
@@ -180,6 +188,10 @@ export default function Editor({
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
   const [linkDraft, setLinkDraft] = useState('')
   const [linkPopover, setLinkPopover] = useState(null)
+  const [findOpen, setFindOpen] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
+  const [replaceQuery, setReplaceQuery] = useState('')
+  const [findMatches, setFindMatches] = useState(0)
   const editingLinkRef = useRef<ReturnType<typeof document.createElement> | null>(null)
 
   // ── Pagination ───────────────────────────────────────────────────────────
@@ -196,6 +208,86 @@ export default function Editor({
   const skipAnnotationTimer = useRef(null)
 
   const toolbarTimerRef = useRef(null)
+  const currentFindRef = useRef<{ node: globalThis.Text; start: number; length: number } | null>(null)
+
+  const findInChapter = useCallback((query: string) => {
+    const root = ref.current
+    const needle = query.trim().toLocaleLowerCase()
+    if (!root || !needle) {
+      setFindMatches(0)
+      return
+    }
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    const nodes: globalThis.Text[] = []
+    let node
+    while ((node = walker.nextNode())) nodes.push(node as globalThis.Text)
+    const matches: Array<{ node: globalThis.Text; start: number }> = []
+    for (const textNode of nodes) {
+      const value = textNode.data.toLocaleLowerCase()
+      let from = 0
+      while (from < value.length) {
+        const start = value.indexOf(needle, from)
+        if (start < 0) break
+        matches.push({ node: textNode, start })
+        from = start + needle.length
+      }
+    }
+    setFindMatches(matches.length)
+    const selection = window.getSelection()
+    const currentNode = selection?.anchorNode
+    const currentOffset = selection?.anchorOffset || 0
+    const next = matches.find((match) => match.node === currentNode && match.start > currentOffset) || matches[0]
+    if (next && selection) {
+      const range = document.createRange()
+      range.setStart(next.node, next.start)
+      range.setEnd(next.node, next.start + needle.length)
+      selection.removeAllRanges()
+      selection.addRange(range)
+      currentFindRef.current = { node: next.node, start: next.start, length: needle.length }
+      next.node.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+  }, [])
+
+  const replaceCurrentMatch = useCallback(() => {
+    const match = currentFindRef.current
+    if (!match || !findQuery.trim()) return
+    const value = match.node.data
+    if (value.slice(match.start, match.start + match.length).toLocaleLowerCase() !== findQuery.trim().toLocaleLowerCase()) {
+      findInChapter(findQuery)
+      return
+    }
+    match.node.data = `${value.slice(0, match.start)}${replaceQuery}${value.slice(match.start + match.length)}`
+    currentFindRef.current = null
+    report()
+    findInChapter(findQuery)
+  // report is declared later in this component and is intentionally omitted.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [findInChapter, findQuery, replaceQuery])
+
+  const replaceAllMatches = useCallback(() => {
+    const root = ref.current
+    const needle = findQuery.trim()
+    if (!root || !needle) return
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+    const nodes: globalThis.Text[] = []
+    let node
+    while ((node = walker.nextNode())) nodes.push(node as globalThis.Text)
+    const pattern = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+    let replaced = 0
+    for (const textNode of nodes) {
+      const before = textNode.data
+      const next = before.replace(pattern, () => { replaced += 1; return replaceQuery })
+      if (next !== before) textNode.data = next
+    }
+    if (replaced) {
+      currentFindRef.current = null
+      report()
+      toast(`${replaced} ${replaced === 1 ? 'match' : 'matches'} replaced.`)
+      findInChapter(findQuery)
+    }
+  // report is declared later in this component and is intentionally omitted.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [findInChapter, findQuery, replaceQuery, toast])
 
   useEffect(() => {
     if (pageLayout?.pageSize) setPageSize(migratePageSize(pageLayout.pageSize))
@@ -312,14 +404,11 @@ export default function Editor({
     return () => cancelAnimationFrame(frame)
   }, [resizeChapterTitle, title])
 
-  // Automatic page gaps are presentation-only nodes. Keeping them out of the
-  // saved HTML means a changed page size never changes the manuscript itself.
+  // Automatic page gaps carry layout metadata so paged exports can reproduce
+  // the same pagination. They remain non-editable and are never counted as
+  // manuscript text.
   const getPersistentHtml = useCallback((el) => {
     const copy = el.cloneNode(true)
-
-    copy
-      .querySelectorAll('[data-auto-page-break="true"]')
-      .forEach((node) => node.remove())
 
     copy
       .querySelectorAll('.comment-anchor')
@@ -430,7 +519,7 @@ export default function Editor({
     // grown, preserving its children and the writer's character offset.
     const cursorOffset = getCursorOffset()
     let repaired = false
-    editor.querySelectorAll('.hl-name, .hl-entity').forEach((mark) => {
+    editor.querySelectorAll<HTMLElement>('.hl-name, .hl-entity').forEach((mark) => {
       const character = mark.dataset.charId
         ? charactersRef.current.find((item) => item.id === mark.dataset.charId)
         : null
@@ -611,6 +700,8 @@ export default function Editor({
   //
   const recalcPages = useCallback(() => {
     const prose = ref.current as HTMLElement | null
+    const shouldRestoreCursor = document.activeElement === prose
+    const cursorOffset = shouldRestoreCursor ? getCursorOffset() : null
 
     const ps = pageSize === 'continuous'
       ? null
@@ -620,6 +711,7 @@ export default function Editor({
       prose?.querySelectorAll('[data-auto-page-break="true"]')
         .forEach((node) => node.remove())
       setPageCount(1)
+      if (cursorOffset !== null) requestAnimationFrame(() => setCursorOffset(cursorOffset))
       return
     }
 
@@ -704,6 +796,10 @@ export default function Editor({
       )
       marker.dataset.previousPage = String(previousPage)
       marker.dataset.nextPage = String(page)
+      marker.dataset.autoPageIndex = String(page)
+      marker.dataset.autoPageSource = String(leafChildren.indexOf(before))
+      marker.dataset.autoPageLayout = `${pageSize}:${pageLayout?.pageMargin || ''}:${ps.bodyHeightPx}`
+      marker.dataset.autoPageGenerated = String(Date.now())
 
       before.before(marker)
       return marker
@@ -825,11 +921,16 @@ export default function Editor({
     }
 
     setPageCount(Math.max(1, currentPage))
+    // Persist the generated boundaries after layout has settled so exports,
+    // backups, and sync see the same paginated document the writer sees.
+    const paginatedHtml = getPersistentHtml(prose)
+    onReportRef.current?.(paginatedHtml, countWords(paginatedHtml))
+    if (cursorOffset !== null) requestAnimationFrame(() => setCursorOffset(cursorOffset))
     // Inserting/removing sibling page markers preserves the browser's live
     // Range. Never restore a character offset on a later frame: the writer may
     // have typed again by then, and rewinding to that stale offset makes fresh
     // text appear to delete itself.
-  }, [pageSize, pageLayout?.pageMargin])
+  }, [getCursorOffset, getPersistentHtml, pageSize, pageLayout?.pageMargin, setCursorOffset])
 
   recalcRef.current = recalcPages
 
@@ -869,11 +970,11 @@ export default function Editor({
     // paperback and custom sizes all use the same live geometry.
     const prose = ref.current
     const onImageLoad = () => recalcRef.current?.()
-    const images = Array.from(prose?.querySelectorAll('img') || [])
+    const images = Array.from(prose?.querySelectorAll<HTMLImageElement>('img') || [])
     images.forEach((image) => image.addEventListener('load', onImageLoad))
     const observer = typeof MutationObserver !== 'undefined' && prose
       ? new MutationObserver(() => {
-          prose.querySelectorAll('img:not([data-page-listener])').forEach((image) => {
+          prose.querySelectorAll<HTMLImageElement>('img:not([data-page-listener])').forEach((image) => {
             image.setAttribute('data-page-listener', 'true')
             image.addEventListener('load', onImageLoad)
           })
@@ -924,7 +1025,14 @@ export default function Editor({
     scheduleReAnnotate,
   ])
 
-  const ensureCaretInTextBlock = useCallback(() => {
+  const ensureCaretInTextBlock = useCallback((event) => {
+    if (event?.inputType === 'insertParagraph' || event?.inputType === 'insertLineBreak') {
+      if (pgTimer.current) {
+        clearTimeout(pgTimer.current)
+        pgTimer.current = null
+      }
+      requestAnimationFrame(() => recalcRef.current?.())
+    }
     const el = ref.current
     const selection = window.getSelection()
     if (!el || !selection?.rangeCount) return
@@ -1354,6 +1462,10 @@ export default function Editor({
     })
   }, [report])
 
+  const recalculatePageBreaks = useCallback(() => {
+    recalcRef.current?.()
+  }, [])
+
   // ── Scene break ──────────────────────────────────────────────────────────
   const insertSceneBreak = useCallback(() => {
     const el = ref.current
@@ -1627,7 +1739,14 @@ export default function Editor({
       window.SpeechRecognition ||
       window.webkitSpeechRecognition
 
-    if (!SpeechRecognition) return
+    if (!SpeechRecognition) {
+      toast('Voice dictation is not supported in this browser. Try Chrome or Edge over HTTPS.')
+      return
+    }
+    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      toast('Voice dictation needs a secure connection.')
+      return
+    }
 
     const recognition = new SpeechRecognition()
 
@@ -1642,7 +1761,10 @@ export default function Editor({
       setDictating(false)
       dictationRef.current = null
     }
-    recognition.onerror = () => {
+    recognition.onerror = (event) => {
+      const error = event?.error
+      if (error === 'not-allowed' || error === 'service-not-allowed') toast('Microphone access was blocked. Allow microphone access and try again.')
+      else if (error !== 'aborted' && error !== 'no-speech') toast('Voice dictation stopped. Try again.')
       setDictating(false)
       dictationRef.current = null
     }
@@ -1670,7 +1792,7 @@ export default function Editor({
       setDictating(false)
       dictationRef.current = null
     }
-  }, [dictating, insertDictationText, stopDictation])
+  }, [dictating, insertDictationText, stopDictation, toast])
 
   // ── Image drop ───────────────────────────────────────────────────────────
   const handleImageDrop = useCallback((e) => {
@@ -1758,6 +1880,27 @@ export default function Editor({
     } else ref.current.appendChild(img)
     report()
   }, [libraryImages, report])
+
+  const insertPageTemplate = useCallback((templateId) => {
+    const template = PAGE_TEMPLATES.find((item) => item.id === templateId)
+    if (!template || !ref.current) return
+    const block = document.createElement('section')
+    block.className = `ms-page-template ms-page-template-${template.id}`
+    block.innerHTML = `<div class="ms-page-template-mark">${template.icon}</div><h2>${template.title}</h2><p>${template.description}</p><div class="ms-page-template-rule"></div><p class="ms-page-template-placeholder">Begin writing here…</p>`
+    const selection = window.getSelection()
+    if (selection?.rangeCount && ref.current.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+      const range = selection.getRangeAt(0); range.deleteContents(); range.insertNode(block); range.setStartAfter(block); range.collapse(true); selection.removeAllRanges(); selection.addRange(range)
+    } else ref.current.appendChild(block)
+    report(); setPageTemplatesOpen(false); toast(`${template.title} inserted.`)
+  }, [report, toast])
+
+  const handleTemplateOrImageDrop = useCallback((event) => {
+    const designId = event.dataTransfer?.getData('application/x-moonscribe-design')
+    if (designId) { event.preventDefault(); onApplyDesign?.(designId); return }
+    const templateId = event.dataTransfer?.getData(TEMPLATE_MIME)
+    if (templateId) { event.preventDefault(); insertPageTemplate(templateId); return }
+    handleImageDrop(event)
+  }, [handleImageDrop, insertPageTemplate, onApplyDesign])
 
   // ── Selection toolbar state ──────────────────────────────────────────────
   useEffect(() => {
@@ -2124,6 +2267,11 @@ export default function Editor({
       case 'b':
         e.preventDefault()
         exec('bold')
+        break
+
+      case 'f':
+        e.preventDefault()
+        setFindOpen(true)
         break
 
       case 'i':
@@ -2636,6 +2784,15 @@ export default function Editor({
         resetToolbarActivity
       }
     >
+      {findOpen && <div className="editor-find-bar" role="search" aria-label="Find and replace in chapter">
+        <Icon icon="fa-solid fa-magnifying-glass" />
+        <input autoFocus value={findQuery} onChange={(event) => { setFindQuery(event.target.value); findInChapter(event.target.value) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findInChapter(findQuery) } if (event.key === 'Escape') setFindOpen(false) }} placeholder="Find in this chapter…" aria-label="Find in this chapter" />
+        <span className="editor-find-count">{findMatches ? `${findMatches} found` : findQuery ? 'Not found' : ''}</span>
+        <input value={replaceQuery} onChange={(event) => setReplaceQuery(event.target.value)} placeholder="Replace with…" aria-label="Replace with" />
+        <button type="button" className="button button-quiet" disabled={!currentFindRef.current || !findQuery.trim()} onClick={replaceCurrentMatch}>Replace</button>
+        <button type="button" className="button button-quiet" disabled={!findQuery.trim() || !findMatches} onClick={replaceAllMatches}>Replace all</button>
+        <button type="button" className="button button-quiet" onClick={() => { setFindOpen(false); setFindQuery(''); setFindMatches(0) }} aria-label="Close find"><Icon icon="fa-solid fa-xmark" /></button>
+      </div>}
       {/* ─────────────────────────────────────────────────────────────────── */}
       {/* TOOLBAR                                                             */}
       {/* ─────────────────────────────────────────────────────────────────── */}
@@ -3322,6 +3479,11 @@ export default function Editor({
             {mediaOpen && <div className="editor-media-popover"><strong>Media Library</strong><div>{libraryImages.map((item) => <button type="button" key={item.id} onClick={() => { insertLibraryImage(item.id); setMediaOpen(false) }}><img src={item.image} alt="" /><span>{item.text || 'Untitled image'}</span></button>)}</div></div>}
           </div>}
 
+          <div className="editor-media-picker editor-template-picker" title="Page templates">
+            <button type="button" className="editor-media-icon" aria-label="Open page templates" onClick={() => onDesigns?.()}><Icon icon="fa-solid fa-file-lines" /></button>
+            {pageTemplatesOpen && <div className="editor-media-popover editor-page-template-popover"><strong>Page templates</strong><div>{PAGE_TEMPLATES.map((template) => <button type="button" key={template.id} draggable onDragStart={(event) => { event.dataTransfer.setData(TEMPLATE_MIME, template.id); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => insertPageTemplate(template.id)}><span>{template.icon}</span><span><b>{template.title}</b><small>{template.description}</small></span></button>)}</div></div>}
+          </div>
+
           <Btn
             action={insertSceneBreak}
             title="Scene break (Ctrl+Shift+E)"
@@ -3333,16 +3495,14 @@ export default function Editor({
 
           {pageSize !==
             'continuous' && (
-            <Btn
-              action={
-                insertPageBreak
-              }
-              title="Page break (Ctrl+Enter)"
-              ariaLabel="Insert page break"
-              disabled={readOnly}
-            >
-              <Icon icon="fa-solid fa-file-circle-plus" />
-            </Btn>
+            <>
+              <Btn action={insertPageBreak} title="Manual page break (Ctrl+Enter)" ariaLabel="Insert manual page break" disabled={readOnly}>
+                <Icon icon="fa-solid fa-file-circle-plus" />
+              </Btn>
+              <Btn action={recalculatePageBreaks} title="Recalculate automatic page breaks" ariaLabel="Recalculate automatic page breaks" disabled={readOnly}>
+                <Icon icon="fa-solid fa-arrows-rotate" />
+              </Btn>
+            </>
           )}
 
           {onComment && (
@@ -3559,10 +3719,10 @@ export default function Editor({
                   'The first sentence is the hardest. Start anywhere.'
                 }
                 onInput={report}
-                onFocus={() => setTypographyTarget('body')}
+                onFocus={() => { setTypographyTarget('body'); onEditorFocus() }}
                 onClick={handleEditorClick}
                 onBeforeInput={ensureCaretInTextBlock}
-                onBlur={report}
+                onBlur={() => { report(); onEditorBlur() }}
                 onPaste={handlePaste}
                 onKeyDown={
                   handleKeyDown
@@ -3580,7 +3740,7 @@ export default function Editor({
                   }
                 }}
                 onDrop={
-                  handleImageDrop
+                  handleTemplateOrImageDrop
                 }
                 onMouseOver={(e) => {
                   const target = e.target instanceof Element ? e.target : null
@@ -3695,6 +3855,7 @@ export default function Editor({
                       ? 'page'
                       : 'pages'}
                   </span>
+                  <span className="editor-page-status-auto">Automatic pagination</span>
                 </div>
               )}
             </div>

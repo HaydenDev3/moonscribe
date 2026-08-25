@@ -1,4 +1,5 @@
 import { capabilities } from './capabilities'
+import { backupNativeStorage } from './nativeStorage'
 
 export type UpdateState = 'idle' | 'checking' | 'up-to-date' | 'available' | 'downloading' | 'ready' | 'installing' | 'offline' | 'error' | 'unconfigured'
 
@@ -38,6 +39,7 @@ export async function checkForDesktopUpdate(): Promise<DesktopUpdate | null> {
 }
 
 export async function restartAfterUpdate() {
+  await backupNativeStorage().catch(() => null)
   window.dispatchEvent(new CustomEvent('moonscribe:before-update-restart'))
   await new Promise((resolve) => setTimeout(resolve, 350))
   const { relaunch } = await import('@tauri-apps/plugin-process')
