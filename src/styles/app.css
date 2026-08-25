@@ -1813,6 +1813,8 @@ body::after {
   border-bottom: 2px solid var(--hl-color, var(--rose));
   border-radius: 2px 2px 0 0;
   padding: 0 1px;
+  background: color-mix(in srgb, var(--hl-color, var(--rose)) 10%, transparent);
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--hl-color, var(--rose)) 16%, transparent);
   cursor: help;
   transition: background 0.15s var(--ease);
 }

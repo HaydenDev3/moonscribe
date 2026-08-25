@@ -589,7 +589,16 @@ export default function Editor({
     }
   }, [getCursorOffset, setCursorOffset])
 
-  // ── Initial content ───────────────────────────────────────────────────────
+  // Characters and entities are loaded alongside the editor. Re-run the
+  // annotation pass when those records arrive so initial prose is not left
+  // unmarked after the mount-only content hydration has already completed.
+  useEffect(() => {
+    if (!ref.current || document.activeElement === ref.current) return undefined
+    const timer = window.setTimeout(() => scheduleReAnnotate(), 40)
+    return () => window.clearTimeout(timer)
+  }, [characters, terms, entities, scheduleReAnnotate])
+
+// ── Initial content ───────────────────────────────────────────────────────
   useEffect(() => {
     const el = ref.current
 
