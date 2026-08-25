@@ -158,6 +158,7 @@ export function AppProvider({ children }) {
   const [customFonts, setCustomFonts] = useState([])
   const [systemFonts, setSystemFonts] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [accountCentreOpen, setAccountCentreOpen] = useState(false)
   const [conflicts, setConflicts] = useState([])
   const toastId = useRef(0)
   const idleTimer = useRef(null)
@@ -870,14 +871,17 @@ export function AppProvider({ children }) {
     }
 
     const runSync = async () => {
-      if (stopped || !navigator.onLine) return
+      // navigator.onLine describes general internet reachability and can be
+      // false while the local MoonScribe API is perfectly reachable. Let the
+      // sync request determine whether the configured server is available.
+      if (stopped) return
       if (batchTimer) clearTimeout(batchTimer)
       batchTimer = undefined
       try {
         await syncEngine.sync()
         failureCount = 0
       } catch {
-        if (stopped || !navigator.onLine) return
+        if (stopped) return
         const delay = retryDelays[Math.min(failureCount, retryDelays.length - 1)]
         failureCount += 1
         retryTimer = setTimeout(runSync, delay)
@@ -885,10 +889,12 @@ export function AppProvider({ children }) {
     }
 
     const scheduleBatch = () => {
-      setSync((current) => ({ ...current, status: navigator.onLine ? 'local' : 'offline' }))
-      if (!navigator.onLine) return
+      // Online edits should enter the cloud sync queue immediately. The
+      // IndexedDB write remains the safety net, but displaying "Saved locally"
+      // for several seconds made healthy cloud sync look permanently offline.
+      setSync((current) => ({ ...current, status: 'syncing' }))
       if (batchTimer) clearTimeout(batchTimer)
-      batchTimer = setTimeout(runSync, 3_500)
+      batchTimer = setTimeout(runSync, 250)
     }
     const reconcileNow = () => {
       failureCount = 0
@@ -943,6 +949,9 @@ export function AppProvider({ children }) {
       settingsOpen,
       openSettings,
       closeSettings,
+      accountCentreOpen,
+      openAccountCentre: () => setAccountCentreOpen(true),
+      closeAccountCentre: () => setAccountCentreOpen(false),
       conflicts,
       resolveConflict,
       syncServer: sync.server,
@@ -974,7 +983,7 @@ export function AppProvider({ children }) {
       deleteCustomFont,
       refreshSystemFonts,
     }),
-    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, signInWithPasskey, sendMagicLink, completeTwoFactorSignIn, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, authFlow]
+    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, accountCentreOpen, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, signInWithPasskey, sendMagicLink, completeTwoFactorSignIn, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, authFlow]
   )
 
   return (

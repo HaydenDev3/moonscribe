@@ -1543,53 +1543,27 @@ export default function Novel() {
             </div>
 
             <div className="editor-footer">
-              <span className="stat"><b>{formatWords(wordCount)}</b> words</span>
-              <span className="stat">+<b>{formatWords(sessionWords)}</b> this session</span>
-              <span className="stat" title="Elapsed writing session"><Icon icon="fa-regular fa-clock" /> <b>{sessionClock}</b></span>
-              <button className="button button-quiet" onClick={toggleSessionPause} title={sessionPaused ? 'Resume writing session' : 'Pause writing session'}><Icon icon={sessionPaused ? 'fa-solid fa-play' : 'fa-solid fa-pause'} /> {sessionPaused ? 'Resume' : 'Pause'}</button>
-              {wordCount > 0 && (
-                <span className="stat" title={`~${lineSpacingWpp} words per page at current spacing`}>
-                  ~<b>{Math.ceil(wordCount / lineSpacingWpp)}</b> {Math.ceil(wordCount / lineSpacingWpp) === 1 ? 'page' : 'pages'}
-                </span>
-              )}
-              {sessionWpm !== null && <span className="stat">~<b>{sessionWpm}</b> wpm</span>}
-              <span className="goal-track" title="Daily goal">
-                <span className="bar"><span style={{ width: `${goalPct}%` }} className={goalPct >= 100 ? 'done' : ''} /></span>
-                <span className="stat"><b>{formatWords(todayW)}</b>/{formatWords(goalWords)} today</span>
-              </span>
-              {!editingGoal ? (
-                <button className="button button-quiet" onClick={() => setEditingGoal(true)} title="Change daily goal"><Icon icon="fa-solid fa-pen" /></button>
-              ) : (
-                <span className="actions-row">
-                  <select value={goalWords} onChange={(e) => setGoalWords(Number(e.target.value))} autoFocus>
-                    {GOAL_PRESETS.map((g) => (
-                      <option key={g} value={g}>{g} words</option>
-                    ))}
-                    <option value={0}>no goal</option>
-                  </select>
-                  <button className="button button-quiet" onClick={commitGoal}><Icon icon="fa-solid fa-check" /></button>
-                </span>
-              )}
-              <span className="saved-indicator">
-                {dirty ? <><span className="dot" style={{ background: 'var(--rose)' }} /> <span role="status" aria-live="polite">Saving locally…</span></> : <><span className="dot" /> <span role="status" aria-live="polite">Saved locally {savedAt ? timeAgo(savedAt) : ''}</span></>}
-              </span>
-              <button className="button button-quiet" onClick={() => saveNowRef.current?.()} title="Save now (Ctrl+S)"><Icon icon="fa-regular fa-floppy-disk" /> Save</button>
-              {chapter.versions?.length > 0 && (
-                <button className="button button-quiet" onClick={() => setHistoryOpen(true)}>History ({chapter.versions.length})</button>
-              )}
-              <button className="button button-quiet" onClick={() => setDesignsOpen((o) => !o)} title="Premade manuscript designs">
-                <Icon icon="fa-solid fa-palette" style={{ marginRight: 6 }} /> Designs
-              </button>
-              <button className="button button-quiet" onClick={() => setReplayOpen((o) => !o)} title="Writing Time Machine — scrub through what you typed this session">
-                <Icon icon="fa-solid fa-clock-rotate-left" style={{ marginRight: 6 }} /> Replay
-              </button>
-              <button className="button button-quiet" onClick={() => { setCommentDraft(null); setAnnotationsOpen((o) => !o) }} title="Private comments on this chapter">
-                <Icon icon="fa-regular fa-comment" style={{ marginRight: 6 }} />
-                Comments{annotations.filter((a) => !a.resolved).length > 0 ? ` (${annotations.filter((a) => !a.resolved).length})` : ''}
-              </button>
-              <button className="button button-quiet" onClick={() => setMergeSource(chapter)} title="Merge this chapter with another">
-                <Icon icon="fa-solid fa-object-ungroup" style={{ marginRight: 6 }} /> Merge
-              </button>
+              <div className="editor-footer-metrics">
+                <span className="stat editor-footer-primary"><b>{formatWords(wordCount)}</b> words</span>
+                <span className="stat">+<b>{formatWords(sessionWords)}</b> this session</span>
+                <span className="stat" title="Elapsed writing session"><Icon icon="fa-regular fa-clock" /> <b>{sessionClock}</b></span>
+                <button className="button button-quiet editor-footer-pause" onClick={toggleSessionPause} title={sessionPaused ? 'Resume writing session' : 'Pause writing session'}><Icon icon={sessionPaused ? 'fa-solid fa-play' : 'fa-solid fa-pause'} /> {sessionPaused ? 'Resume' : 'Pause'}</button>
+                {wordCount > 0 && <span className="stat" title={`~${lineSpacingWpp} words per page at current spacing`}>~<b>{Math.ceil(wordCount / lineSpacingWpp)}</b> {Math.ceil(wordCount / lineSpacingWpp) === 1 ? 'page' : 'pages'}</span>}
+                {sessionWpm !== null && <span className="stat">~<b>{sessionWpm}</b> wpm</span>}
+              </div>
+              <div className="editor-footer-goal">
+                <span className="goal-track" title="Daily goal"><span className="bar"><span style={{ width: `${goalPct}%` }} className={goalPct >= 100 ? 'done' : ''} /></span><span className="stat"><b>{formatWords(todayW)}</b>/{formatWords(goalWords)} today</span></span>
+                {!editingGoal ? <button className="button button-quiet" onClick={() => setEditingGoal(true)} title="Change daily goal"><Icon icon="fa-solid fa-pen" /></button> : <span className="actions-row"><select value={goalWords} onChange={(e) => setGoalWords(Number(e.target.value))} autoFocus>{GOAL_PRESETS.map((g) => <option key={g} value={g}>{g} words</option>)}<option value={0}>no goal</option></select><button className="button button-quiet" onClick={commitGoal}><Icon icon="fa-solid fa-check" /></button></span>}
+              </div>
+              <div className="editor-footer-actions">
+                <span className="saved-indicator">{dirty ? <><span className="dot" style={{ background: 'var(--rose)' }} /> <span role="status" aria-live="polite">Saving locally…</span></> : <><span className="dot" /> <span role="status" aria-live="polite">Saved locally {savedAt ? timeAgo(savedAt) : ''}</span></>}</span>
+                <button className="button button-quiet" onClick={() => saveNowRef.current?.()} title="Save now (Ctrl+S)"><Icon icon="fa-regular fa-floppy-disk" /> Save</button>
+                {chapter.versions?.length > 0 && <button className="button button-quiet" onClick={() => setHistoryOpen(true)}>History ({chapter.versions.length})</button>}
+                <button className="button button-quiet" onClick={() => setDesignsOpen((o) => !o)} title="Premade manuscript designs"><Icon icon="fa-solid fa-palette" /> <span>Designs</span></button>
+                <button className="button button-quiet" onClick={() => setReplayOpen((o) => !o)} title="Writing Time Machine — scrub through what you typed this session"><Icon icon="fa-solid fa-clock-rotate-left" /> <span>Replay</span></button>
+                <button className="button button-quiet" onClick={() => { setCommentDraft(null); setAnnotationsOpen((o) => !o) }} title="Private comments on this chapter"><Icon icon="fa-regular fa-comment" /> <span>Comments{annotations.filter((a) => !a.resolved).length > 0 ? ` (${annotations.filter((a) => !a.resolved).length})` : ''}</span></button>
+                <button className="button button-quiet" onClick={() => setMergeSource(chapter)} title="Merge this chapter with another"><Icon icon="fa-solid fa-object-ungroup" /> <span>Merge</span></button>
+              </div>
             </div>
 
             {designsOpen && (

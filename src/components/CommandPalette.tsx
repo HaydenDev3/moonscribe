@@ -21,7 +21,7 @@ const GROUPS = [
   ,{ key: 'settings', label: 'Settings', icon: 'fa-solid fa-sliders' }
 ]
 const SETTING_RESULTS = [
-  ['themes','Themes and colour','Parchment, Midnight, AMOLED and accent colours'],['layout','App layout','Writer Studio, Visual Library or Compact'],['paper','Paper texture','Paper grain and intensity'],['font','Editor typography','Font size, line height and reading width'],['motion','Motion and animation','Reduce motion and interface effects'],['security','Lock & security','App lock, sessions and account security'],['sync','Account & sync','Cloud library, Discord and signed-in devices'],['keybinds','Keyboard shortcuts','View all MoonScribe keybinds'],['quick-capture','Quick capture','Save a note to a novel without leaving your current workspace']
+  ['themes','Themes and colour','Parchment, Midnight, AMOLED and accent colours'],['layout','App layout','Writer Studio, Visual Library or Compact'],['paper','Paper texture','Paper grain and intensity'],['font','Editor typography','Font size, line height and reading width'],['motion','Motion and animation','Reduce motion and interface effects'],['security','Lock & security','App lock, sessions and account security'],['sync','Sync','Cloud library, Discord and signed-in devices'],['keybinds','Keyboard shortcuts','View all MoonScribe keybinds'],['quick-capture','Quick capture','Save a note to a novel without leaving your current workspace']
 ].map(([id,title,subtitle]) => ({ id, title, subtitle }))
 
 const SECTION_FOR = { characters: 'characters', notes: 'notes', world: 'world', relationships: 'relationships', glossary: 'glossary' }

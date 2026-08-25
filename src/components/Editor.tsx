@@ -2725,9 +2725,13 @@ export default function Editor({
       }
       aria-pressed={active}
       disabled={disabled}
-      onMouseDown={(e) =>
+      onMouseDown={(e) => {
+        // Preserve the writer's actual selection before the toolbar steals
+        // focus. Without this, the browser can reuse a stale document-wide
+        // range and apply inline marks to the entire chapter.
+        saveSelection()
         e.preventDefault()
-      }
+      }}
       onClick={disabled ? undefined : action}
     >
       {children}

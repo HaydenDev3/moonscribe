@@ -6,7 +6,7 @@ import Icon from './Icon'
 import ProfileAvatar from './ProfileAvatar'
 
 export default function UserPill({ onConnectClick }) {
-  const { syncUsername, syncServer, syncStatus, syncDiscordAvatar, syncProvider, disconnectSync, syncNow, openSettings, toast } = useApp()
+  const { syncUsername, syncServer, syncStatus, syncDiscordAvatar, syncProvider, disconnectSync, syncNow, openSettings, openAccountCentre, toast } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
@@ -117,6 +117,9 @@ export default function UserPill({ onConnectClick }) {
           <div className="user-pill-sep" />
           <button className="user-pill-item" onClick={() => { openSettings(); setOpen(false) }}>
             <Icon icon="fa-solid fa-gear" /> Settings
+          </button>
+          <button className="user-pill-item" onClick={() => { openAccountCentre?.(); setOpen(false) }}>
+            <Icon icon="fa-solid fa-user-shield" /> Account Centre
           </button>
           {showOpenStudio && <button className="user-pill-item" onClick={() => { navigate('/dashboard'); setOpen(false) }}>
             <Icon icon="fa-solid fa-arrow-right" /> Open Studio

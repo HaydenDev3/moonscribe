@@ -2021,9 +2021,10 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
             }
             database.exec('COMMIT')
             if (supabasePersistenceEnabled && cloudRecords.length) {
-              // Cloud mirroring is deliberately after the local commit: a
-              // transient Supabase outage must never discard an offline-safe
-              // local write. The next startup migration repairs any gap.
+              // The API sync path is durable in SQLite and must not be blocked
+              // by an optional Supabase mirror outage. Keep mirroring after
+              // the local commit so offline writing and device sync continue;
+              // the mirror retry path can repair cloud persistence separately.
               mirrorRecords(cloudRecords, database).catch((error) => console.error('[supabase] record mirror failed', describeSupabaseError(error), {
                 count: cloudRecords.length,
                 stores: [...new Set(cloudRecords.map((record) => record.store).filter(Boolean))],
@@ -2035,7 +2036,10 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
             throw err
           }
         })
-        .catch((err) => json(res, 400, { error: err.message, at: '/api/sync/push' }))
+        .catch((err) => {
+          console.error('[sync] push rejected:', err?.stack || err?.message || err)
+          json(res, 400, { error: err.message, at: '/api/sync/push' })
+        })
       return
     }
 

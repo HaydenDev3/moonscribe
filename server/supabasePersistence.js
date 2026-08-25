@@ -8,17 +8,35 @@ export const supabasePersistence = supabasePersistenceEnabled
   ? createClient(url, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } })
   : null
 
+// A sync burst can contain several pushes for the same account. Serializing
+// mirrors prevents identity reconciliation in one request from racing the
+// parent-row check in another request.
+let recordMirrorQueue = Promise.resolve()
+
 function requirePersistence() {
   if (!supabasePersistence) throw new Error('Supabase server persistence is not configured.')
   return supabasePersistence
 }
 
 export async function mirrorUserProfile(db, userId) {
-  if (!supabasePersistence) return
+  if (!supabasePersistence) return false
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId)
-  if (!user) return
+  // A stale client can still have records for an account that no longer
+  // exists in this server's local session database. Never mirror those
+  // records as children: moonscribe_records intentionally requires a real
+  // moonscribe_users parent.
+  if (!user) return false
   const provider = user.discord_id ? 'discord' : user.google_id ? 'google' : 'password'
   const providerSubject = user.discord_id || user.google_id || null
+  // Create the destination parent before identity reconciliation. Use a
+  // neutral row first because the email/provider may still belong to an older
+  // Supabase identity that will be merged below.
+  const { data: existingDestination, error: destinationLookupError } = await supabasePersistence.from('moonscribe_users').select('id').eq('id', String(user.id)).maybeSingle()
+  if (destinationLookupError) throw destinationLookupError
+  if (!existingDestination) {
+    const { error: profileError } = await supabasePersistence.from('moonscribe_users').insert({ id: String(user.id), email: null, username: user.username || null, password_hash: user.password_hash || null, display_name: user.username || null, provider: null, provider_subject: null, avatar_url: user.discord_avatar || user.google_avatar || null, email_verified: Boolean(user.email_verified), disabled_at: user.disabled_at ? new Date(user.disabled_at).toISOString() : null, created_at: new Date(user.created_at || Date.now()).toISOString(), updated_at: new Date().toISOString() })
+    if (profileError) throw profileError
+  }
   // SQLite is the active identity source, but Supabase can retain a row from
   // an older deployment or a previous local database. Reconcile by identity
   // before upserting by id, otherwise a unique provider/email constraint turns
@@ -35,8 +53,15 @@ export async function mirrorUserProfile(db, userId) {
     if (data?.id && String(data.id) !== String(user.id)) identityMatches.push(String(data.id))
   }
   for (const sourceId of [...new Set(identityMatches)]) await mergeSupabaseUser(sourceId, user.id)
-  const { error } = await supabasePersistence.from('moonscribe_users').upsert({ id: String(user.id), email: user.email || null, username: user.username || null, password_hash: user.password_hash || null, display_name: user.username || null, provider, provider_subject: providerSubject, avatar_url: user.discord_avatar || user.google_avatar || null, email_verified: Boolean(user.email_verified), disabled_at: user.disabled_at ? new Date(user.disabled_at).toISOString() : null, created_at: new Date(user.created_at || Date.now()).toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'id' })
-  if (error) throw error
+  const { error: profileUpdateError } = await supabasePersistence.from('moonscribe_users').upsert({ id: String(user.id), email: user.email || null, username: user.username || null, password_hash: user.password_hash || null, display_name: user.username || null, provider, provider_subject: providerSubject, avatar_url: user.discord_avatar || user.google_avatar || null, email_verified: Boolean(user.email_verified), disabled_at: user.disabled_at ? new Date(user.disabled_at).toISOString() : null, created_at: new Date(user.created_at || Date.now()).toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'id' })
+  if (profileUpdateError) throw profileUpdateError
+  // Do not rely on a successful upsert response alone. Supabase can return
+  // no row when policies, schema drift, or a proxy configuration prevents
+  // the parent from being visible; the FK would otherwise fail noisily on
+  // the following records upsert.
+  const { data: parent, error: parentError } = await supabasePersistence.from('moonscribe_users').select('id').eq('id', String(user.id)).maybeSingle()
+  if (parentError) throw parentError
+  return Boolean(parent?.id)
 }
 
 export async function mergeSupabaseUser(sourceUserId, destinationUserId) {
@@ -91,7 +116,11 @@ export async function migrateSqliteToSupabase(db) {
     if (error) throw error
   }
 
-  const recordRows = records.filter((r) => r.user_id).map((r) => ({
+  // Keep the child table aligned with the parent batch. Old local databases
+  // can contain records for accounts that were removed or renamed; uploading
+  // those rows would violate the intentional user_id foreign key.
+  const migratedUserIds = new Set(userRows.map((user) => user.id))
+  const recordRows = records.filter((r) => r.user_id && migratedUserIds.has(String(r.user_id))).map((r) => ({
     user_id: String(r.user_id), store: r.store, id: r.id, novel_id: r.novel_id || null,
     payload: r.payload ? JSON.parse(r.payload) : {}, updated_at: Number(r.updated_at) || 0, deleted: Boolean(r.deleted)
   }))
@@ -130,7 +159,7 @@ export async function restoreSupabaseToSqlite(db) {
   return { users: users?.length || 0, sessions: sessions?.length || 0, records: records?.length || 0 }
 }
 
-export async function mirrorRecords(records, db = null) {
+async function mirrorRecordsNow(records, db = null) {
   if (!supabasePersistence || !records?.length) return
   let rows = records.filter((r) => r?.userId).map((r) => ({
     user_id: String(r.userId), store: String(r.store), id: String(r.id), novel_id: r.novelId || null,
@@ -142,18 +171,34 @@ export async function mirrorRecords(records, db = null) {
   // mirroring the child records instead of relying on request ordering.
   if (db) {
     for (const userId of [...new Set(rows.map((row) => row.user_id))]) {
-      await mirrorUserProfile(db, userId)
+      const parentReady = await mirrorUserProfile(db, userId)
+      if (!parentReady) throw new Error(`Supabase account ${userId} is unavailable; records were kept locally and will retry.`)
     }
-    rows = rows.filter((row) => db.prepare('SELECT id FROM users WHERE id = ?').get(row.user_id))
   }
+  if (!rows.length) return
+  const userIds = [...new Set(rows.map((row) => row.user_id))]
+  const { data: parents, error: parentError } = await supabasePersistence
+    .from('moonscribe_users')
+    .select('id')
+    .in('id', userIds)
+  if (parentError) throw parentError
+  const ready = new Set((parents || []).map((parent) => String(parent.id)))
+  rows = rows.filter((row) => ready.has(row.user_id))
   if (!rows.length) return
   const { error } = await supabasePersistence.from('moonscribe_records').upsert(rows, { onConflict: 'user_id,store,id' })
   if (error) throw error
 }
 
+export function mirrorRecords(records, db = null) {
+  const task = recordMirrorQueue.then(() => mirrorRecordsNow(records, db))
+  recordMirrorQueue = task.catch(() => undefined)
+  return task
+}
+
 export async function mirrorUserAndSession(db, userId, session) {
   if (!supabasePersistence) return
-  await mirrorUserProfile(db, userId)
+  const parentReady = await mirrorUserProfile(db, userId)
+  if (!parentReady) return
   const { error: sessionError } = await supabasePersistence.from('moonscribe_sessions').upsert({
     token_hash: shaToken(session.token), user_id: String(userId), device_id: session.deviceId || null, device_name: session.deviceName || 'Unknown device',
     session_id: session.sessionId, created_at: new Date().toISOString(), expires_at: new Date(session.expiresAt).toISOString(), last_seen_at: new Date().toISOString()

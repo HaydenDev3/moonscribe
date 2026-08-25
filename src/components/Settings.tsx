@@ -32,7 +32,6 @@ const IDLE_OPTIONS = [
 
 const CATEGORIES = [
   { key: 'overview', label: 'Overview', icon: 'fa-solid fa-sliders', group: 'General', terms: 'home start screen preferences settings' },
-  { key: 'account', label: 'Account & sync', icon: 'fa-solid fa-user-shield', group: 'Account', terms: 'account authentication connections profile security username email' },
   { key: 'appearance', label: 'Appearance', icon: 'fa-solid fa-palette', group: 'Experience', terms: 'theme colour paper custom motion' },
   { key: 'editor', label: 'Editor', icon: 'fa-solid fa-pen-nib', group: 'Experience', terms: 'writing font spelling autocorrect page' },
   { key: 'writing', label: 'Writing experience', icon: 'fa-solid fa-feather-pointed', group: 'Experience', terms: 'autosave typewriter focus writing session' },
@@ -111,7 +110,7 @@ export default function Settings() {
             <Icon icon="fa-solid fa-xmark" />
           </button>
 
-          {query && <SettingsSearchResults query={query} settings={settings} updateSettings={updateSettings} onOpenCategory={(key) => { setCat(key === 'accountCentre' || key === 'account' ? 'sync' : key); setQuery('') }} />}
+          {query && <SettingsSearchResults query={query} settings={settings} updateSettings={updateSettings} onOpenCategory={(key) => { setCat(key); setQuery('') }} />}
           {!query && cat === 'appearance' && (
             <Appearance
               settings={settings}
@@ -128,7 +127,7 @@ export default function Settings() {
             />
           )}
           {!query && cat === 'editor' && <EditorSettings settings={settings} updateSettings={updateSettings} />}
-          {!query && cat === 'overview' && <SettingsOverview onOpenCategory={setCat} onOpenAccountCentre={() => setCat('sync')} />}
+          {!query && cat === 'overview' && <SettingsOverview onOpenCategory={setCat} />}
           {!query && cat === 'writing' && <WritingExperience settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'sounds' && <SoundsFeedback settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'notifications' && <NotificationPreferences settings={settings} updateSettings={updateSettings} />}
@@ -146,7 +145,7 @@ export default function Settings() {
           {!query && cat === 'sync' && (
             <section className="settings-panel">
               <div className="settings-panel-kicker">Identity &amp; devices</div>
-              <h2>Account &amp; sync</h2>
+              <h2>Sync</h2>
               <p className="muted">Manage who you are in MoonScribe, where your library lives, and which devices can reach it.</p>
               <SyncPanel onOpen={() => setCat('sync')} />
               <RolePermissions />
@@ -193,12 +192,11 @@ function SettingsSearchResults({ query, settings, updateSettings, onOpenCategory
   return <section className="settings-panel"><div className="settings-panel-kicker">Smart settings search</div><h2>Results for “{query}”</h2><p className="muted">Change common settings directly, or open the full category for more detail.</p><div className="settings-search-results">{matches.map((item) => <div className="settings-row" key={item.label}><button className="settings-search-result-label" onClick={() => onOpenCategory(item.category)}><strong>{item.label}</strong><small>Open {CATEGORIES.find((category) => category.key === item.category)?.label}</small></button>{item.control}</div>)}{categories.map((item) => <button className="settings-search-category" key={item.key} onClick={() => onOpenCategory(item.key)}><Icon icon={item.icon}/><span><strong>{item.label}</strong><small>View every {item.label.toLowerCase()} option</small></span><Icon icon="fa-solid fa-arrow-right"/></button>)}{!matches.length && !categories.length && <div className="palette-hint">No setting matches “{query}”. Try theme, font, layout, security or motion.</div>}</div></section>
 }
 
-function SettingsOverview({ onOpenCategory, onOpenAccountCentre }) {
+function SettingsOverview({ onOpenCategory }) {
   const shortcuts = [
     ['appearance', 'Appearance', 'Theme, typography and atmosphere', 'fa-solid fa-palette'],
     ['writing', 'Writing experience', 'Autosave, focus and session comfort', 'fa-solid fa-feather-pointed'],
     ['dashboard', 'Dashboard', 'Home, library and sidebar preferences', 'fa-solid fa-house'],
-    ['accountCentre', 'Account Centre', 'Profile, connections and account security', 'fa-solid fa-user-shield'],
   ]
   return (
     <section className="settings-panel">
@@ -207,7 +205,7 @@ function SettingsOverview({ onOpenCategory, onOpenAccountCentre }) {
       <p className="muted">Account preferences follow your MoonScribe identity. Device-specific controls stay local to this browser.</p>
       <div className="settings-overview-grid">
         {shortcuts.map(([key, title, description, icon]) => (
-          <button key={key} className="settings-overview-card" onClick={() => key === 'accountCentre' ? onOpenAccountCentre() : onOpenCategory(key)}>
+          <button key={key} className="settings-overview-card" onClick={() => onOpenCategory(key)}>
             <Icon icon={icon} />
             <span><strong>{title}</strong><small>{description}</small></span>
             <Icon icon="fa-solid fa-arrow-right" />

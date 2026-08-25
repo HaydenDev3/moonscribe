@@ -13,6 +13,7 @@ import CommandPalette from './components/CommandPalette'
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Novel = lazy(() => import('./pages/Novel'))
 const Settings = lazy(() => import('./components/Settings'))
+const AccountCentre = lazy(() => import('./components/AccountCentre'))
 import Onboarding from './pages/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
 import FeatureGuard from './components/FeatureGuard'
@@ -99,12 +100,14 @@ export default function App() {
     unlockApp?: (value: string) => Promise<boolean>
     syncUsername?: string | null
     accountReady?: boolean
+    accountCentreOpen?: boolean
+    closeAccountCentre?: () => void
     guestMode?: boolean
     hasRole?: (role: string) => boolean
     novels?: Array<{ id: string; title: string }>
     toast?: (message: string) => void
   }
-  const { onboardingDone, appLock, locked, unlockApp, syncUsername, accountReady, guestMode, hasRole } = appState
+  const { onboardingDone, appLock, locked, unlockApp, syncUsername, accountReady, guestMode, hasRole, accountCentreOpen, closeAccountCentre } = appState
 
   useEffect(() => {
     registerSW({ immediate: true })
@@ -194,6 +197,7 @@ export default function App() {
         </div>
         <CommandPalette />
         <Settings />
+        {accountCentreOpen && <Suspense fallback={null}><AccountCentre onClose={closeAccountCentre} /></Suspense>}
         <Toasts />
       </ErrorBoundary>
     </Router>
