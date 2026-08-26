@@ -1,5 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "moonscribe.cc" }],
+      "destination": "https://www.moonscribe.cc/$1",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/auth/:path*",

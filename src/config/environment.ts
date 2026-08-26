@@ -11,8 +11,8 @@ const trim = (value: unknown) => typeof value === 'string' ? value.trim().replac
 
 export function resolveAppEnvironment(env: EnvironmentInput): AppEnvironment {
   const name = (env.VITE_MOONSCRIBE_ENV || (env.DEV ? 'development' : 'production')) === 'development' ? 'development' : 'production'
-  const webUrl = trim(env.VITE_MOONSCRIBE_WEB_URL) || (name === 'development' ? 'http://localhost:5173' : 'https://moonscribe.cc')
-  const apiUrl = trim(env.VITE_MOONSCRIBE_API_URL || env.VITE_API_URL) || (name === 'development' ? 'http://localhost:3001' : 'https://moonscribe.cc')
+  const webUrl = trim(env.VITE_MOONSCRIBE_WEB_URL) || (name === 'development' ? 'http://localhost:5173' : 'https://www.moonscribe.cc')
+  const apiUrl = trim(env.VITE_MOONSCRIBE_API_URL || env.VITE_API_URL) || (name === 'development' ? 'http://localhost:3001' : 'https://www.moonscribe.cc')
   return { name, webUrl, apiUrl, authUrl: `${apiUrl}/auth`, websocketUrl: apiUrl.replace(/^http/, 'ws') }
 }
 

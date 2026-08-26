@@ -60,7 +60,7 @@ function describeSupabaseError(error) {
   })
 }
 const IS_PRODUCTION = process.env.NODE_ENV === 'production' || Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID)
-const CANONICAL_WEB_ORIGIN = 'https://moonscribe.cc'
+const CANONICAL_WEB_ORIGIN = 'https://www.moonscribe.cc'
 
 const STORES = new Set([
   'novels',
@@ -82,11 +82,11 @@ const STORES = new Set([
 // Providers always return through the public application origin. In local
 // development Vite proxies /auth to this process, so backend ports never leak
 // into provider-facing redirect URIs.
-const APP_ORIGIN = (process.env.APP_ORIGIN || (IS_PRODUCTION ? 'https://moonscribe.cc' : 'http://localhost:5173')).replace(/\/+$/, '')
+const APP_ORIGIN = (process.env.APP_ORIGIN || (IS_PRODUCTION ? CANONICAL_WEB_ORIGIN : 'http://localhost:5173')).replace(/\/+$/, '')
 // Magic Links must always land on the real MoonScribe web app. This is
 // intentionally independent from APP_ORIGIN so local/test servers cannot
 // send unusable localhost links through Resend.
-const MAGIC_LINK_ORIGIN = 'https://moonscribe.cc'
+const MAGIC_LINK_ORIGIN = CANONICAL_WEB_ORIGIN
 const BOOTSTRAP_ADMIN_DISCORD_ID = process.env.MOONSCRIBE_ADMIN_DISCORD_ID || '622903645268344835'
 const BOOTSTRAP_ADMIN_EMAIL = String(process.env.MOONSCRIBE_ADMIN_EMAIL || '').trim().toLowerCase()
 // OAuth providers must always return to the hosted API. The final browser

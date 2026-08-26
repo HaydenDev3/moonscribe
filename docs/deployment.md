@@ -11,7 +11,7 @@ MoonScribe’s Docker image intentionally does not declare a Docker `VOLUME` ins
 
 ## Vercel frontend with Railway API
 
-If the web assets are deployed to Vercel while the sync server runs on Railway, keep `vercel.json` in the project root. It proxies `/auth/*` and `/api/*` from the public MoonScribe domain to the Railway service so OAuth and API requests do not fall through to the frontend’s 404 page. Update the Railway hostname in `vercel.json` if the Railway service uses a different public domain. WebSocket collaboration should be tested after deployment; if the Vercel proxy does not support the upgrade, set `VITE_SYNC_SERVER` to the Railway HTTPS origin for the client and use the Railway origin for realtime connections.
+If the web assets are deployed to Vercel while the sync server runs on Railway, keep `vercel.json` in the project root. `www.moonscribe.cc` is the canonical application origin; the apex `moonscribe.cc` redirects there before the app loads. The config proxies `/auth/*` and `/api/*` from the canonical public domain to the Railway service so OAuth and API requests do not fall through to the frontend’s 404 page. Update the Railway hostname in `vercel.json` if the Railway service uses a different public domain. WebSocket collaboration should be tested after deployment; if the Vercel proxy does not support the upgrade, set `VITE_SYNC_SERVER` to the Railway HTTPS origin for the client and use the Railway origin for realtime connections.
 - HTTPS application origin and reverse proxy.
 - Verified Resend sending domain.
 - Google/Discord OAuth applications with exact callback URLs.
@@ -19,7 +19,7 @@ If the web assets are deployed to Vercel while the sync server runs on Railway, 
 
 ## Environment
 
-Copy `.env.example` for local development. In production set `APP_ORIGIN=https://moonscribe.cc` and verify `moonscribe.cc` in Resend first. Required production server values are `APP_ORIGIN`, `OAUTH_STATE_SECRET`, `DATA_DIR`, and `RESEND_API_KEY`; the sender is fixed to `MoonScribe <noreply@moonscribe.cc>`. OAuth providers require their client IDs and secrets. Configure `CORS_ORIGINS`, `TRUST_PROXY`, and `PORT` deliberately. `ALLOW_DEV_TUNNELS` and legacy record claiming must remain off except during a controlled operation.
+Copy `.env.example` for local development. In production set `APP_ORIGIN=https://www.moonscribe.cc` and verify `moonscribe.cc` in Resend first. Required production server values are `APP_ORIGIN`, `OAUTH_STATE_SECRET`, `DATA_DIR`, and `RESEND_API_KEY`; the sender is fixed to `MoonScribe <noreply@moonscribe.cc>`. OAuth providers require their client IDs and secrets. Configure `CORS_ORIGINS`, `TRUST_PROXY`, and `PORT` deliberately. `ALLOW_DEV_TUNNELS` and legacy record claiming must remain off except during a controlled operation.
 
 Set `API_ORIGIN` to the public HTTPS origin of the API when it is deployed separately from the web app. This is the exact Google/Discord callback host. If it is omitted in production, MoonScribe derives it from the trusted proxy host; setting it explicitly is preferred.
 

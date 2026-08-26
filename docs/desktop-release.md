@@ -9,10 +9,10 @@ Keep `RESEND_API_KEY`, OAuth client secrets, `OAUTH_STATE_SECRET`,
 `TAURI_SIGNING_PRIVATE_KEY`, and its password in the deployment or CI secret
 store. Never put them in `VITE_*` variables or commit them.
 
-Passkeys additionally require `WEBAUTHN_ORIGIN=https://moonscribe.cc` and
+Passkeys additionally require `WEBAUTHN_ORIGIN=https://www.moonscribe.cc` and
 `WEBAUTHN_RP_ID=moonscribe.cc` in the deployed API environment.
 
-Passkeys additionally require `WEBAUTHN_ORIGIN=https://moonscribe.cc` and
+Passkeys additionally require `WEBAUTHN_ORIGIN=https://www.moonscribe.cc` and
 `WEBAUTHN_RP_ID=moonscribe.cc` in the deployed API environment.
 
 Resend must have a verified sending domain and a sender address on that domain.
