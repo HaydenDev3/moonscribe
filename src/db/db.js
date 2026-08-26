@@ -7,9 +7,9 @@ import { isDesktopRuntime } from '../api/config'
 import { NativeDatabase } from '../platform/nativeDatabase'
 
 const environment = import.meta.env.VITE_MOONSCRIBE_ENV || (import.meta.env.DEV ? 'development' : 'production')
-const DB_VERSION = 10
+const DB_VERSION = 11
 
-const STORES = ['novels', 'chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'projectFiles', 'workspacePreferences', 'glossary', 'annotations', 'branches', 'suggestions', 'research', 'storyThreads', 'sceneChecklists', 'betaPackages', 'tombstones', 'meta', 'snapshots']
+const STORES = ['novels', 'chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'projectFiles', 'workspacePreferences', 'accountPreferences', 'glossary', 'annotations', 'branches', 'suggestions', 'research', 'storyThreads', 'sceneChecklists', 'betaPackages', 'tombstones', 'meta', 'snapshots']
 
 let dbPromise = null
 let legacyDbPromise = null
@@ -44,6 +44,7 @@ function getLegacyDB() {
           moodboard: { keyPath: 'id', index: 'by-novel' },
           projectFiles: { keyPath: 'id', index: 'by-novel' },
           workspacePreferences: { keyPath: 'id', index: 'by-novel' },
+          accountPreferences: { keyPath: 'id' },
           glossary: { keyPath: 'id', index: 'by-novel' },
           annotations: { keyPath: 'id', index: 'by-novel' },
           branches: { keyPath: 'id', index: 'by-novel' },

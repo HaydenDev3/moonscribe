@@ -1,7 +1,7 @@
 // Sync engine. Local-first: every write stays in IndexedDB and is flagged
 // pendingSync; the engine pushes pending records and pulls remote changes
 // with last-writer-wins merge. Deletes travel as tombstones.
-import { getDB, listStores, uid } from '../db/db'
+import { getDB, listStores, uid, markDirty } from '../db/db'
 import { migrateGuestToAccount } from '../db/guestMerge'
 import { getMeta, setMeta } from '../db/meta'
 import { toWire, fromWire } from './serialize'
@@ -58,6 +58,21 @@ export async function getConfig() {
   // stored here. IndexedDB remains the primary web store.
   if (!hasDesktopCredentialVault() && !token && typeof localStorage !== 'undefined') {
     token = localStorage.getItem('moonscribe:session:token') || null
+  }
+  // Shared parent-domain cookie recovery keeps www.moonscribe.cc and
+  // moonscribe.cc on the same cloud session even though IndexedDB is origin-scoped.
+  if (!hasDesktopCredentialVault() && !token && server && typeof window !== 'undefined' && /(?:^|\.)moonscribe\.cc$/i.test(window.location.hostname)) {
+    try {
+      const response = await fetch(`${server.replace(/\/+$/, '')}/api/auth/session/bootstrap`, { method: 'POST', credentials: 'include' })
+      if (response.ok) {
+        const data = await response.json()
+        token = data.token || null
+        if (data.accountId) await setMeta('syncAccountId', data.accountId)
+        if (data.username) await setMeta('syncUsername', data.username)
+      }
+    } catch {
+      // Offline startup remains local-first; a later sync retries bootstrap.
+    }
   }
   // Migrate older desktop builds away from plaintext browser storage once.
   if (hasDesktopCredentialVault() && !token) {
@@ -466,6 +481,7 @@ export async function applyIncoming(records) {
     next.id = key
     delete next.pendingSync
     await db.put(r.store, next)
+    if (r.store === 'accountPreferences' && r.id === 'settings' && next.value) await setMeta('settings', next.value)
     applied += 1
 
     // Keep the daily "words today" tally roughly in step across devices.
@@ -588,6 +604,49 @@ async function performSync() {
     setStatus('error', err.message)
     throw err
   }
+}
+
+// Inspect a local origin before importing it into the shared cloud library.
+// Matching IDs are never silently overwritten; title matches are reported as
+// likely duplicates so the user can choose whether to keep both.
+export async function inspectLocalLibrary() {
+  const db = await getDB()
+  const local = []
+  for (const store of listStores()) {
+    for (const record of await db.getAll(store)) {
+      if (record && record.id && !record.trashedAt) local.push({ store, record })
+    }
+  }
+  const cfg = await getConfig()
+  if (!cfg.token) throw new Error('Sign in before migrating a local library.')
+  const response = await fetch(`${apiBase(cfg)}/api/sync/pull?since=0`, { headers: { Authorization: `Bearer ${cfg.token}` } })
+  if (!response.ok) throw new Error('MoonScribe could not inspect the cloud library.')
+  const remote = (await response.json()).records || []
+  const byKey = new Map(remote.map((record) => [`${record.store}:${record.id}`, record]))
+  const remoteNovels = remote.filter((record) => record.store === 'novels' && !record.deleted)
+  const duplicates = []
+  const importable = []
+  for (const entry of local) {
+    const key = `${entry.store}:${entry.record.id}`
+    const sameId = byKey.get(key)
+    const sameTitle = entry.store === 'novels' && remoteNovels.find((record) => String(record.payload?.title || '').trim().toLowerCase() === String(entry.record.title || '').trim().toLowerCase())
+    if (sameId || sameTitle) duplicates.push({ store: entry.store, id: entry.record.id, reason: sameId ? 'same-id' : 'same-title', local: entry.record, remote: sameId || sameTitle })
+    else importable.push(entry)
+  }
+  return { importable, duplicates, total: local.length }
+}
+
+// Import only records that are not already represented in the cloud. The
+// caller receives duplicates for explicit review instead of losing data.
+export async function migrateLocalLibrary() {
+  const report = await inspectLocalLibrary()
+  const db = await getDB()
+  const importKeys = new Set(report.importable.map(({ store, record }) => `${store}:${record.id}`))
+  for (const { store, record } of report.importable) {
+    await db.put(store, markDirty(record, record))
+  }
+  const pushed = report.importable.length ? await push() : 0
+  return { ...report, imported: pushed, skipped: report.duplicates.length, importKeys }
 }
 
 export function sync() {

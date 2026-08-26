@@ -9,7 +9,7 @@ describe('shared cloud API configuration', () => {
   it('uses MoonScribe Cloud for a packaged desktop without configuration', () => {
     const desktop = { protocol: 'tauri:', origin: 'tauri://localhost' }
     expect(isDesktopRuntime(desktop)).toBe(true)
-    expect(apiBaseUrl({}, desktop)).toBe('https://moonscribe.cc')
+    expect(apiBaseUrl({}, desktop)).toBe('https://www.moonscribe.cc')
     expect(authReturnUrl({}, desktop)).toBe('moonscribe://auth/callback')
   })
 

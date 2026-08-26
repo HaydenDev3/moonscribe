@@ -72,6 +72,7 @@ const STORES = new Set([
   'moodboard',
   'projectFiles',
   'workspacePreferences',
+  'accountPreferences',
   'glossary',
   'annotations',
   'branches',
@@ -578,14 +579,29 @@ async function readBody(req, maxBytes = 12 * 1024 * 1024) {
   return data ? JSON.parse(data) : {}
 }
 
+function requestCookie(req, name) {
+  const header = String(req.headers.cookie || '')
+  const match = header.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`))
+  return match ? decodeURIComponent(match.slice(name.length + 1)) : ''
+}
+
+function sessionCookie(clear = false) {
+  return `${clear ? 'Max-Age=0' : `Max-Age=${30 * 24 * 60 * 60}`}; Path=/; Domain=.moonscribe.cc; HttpOnly; Secure; SameSite=Lax`
+}
+
 function json(res, status, body) {
   const text = JSON.stringify(body)
-  res.writeHead(status, {
+  const headers = {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
     'Referrer-Policy': 'no-referrer'
-  })
+  }
+  const existingCookie = res.getHeader('Set-Cookie')
+  if (existingCookie) headers['Set-Cookie'] = existingCookie
+  if (body && typeof body.token === 'string' && body.token) headers['Set-Cookie'] = `moonscribe_session=${encodeURIComponent(body.token)}; ${sessionCookie()}`
+  if (body?.clearSessionCookie) headers['Set-Cookie'] = `moonscribe_session=; ${sessionCookie(true)}`
+  res.writeHead(status, headers)
   res.end(text)
 }
 
@@ -1241,15 +1257,27 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       return
     }
 
+    if (path === '/api/auth/session/bootstrap' && req.method === 'POST') {
+      const cookieToken = requestCookie(req, 'moonscribe_session')
+      const cookieUserId = userFromToken(database, cookieToken)
+      if (!cookieUserId) return json(res, 401, { error: 'No shared session found.' })
+      const user = database.prepare('SELECT id, username, disabled_at FROM users WHERE id = ?').get(cookieUserId)
+      if (!user || user.disabled_at) return json(res, 401, { error: 'Account session is no longer valid.' })
+      json(res, 200, { ok: true, token: cookieToken, accountId: user.id, username: user.username, server: publicOrigin(req) })
+      return
+    }
+
     if (path === '/api/auth/logout' && req.method === 'POST') {
       const token = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
       database.prepare('DELETE FROM tokens WHERE token_hash = ?').run(sha(token))
-      json(res, 200, { ok: true })
+      json(res, 200, { ok: true, clearSessionCookie: true })
       return
     }
 
     // ---- protected sync endpoints ----
-    const userId = userFromToken(database, (req.headers.authorization || '').replace(/^Bearer\s+/i, ''))
+    const bearerToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
+    const userId = userFromToken(database, bearerToken || requestCookie(req, 'moonscribe_session'))
+    if (bearerToken && /(?:^|\.)moonscribe\.cc$/i.test(String(req.headers.host || '').split(':')[0])) res.setHeader('Set-Cookie', `moonscribe_session=${encodeURIComponent(bearerToken)}; ${sessionCookie()}`)
     const betaFeatureAllowed = () => {
       const current = userId ? database.prepare('SELECT role, roles FROM users WHERE id = ?').get(userId) : null
       const roles = userRoleInfo(current).roles

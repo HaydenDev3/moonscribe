@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { listNovels } from '../db/novels'
 import { getMeta, setMeta } from '../db/meta'
+import { putRecord } from '../db/db'
 import { switchDatabaseProfile } from '../db/db'
 import { makeLock, verifyLock } from '../db/lock'
 import * as syncEngine from '../sync/engine'
@@ -195,6 +196,7 @@ export function AppProvider({ children }) {
       const next = { ...DEFAULT_SETTINGS, ...s }
       if (!THEMES.includes(next.theme)) next.theme = 'light'
       setSettings(next)
+      void putRecord('accountPreferences', { id: 'settings', kind: 'settings', value: next, updatedAt: Date.now() })
     })
     ;(async () => {
       const [persistedCustomFonts, persistedSystemFonts] = await Promise.all([
@@ -592,6 +594,7 @@ export function AppProvider({ children }) {
       const next = { ...prev, ...patch }
       if (!THEMES.includes(next.theme)) next.theme = 'light'
       setMeta('settings', next)
+      void putRecord('accountPreferences', { id: 'settings', kind: 'settings', value: next, updatedAt: Date.now() })
       return next
     })
   }, [])
