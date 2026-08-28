@@ -3,9 +3,42 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{menu::MenuBuilder, tray::TrayIconBuilder, Emitter, Manager, WindowEvent};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
+use std::sync::Mutex;
 
 const CREDENTIAL_SERVICE: &str = "com.moonscribe.desktop";
 const NATIVE_SCHEMA_VERSION: i64 = 1;
+const DISCORD_CLIENT_ID_ENV: &str = "MOONSCRIBE_DISCORD_CLIENT_ID";
+const DISCORD_CLIENT_ID: &str = "1537750421458780170";
+
+struct DiscordPresenceState(Mutex<Option<DiscordIpcClient>>);
+
+fn discord_client_id() -> Option<String> {
+    Some(std::env::var(DISCORD_CLIENT_ID_ENV).ok().filter(|v| !v.trim().is_empty()).unwrap_or_else(|| DISCORD_CLIENT_ID.to_string()))
+}
+
+#[tauri::command]
+fn discord_presence_set(state: tauri::State<'_, DiscordPresenceState>, details: String, activity_state: String, started_at: i64) -> Result<(), String> {
+    let Some(client_id) = discord_client_id() else { return Err("Discord application ID is not configured".into()) };
+    let mut guard = state.0.lock().map_err(|_| "Discord state unavailable".to_string())?;
+    if guard.is_none() { let mut client = DiscordIpcClient::new(&client_id).map_err(|e| e.to_string())?; client.connect().map_err(|e| e.to_string())?; *guard = Some(client); }
+    let activity = activity::Activity::new().details(&details).state(&activity_state).timestamps(activity::Timestamps::new().start(started_at / 1000));
+    if let Some(client) = guard.as_mut() { client.set_activity(activity).map_err(|e| e.to_string())?; }
+    Ok(())
+}
+
+#[tauri::command]
+fn discord_presence_clear(state: tauri::State<'_, DiscordPresenceState>) -> Result<(), String> {
+    if let Ok(mut guard) = state.0.lock() { if let Some(mut client) = guard.take() { let _ = client.clear_activity(); let _ = client.close(); } }
+    Ok(())
+}
+
+#[tauri::command]
+fn discord_presence_status(state: tauri::State<'_, DiscordPresenceState>) -> serde_json::Value {
+    let available = discord_client_id().is_some();
+    let connected = state.0.lock().map(|g| g.is_some()).unwrap_or(false);
+    serde_json::json!({ "available": available, "connected": connected, "reason": if !available { "not_configured" } else if !connected { "discord_not_running" } else { "connected" } })
+}
 
 fn window_state_path(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.path()
@@ -361,9 +394,17 @@ pub fn run() {
                 let _ = window.unminimize();
                 let _ = window.set_focus();
             }
+            let deep_links = args
+                .iter()
+                .filter(|arg| arg.starts_with("moonscribe://"))
+                .cloned()
+                .collect::<Vec<_>>();
+            if !deep_links.is_empty() {
+                let _ = app.emit("moonscribe://auth-callback", deep_links);
+            }
             let files = args
                 .into_iter()
-                .filter(|arg| !arg.starts_with('-'))
+                .filter(|arg| !arg.starts_with('-') && !arg.starts_with("moonscribe://"))
                 .collect::<Vec<_>>();
             if !files.is_empty() {
                 let _ = app.emit("moonscribe://open-files", files);
@@ -377,6 +418,9 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
+            discord_presence_set,
+            discord_presence_clear,
+            discord_presence_status,
             credential_get,
             credential_set,
             native_read_file,
@@ -390,11 +434,12 @@ pub fn run() {
             native_storage_list_backups
         ])
         .setup(|app| {
+            app.manage(DiscordPresenceState(Mutex::new(None)));
             let window = app.get_webview_window("main").unwrap();
             restore_window_state(app.handle(), &window);
             let initial_files = std::env::args()
                 .skip(1)
-                .filter(|arg| !arg.starts_with('-'))
+                .filter(|arg| !arg.starts_with('-') && !arg.starts_with("moonscribe://"))
                 .collect::<Vec<_>>();
             if !initial_files.is_empty() {
                 let _ = app.emit("moonscribe://open-files", initial_files);

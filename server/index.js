@@ -746,6 +746,17 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
   // the provider code.
   const oauthCallbackOrigin = (req) => {
     if (process.env.API_ORIGIN) return API_ORIGIN
+    // Vite's proxy can make the API see localhost as its host while the user
+    // is actually browsing through an allowed HTTPS tunnel. OAuth providers
+    // must receive the public callback origin in that case.
+    const requestOrigin = String(req.headers.origin || '').trim().replace(/\/+$/, '')
+    if (requestOrigin && isAllowedOrigin(requestOrigin)) {
+      try {
+        const parsed = new URL(requestOrigin)
+        const local = new Set(['localhost', '127.0.0.1', '[::1]'])
+        if (!local.has(parsed.hostname)) return parsed.origin
+      } catch { /* use the configured fallback */ }
+    }
     if (!IS_PRODUCTION) return API_ORIGIN
     const forwardedHost = String(req.headers['x-forwarded-host'] || '').split(',')[0].trim()
     const host = forwardedHost || String(req.headers.host || '').trim()
@@ -757,6 +768,20 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
 
   const authReturnTarget = (req, requested = null) => {
     if (requested === 'moonscribe://auth/callback') return requested
+    // Do not honour a stale localhost value embedded in a tunneled dev build.
+    // Discord would otherwise display localhost as the post-consent target
+    // and the browser would leave the active ngrok origin.
+    if (requested) {
+      try {
+        const requestedUrl = new URL(requested)
+        const local = new Set(['localhost', '127.0.0.1', '[::1]'])
+        const requestOrigin = req.headers.origin
+        if (local.has(requestedUrl.hostname) && requestOrigin && isAllowedOrigin(requestOrigin)) {
+          const visible = new URL(requestOrigin)
+          if (!local.has(visible.hostname)) return visible.origin
+        }
+      } catch { /* fall through to normal redirect validation */ }
+    }
     return publicOrigin(req, requested)
   }
   const oauthResultLocation = (target, params) => target.startsWith('moonscribe:')

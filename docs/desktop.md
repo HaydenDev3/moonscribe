@@ -6,6 +6,8 @@ MoonScribe uses Tauri 2 to package the shared React/Vite frontend. Desktop uses 
 
 Release configuration still required includes the GitHub secrets `TAURI_PUBLIC_KEY`, `TAURI_SIGNING_PRIVATE_KEY`, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, plus full packaged-app QA. Quick Capture is available by Ctrl/Cmd+Shift+K even when the desktop window is unfocused, and from the command palette. The release workflow now refuses to package without the signing secrets and injects the public key into the updater configuration for the build. The installer registers Markdown, DOCX, EPUB, and JSON backup associations; OS-opened Markdown, plain-text, RTF, DOCX, and EPUB files route into the active novel’s chapter importer. JSON backup restore remains available through the dedicated recovery flow.
 
+Discord Rich Presence is opt-in and desktop-only. The bundled Discord Application ID is `1537750421458780170`; `MOONSCRIBE_DISCORD_CLIENT_ID` may override it for development or a future application. The app publishes only generic workspace activity and silently disables the integration when Discord is not available.
+
 ## Windows toolchain
 
 Install Rust stable, Node/npm, WebView2, and Visual Studio Build Tools with the Desktop development with C++ workload and Windows SDK. `npm run tauri:build` produces the Windows NSIS installer; MSI packaging is intentionally omitted because the release path is NSIS.

@@ -94,7 +94,7 @@ export default function UserPill({ onConnectClick }) {
           }
           <span className="user-pill-dot" style={{ background: statusColor }} aria-label={`Sync status: ${syncStatus || 'unknown'}`} />
         </span>
-        <span className="user-pill-name">{syncUsername}</span>
+        <span className="user-pill-name">{syncUsername === 'Guest' ? 'Guest mode' : syncUsername}</span>
         {isDiscord && <span className="user-pill-discord" title="Discord account"><Icon icon="fa-brands fa-discord" /></span>}
         <Icon icon="fa-solid fa-chevron-down" className={`user-pill-caret${open ? ' open' : ''}`} />
       </button>

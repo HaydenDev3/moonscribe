@@ -10,6 +10,7 @@ import {
   characterColors
 } from '../db/characters'
 import { listRelationships } from '../db/relationships'
+import { restoreTrashed } from '../db/trash'
 import { useApp } from '../context/AppContext'
 import SubPageTopbar from '../components/SubPageTopbar'
 import Modal from '../components/Modal'
@@ -81,6 +82,8 @@ export default function Characters({ novelId, embedded }) {
 
   const save = async (clearDraftFn) => {
     if (!editing) return
+    const duplicate = characters.find((character) => character.id !== editing.id && String(character.name || '').trim().toLocaleLowerCase() === String(editing.name || '').trim().toLocaleLowerCase())
+    if (duplicate && !window.confirm(`“${duplicate.name}” already exists. Save another character with the same name?`)) return
     if (editing.__new) {
       await createCharacter(nid, editing)
       toast(`${editing.name || 'A character'} joined the story.`)
@@ -104,7 +107,7 @@ export default function Characters({ novelId, embedded }) {
     await trashCharacter(deleting.id)
     setDeleting(null)
     load()
-    toast('Moved to the Trash — recoverable for 30 days.')
+    toast('Moved to the Trash — recoverable for 30 days.', { label: 'Undo', run: async () => { await restoreTrashed('characters', deleting.id); load() } })
   }
 
   const chapterName = (cid) => chapters.find((c) => c.id === cid)?.title || 'Untitled'
@@ -374,7 +377,7 @@ function CharacterModal({ character, chapters, onChange, onClose, onSave, isNew,
           <div className="field-row">
             <div className="field" style={{ flex: 2 }}>
               <label>Name</label>
-              <input value={character.name || ''} onChange={(e) => set({ name: e.target.value })} autoFocus placeholder="Full name" />
+              <input spellCheck value={character.name || ''} onChange={(e) => set({ name: e.target.value })} autoFocus placeholder="Full name" />
             </div>
             <div className="field" style={{ flex: 1 }}>
               <label>Age</label>
@@ -382,27 +385,27 @@ function CharacterModal({ character, chapters, onChange, onClose, onSave, isNew,
             </div>
           </div>
           <div className="field">
-            <label>Also known as <span className="hint">(aliases, comma-separated)</span></label>
-            <input value={aliasStr} onChange={(e) => set({ aliases: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} placeholder="Mira, The Keeper, Red" />
+            <label>Also known as <span className="hint">(separate aliases with commas; spaces are kept)</span></label>
+            <input spellCheck value={aliasStr} onChange={(e) => set({ aliases: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} placeholder="Mira, The Keeper, Red Queen" />
           </div>
           <div className="field-row">
             <div className="field" style={{ flex: 1 }}>
               <label>Role / archetype</label>
-              <input value={character.role || ''} onChange={(e) => set({ role: e.target.value })} placeholder="The reluctant hero" />
+              <input spellCheck value={character.role || ''} onChange={(e) => set({ role: e.target.value })} placeholder="The reluctant hero" />
             </div>
             <div className="field" style={{ flex: 1 }}>
               <label>Occupation</label>
-              <input value={character.occupation || ''} onChange={(e) => set({ occupation: e.target.value })} placeholder="Lighthouse keeper" />
+              <input spellCheck value={character.occupation || ''} onChange={(e) => set({ occupation: e.target.value })} placeholder="Lighthouse keeper" />
             </div>
           </div>
           <div className="field-row">
             <div className="field" style={{ flex: 1 }}>
               <label>Gender</label>
-              <input value={character.gender || ''} onChange={(e) => set({ gender: e.target.value })} placeholder="She/her" />
+              <input spellCheck value={character.gender || ''} onChange={(e) => set({ gender: e.target.value })} placeholder="She/her" />
             </div>
             <div className="field" style={{ flex: 1 }}>
               <label>Species / origin</label>
-              <input value={character.species || ''} onChange={(e) => set({ species: e.target.value })} placeholder="Human, Fae…" />
+              <input spellCheck value={character.species || ''} onChange={(e) => set({ species: e.target.value })} placeholder="Human, Fae…" />
             </div>
           </div>
           <div className="field">
@@ -421,19 +424,19 @@ function CharacterModal({ character, chapters, onChange, onClose, onSave, isNew,
         <div className="char-modal-section">
           <div className="field">
             <label>Bio <span className="hint">(who they are at a glance)</span></label>
-            <textarea rows={3} value={character.bio || ''} onChange={(e) => set({ bio: e.target.value })} placeholder="A weather-worn keeper with a secret she's kept for twenty years…" />
+              <textarea spellCheck rows={3} value={character.bio || ''} onChange={(e) => set({ bio: e.target.value })} placeholder="A weather-worn keeper with a secret she's kept for twenty years…" />
           </div>
           <div className="field">
             <label>Appearance</label>
-            <textarea rows={3} value={character.appearance || ''} onChange={(e) => set({ appearance: e.target.value })} placeholder="What would a stranger notice first?" />
+              <textarea spellCheck rows={3} value={character.appearance || ''} onChange={(e) => set({ appearance: e.target.value })} placeholder="What would a stranger notice first?" />
           </div>
           <div className="field">
             <label>Personality</label>
-            <textarea rows={3} value={character.personality || ''} onChange={(e) => set({ personality: e.target.value })} placeholder="Quiet, stubborn, kind in private…" />
+              <textarea spellCheck rows={3} value={character.personality || ''} onChange={(e) => set({ personality: e.target.value })} placeholder="Quiet, stubborn, kind in private…" />
           </div>
           <div className="field">
             <label>Writer's notes</label>
-            <textarea rows={2} value={character.notes || ''} onChange={(e) => set({ notes: e.target.value })} placeholder="Their secret, their fear, what they really want…" />
+            <textarea spellCheck rows={2} value={character.notes || ''} onChange={(e) => set({ notes: e.target.value })} placeholder="Their secret, their fear, what they really want…" />
           </div>
         </div>
       )}
@@ -443,11 +446,11 @@ function CharacterModal({ character, chapters, onChange, onClose, onSave, isNew,
         <div className="char-modal-section">
           <div className="field">
             <label>Motivation</label>
-            <textarea rows={2} value={character.motivation || ''} onChange={(e) => set({ motivation: e.target.value })} placeholder="What do they want more than anything?" />
+            <textarea spellCheck rows={2} value={character.motivation || ''} onChange={(e) => set({ motivation: e.target.value })} placeholder="What do they want more than anything?" />
           </div>
           <div className="field">
             <label>Character arc</label>
-            <textarea rows={2} value={character.arc || ''} onChange={(e) => set({ arc: e.target.value })} placeholder="Where do they start, and where do they end up?" />
+            <textarea spellCheck rows={2} value={character.arc || ''} onChange={(e) => set({ arc: e.target.value })} placeholder="Where do they start, and where do they end up?" />
           </div>
           <div className="field">
             <label>Appears in chapters <span className="hint">(optional — auto-tracked from the text)</span></label>

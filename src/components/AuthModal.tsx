@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useApp } from '../context/AppContext'
-import { apiBaseUrl } from '../api/config'
+import { apiBaseUrl, isDesktopRuntime } from '../api/config'
 import Icon from './Icon'
 import { exportBackup } from '../db/backup'
 import { downloadBlob } from '../utils/download'
@@ -82,7 +82,7 @@ function CloseButton({ onClick }) {
       onClick={onClick}
       aria-label="Close sign in"
       title="Close"
-      className="
+      className={`
         group flex h-10 w-10 shrink-0
         items-center justify-center
         rounded-full
@@ -97,7 +97,8 @@ function CloseButton({ onClick }) {
         focus:outline-none
         focus-visible:ring-2
         focus-visible:ring-amber-500/40
-      "
+        ${isDesktopRuntime() ? 'desktop-auth-overlay' : ''}
+      `}
     >
       <span className="transition-transform duration-200 group-hover:rotate-90">
         <Icon icon="fa-solid fa-xmark" />
@@ -1722,7 +1723,7 @@ export default function AuthModal({
             p-4
           "
         >
-          <div className="
+          <div className="auth-modal-content
             mb-5
             flex rounded-xl
             bg-black/30
@@ -1979,7 +1980,7 @@ export default function AuthModal({
         onMouseDown={(event) =>
           event.stopPropagation()
         }
-        className="
+        className={`
           relative
           flex flex-col
           overflow-hidden
@@ -2003,7 +2004,8 @@ export default function AuthModal({
           lg:max-w-none
 
           shadow-[0_35px_150px_rgba(0,0,0,0.72)]
-        "
+          ${isDesktopRuntime() ? 'desktop-auth-modal' : ''}
+        `}
       >
         {/* Background atmosphere */}
 
@@ -2029,7 +2031,7 @@ export default function AuthModal({
 
         {/* Header */}
 
-        <header className="
+        <header className="auth-modal-header
           relative z-10
           flex shrink-0
           items-start justify-between
@@ -2039,7 +2041,7 @@ export default function AuthModal({
           sm:py-5
           lg:px-8
         ">
-          <div className="flex min-w-0 items-start gap-3.5">
+          <div className="auth-modal-header-main flex min-w-0 flex-1 items-start gap-3.5">
             <div className="
               h-11 w-11
               sm:h-13 sm:w-13
@@ -2052,11 +2054,11 @@ export default function AuthModal({
               <img
                 src={APP_LOGO}
                 alt="MoonScribe"
-                className="h-full w-full object-cover"
+                className="h-full w-full object-contain"
               />
             </div>
 
-            <div className="min-w-0">
+            <div className="auth-modal-header-copy min-w-0 flex-1">
               <div className="
                 text-[8px]
                 font-semibold uppercase

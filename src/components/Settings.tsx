@@ -20,6 +20,7 @@ import { flushNativeMirrorFailures, listNativeBackups, pendingNativeMirrorFailur
 import { readDesktopFile, takePendingDesktopBackup } from '../platform/fileOpen'
 import { pendingSyncCount } from '../sync/engine'
 import { DEFAULT_KEYBINDS, KEYBIND_LABELS, formatKeybind, keybindConflicts, keybindFromEvent, keybindsWithDefaults } from '../utils/keybinds'
+import { discordPresenceStatus } from '../platform/discordPresence'
 
 const IDLE_OPTIONS = [
   { value: '0', label: 'Never' },
@@ -39,8 +40,8 @@ const CATEGORIES = [
   { key: 'notifications', label: 'Notifications', icon: 'fa-regular fa-bell', group: 'Experience', terms: 'email reminder browser inbox collaboration announcement' },
   { key: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-house', group: 'Experience', terms: 'home library sidebar widgets landing view' },
   { key: 'sync', label: 'Sync', icon: 'fa-solid fa-arrows-rotate', group: 'Data & sync', terms: 'cloud sync offline conflicts server' },
-  { key: 'backups', label: 'Backups', icon: 'fa-solid fa-box-archive', group: 'Data & sync', terms: 'backup restore download safety' },
   { key: 'privacy', label: 'Import, export & storage', icon: 'fa-solid fa-database', group: 'Data & sync', terms: 'backup export import delete encryption storage' },
+  { key: 'backups', label: 'Backups', icon: 'fa-solid fa-box-archive', group: 'Data & sync', terms: 'backup restore download safety' },
   { key: 'lock', label: 'Lock & security', icon: 'fa-solid fa-lock', group: 'Privacy & safety', terms: 'password pin idle authorization security' },
   { key: 'sessions', label: 'Sessions & devices', icon: 'fa-solid fa-laptop', group: 'Privacy & safety', terms: 'devices sessions revoke login signed in' },
   { key: 'accessibility', label: 'Accessibility', icon: 'fa-solid fa-universal-access', group: 'Accessibility', terms: 'contrast readable motion keyboard focus' },
@@ -148,6 +149,7 @@ export default function Settings() {
               <h2>Sync</h2>
               <p className="muted">Manage who you are in MoonScribe, where your library lives, and which devices can reach it.</p>
               <SyncPanel onOpen={() => setCat('sync')} />
+              <DiscordPresencePanel settings={settings} updateSettings={updateSettings} />
               <RolePermissions />
               <div className="settings-section-card">
                 <div className="settings-section-head"><span className="settings-section-icon"><Icon icon="fa-solid fa-laptop-file" /></span><div><strong>Local writing identity</strong><small>Your offline library is available without an account.</small></div><span className="settings-status-pill safe">Active</span></div>
@@ -162,7 +164,13 @@ export default function Settings() {
               <p className="muted">A quiet, private place to write — made with love, for Storm Tattersall. Every word stays on your device by default; nothing is ever counted against you.</p>
               <p className="muted small">Online across your devices · offline-safe · yours.</p>
               <div className="settings-row" style={{ marginTop: 'var(--space-5)' }}>
+                <div><div className="settings-row-title">Version 1.1.1</div><div className="settings-row-sub">Released 28 August 2026 — Quality-of-life update</div></div>
+              </div>
+              <div className="settings-row">
                 <div><div className="settings-row-title">Version 1.1.0</div><div className="settings-row-sub">Released 26 August 2026 — Parchment</div></div>
+              </div>
+              <div className="settings-row">
+                <div><div className="settings-row-title">Version 1.0.0</div><div className="settings-row-sub">Released 5 August 2026 — First public release</div></div>
               </div>
             </section>
           )}
@@ -172,6 +180,16 @@ export default function Settings() {
     </div>,
     document.body
   )
+}
+
+function DiscordPresencePanel({ settings, updateSettings }) {
+  const [status, setStatus] = useState<{ available: boolean; connected: boolean; reason?: string } | null>(null)
+  useEffect(() => { void discordPresenceStatus().then(setStatus) }, [settings.discordRichPresence])
+  const label = !status ? 'Checking…' : status.connected ? 'Connected' : status.available ? 'Disconnected' : status.reason === 'web' ? 'Desktop only' : 'Discord unavailable'
+  return <div className="settings-section-card">
+    <div className="settings-section-head"><span className="settings-section-icon"><Icon icon="fa-brands fa-discord" /></span><div><strong>Discord Rich Presence</strong><small>Let friends see what kind of work you are doing in MoonScribe.</small></div><span className={`settings-status-pill ${status?.connected ? 'safe' : ''}`}>{label}</span></div>
+    <div className="settings-row"><div><div className="settings-row-title">Share my MoonScribe activity</div><div className="settings-row-sub">Only generic activities are shared — never novel, chapter, or document names. Discord’s desktop app must be running.</div></div><Toggle checked={!!settings.discordRichPresence} onChange={(value) => updateSettings({ discordRichPresence: value })} /></div>
+  </div>
 }
 
 function SettingsSearchResults({ query, settings, updateSettings, onOpenCategory }) {
@@ -471,7 +489,10 @@ function SyncPanel({ onOpen }) {
   const { syncUsername, syncDiscordAvatar, syncServer, syncStatus, disconnectSync, toast, syncNow } = useApp()
   const [pending, setPending] = useState(0)
   const [nativePending, setNativePending] = useState(0)
+  const [queue, setQueue] = useState([])
+  const [queueOpen, setQueueOpen] = useState(false)
   const refresh = () => { void pendingSyncCount().then(setPending).catch(() => {}); setNativePending(pendingNativeMirrorFailures()) }
+  const inspectQueue = async () => { setQueue(await syncEngine.collectPending()); setQueueOpen(true) }
   useEffect(() => {
     refresh()
     const timer = window.setInterval(refresh, 5000)
@@ -537,7 +558,8 @@ function SyncPanel({ onOpen }) {
             <span className="char-tag">Writer</span>
             <span className="char-tag">Discord</span>
           </div>
-          <div className="sync-queue-card" role="status"><div><strong>{pending + nativePending}</strong><span>{nativePending ? `${nativePending} local desktop retry${nativePending === 1 ? '' : 'ies'} pending` : (pending === 1 ? 'queued change' : 'queued changes')}</span></div><button className="button button-quiet" type="button" onClick={async () => { await flushNativeMirrorFailures(); void syncNow?.(); refresh(); toast('Sync and local recovery retry requested.') }} disabled={(!pending && !nativePending) || syncStatus === 'syncing'}>{syncStatus === 'syncing' ? 'Syncing…' : 'Retry now'}</button></div>
+          <div className="sync-queue-card" role="status"><div><strong>{pending + nativePending}</strong><span>{nativePending ? `${nativePending} local desktop retry${nativePending === 1 ? '' : 'ies'} pending` : (pending === 1 ? 'queued change' : 'queued changes')}</span></div><div className="sync-queue-actions"><button className="button button-quiet" type="button" onClick={() => void inspectQueue()} disabled={!pending}>View details</button><button className="button button-quiet" type="button" onClick={async () => { await flushNativeMirrorFailures(); void syncNow?.(); refresh(); toast('Sync and local recovery retry requested.') }} disabled={(!pending && !nativePending) || syncStatus === 'syncing'}>{syncStatus === 'syncing' ? 'Syncing…' : 'Retry now'}</button></div></div>
+          {queueOpen && <div className="sync-queue-details"><div className="settings-row-title">Pending local changes <button type="button" className="button button-quiet" onClick={() => setQueueOpen(false)}>Close</button></div>{queue.length ? queue.map((item) => <div className="sync-queue-item" key={`${item.store}:${item.id}`}><strong>{item.store}</strong><span>{item.deleted ? 'Deletion waiting to sync' : 'Change waiting to sync'} · {new Date(item.updatedAt).toLocaleString()}</span></div>) : <p className="muted small">No queued changes remain.</p>}</div>}
         </div>
 
         {/* Footer actions */}

@@ -2,6 +2,24 @@ import { getDB, uid } from './db'
 
 const SESSION_TTL = 24 * 60 * 60 * 1000 // keep 24 hours of snapshots
 
+export async function saveRecoveryDraft(chapterId, novelId, content, wordCount) {
+  const db = await getDB()
+  const id = `recovery:${chapterId}`
+  await db.put('snapshots', { id, chapterId, novelId, content, wordCount, ts: Date.now(), recovery: true })
+  return id
+}
+
+export async function getRecoveryDraft(chapterId) {
+  const db = await getDB()
+  const draft = await db.get('snapshots', `recovery:${chapterId}`)
+  return draft?.recovery ? draft : null
+}
+
+export async function clearRecoveryDraft(chapterId) {
+  const db = await getDB()
+  await db.delete('snapshots', `recovery:${chapterId}`)
+}
+
 export async function saveSnapshot(chapterId, novelId, content, wordCount) {
   const db = await getDB()
   await db.add('snapshots', { id: uid(), chapterId, novelId, content, wordCount, ts: Date.now() })

@@ -18,7 +18,7 @@ Use `Ctrl+S` for an explicit save and `Ctrl+K` for the command/search palette. B
 
 ## Worldbuilding
 
-Characters hold identity, appearance, personality, motivation, arc, aliases, and custom fields. Places, factions, artefacts, general world entries, relationships, glossary, timeline, milestones, and continuity tools connect planning information to the manuscript. Entity highlights are aids, not manuscript text, and can be disabled.
+Characters hold identity, appearance, personality, motivation, arc, aliases, and custom fields. Places, factions, artefacts, creatures, general world entries, relationships, glossary, timeline, milestones, and continuity tools connect planning information to the manuscript. Entity highlights are aids, not manuscript text, and can be disabled.
 
 ## Planning and visual workspaces
 

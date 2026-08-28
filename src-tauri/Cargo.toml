@@ -1,6 +1,6 @@
 [package]
 name = "moonscribe"
-version = "1.1.0"
+version = "1.1.1"
 description = "MoonScribe desktop app"
 authors = ["MoonScribe"]
 license = "MIT"
@@ -21,6 +21,7 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-global-shortcut = "2"
+discord-rich-presence = "0.2"
 
 [features]
 default = ["custom-protocol"]

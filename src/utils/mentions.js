@@ -19,10 +19,20 @@ export function mentionsInHtml(html, names) {
 export function autoChapterMentions(chapters, characters) {
   const map = {}
   const idByName = {}
+  const firstNames = new Map()
   for (const c of characters || []) {
     if (!c.id) continue
     map[c.id] = new Set(c.chapterIds || [])
-    if (c.name && c.name.trim()) idByName[c.name.trim()] = c.id
+    if (c.name && c.name.trim()) {
+      const full = c.name.trim()
+      idByName[full] = c.id
+      const first = full.split(/\s+/)[0]
+      if (first.length > 1 && first !== full) firstNames.set(first, (firstNames.get(first) || []).concat(c.id))
+    }
+  }
+  for (const [first, ids] of firstNames) {
+    // Ambiguous first names are deliberately left unassigned.
+    if (ids.length === 1) idByName[first] = ids[0]
   }
   const names = Object.keys(idByName).sort((a, b) => b.length - a.length)
   for (const ch of chapters || []) {

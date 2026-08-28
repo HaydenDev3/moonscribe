@@ -36,7 +36,11 @@ export async function searchAll(query) {
     const title = c.title || 'Untitled chapter'
     const body = (c.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
     if (matches(title) || matches(body)) {
-      chapters.push({ id: c.id, novelId: c.novelId, title, subtitle: novelTitle.get(c.novelId) || '', score: rank(title) + (matches(title) ? 10 : 0) })
+      const source = matches(title) ? title : body
+      const at = source.toLowerCase().indexOf(q)
+      const start = Math.max(0, at - 70)
+      const snippet = source.slice(start, start + 180)
+      chapters.push({ id: c.id, novelId: c.novelId, title, subtitle: novelTitle.get(c.novelId) || '', preview: `${start ? '…' : ''}${snippet}${start + 180 < source.length ? '…' : ''}`, match: q, score: rank(title) + (matches(title) ? 10 : 0) })
     }
   }
 

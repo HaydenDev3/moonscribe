@@ -13,7 +13,10 @@ export async function trashRecord(storeName, id) {
   const db = await getDB()
   const rec = await db.get(storeName, id)
   if (!rec) return null
-  const next = { ...rec, id: rec.id, trashedAt: Date.now() }
+  // A tombstone must be newer than the last chapter edit. Reusing the old
+  // updatedAt lets a sync pull win the race and resurrect the item locally.
+  const now = Date.now()
+  const next = { ...rec, id: rec.id, trashedAt: now, updatedAt: now }
   return putRecord(storeName, next)
 }
 
@@ -33,7 +36,7 @@ export async function restoreTrashed(store, id) {
   const db = await getDB()
   const rec = await db.get(store, id)
   if (!rec) return null
-  const next = { ...rec, id: rec.id }
+  const next = { ...rec, id: rec.id, updatedAt: Date.now() }
   delete next.trashedAt
   return putRecord(store, next)
 }

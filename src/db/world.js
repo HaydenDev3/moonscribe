@@ -1,11 +1,12 @@
 import { getDB, uid, putRecord, removeRecord } from './db'
 import { trashRecord } from './trash'
 
-// Worldbuilding: places, factions, artefacts, lore, timeline entries.
+// Worldbuilding: places, factions, artefacts, creatures, lore, timeline entries.
 export const WORLD_KINDS = [
   { key: 'place', label: 'Places', icon: 'fa-solid fa-mountain-sun' },
   { key: 'faction', label: 'Factions', icon: 'fa-solid fa-flag' },
   { key: 'item', label: 'Artefacts', icon: 'fa-solid fa-gem' },
+  { key: 'creature', label: 'Creatures', icon: 'fa-solid fa-paw' },
   { key: 'lore', label: 'Lore', icon: 'fa-solid fa-scroll' },
   { key: 'timeline', label: 'Timeline', icon: 'fa-regular fa-clock' }
 ]

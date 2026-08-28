@@ -32,6 +32,8 @@
 
 /* Theme bridge: dashboard surfaces and copy follow the active app palette. */
 .moon-dashboard-home .moon-continue-card { border-color: color-mix(in srgb, var(--moon) 28%, var(--border)); background: radial-gradient(circle at 92% 15%, color-mix(in srgb, var(--twilight) 12%, transparent), transparent 30%), linear-gradient(125deg, var(--surface-elev), var(--surface)); box-shadow: var(--shadow-md); }
+.moon-dashboard-home { background: var(--bg); }
+.moon-dashboard-home .moon-card, .moon-dashboard-home .moon-quick-capture { background: linear-gradient(155deg, var(--surface-elev), var(--surface)); }
 .moon-dashboard-home .moon-continue-card:hover, .moon-dashboard-home .moon-card:hover { border-color: color-mix(in srgb, var(--moon) 38%, var(--border)); }
 .moon-dashboard-home .moon-continue-copy h3, .moon-dashboard-home .moon-chapter-list strong, .moon-dashboard-home .moon-story-progress h3, .moon-dashboard-home .moon-rhythm-footer strong { color: var(--charcoal); }
 .moon-dashboard-home .moon-continue-copy > p:not(.moon-kicker), .moon-dashboard-home .moon-card-note, .moon-dashboard-home .moon-chapter-list small, .moon-dashboard-home .moon-chapter-time, .moon-dashboard-home .moon-rhythm-footer span, .moon-dashboard-home .moon-bars small { color: var(--grey); }

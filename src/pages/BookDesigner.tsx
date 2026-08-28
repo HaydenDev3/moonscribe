@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ComponentType } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { getNovel, updateNovel } from '../db/novels'
+import { defaultLayout, getNovel, updateNovel } from '../db/novels'
 import { listChapters } from '../db/chapters'
 import { useApp } from '../context/AppContext'
 import SubPageTopbar from '../components/SubPageTopbar'
@@ -286,6 +286,7 @@ export default function BookDesigner({
   const surfaceFileRef = useRef<HTMLInputElement | null>(null)
   const pendingSurfaceRef = useRef('front')
   const applyingRemoteRef = useRef(false)
+  const designerDirtyRef = useRef(false)
   const presenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const presenceStateRef = useRef({ stageView: 'cover', coverSurface: 'front', section: 'cover', canEditDesigner: true, novelReady: false })
   const designerFontOptions = useMemo(() => buildDesignerFontOptions({ systemFonts, customFonts }), [customFonts, systemFonts])
@@ -296,8 +297,11 @@ export default function BookDesigner({
       setNovel(n)
       setChapters(await listChapters(id))
       setLibraryImages((await listMoodboard(id)).filter((tile) => tile.kind === 'image' && tile.image))
-      setLayout(n.layout || {})
-      layoutRef.current = n.layout || {}
+      // Merge new designer defaults into older books without replacing any
+      // choices the author has already made.
+      const savedLayout = { ...defaultLayout(), ...(n.layout || {}) }
+      setLayout(savedLayout)
+      layoutRef.current = savedLayout
     })()
   }, [id])
 
@@ -407,11 +411,13 @@ export default function BookDesigner({
     layoutRef.current = layout
     if (!layout || !novel) return
     if (!canEditDesigner) return
-    setSaveState('syncing')
     if (applyingRemoteRef.current) {
       applyingRemoteRef.current = false
       return
     }
+    if (!designerDirtyRef.current) return
+    designerDirtyRef.current = false
+    setSaveState('syncing')
     if (saveTimer.current) clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => {
       updateNovel(id, { layout }).then(() => setSaveState('saved')).catch(() => setSaveState('error'))
@@ -428,6 +434,7 @@ export default function BookDesigner({
 
   const update = useCallback((patch) => {
     if (!canEditDesigner) return
+    designerDirtyRef.current = true
     setLayout((p) => {
       if (!isUndoRedo.current) {
         historyRef.current = [...historyRef.current.slice(-49), p]
@@ -441,6 +448,7 @@ export default function BookDesigner({
 
   const updateCover = useCallback((patch) => {
     if (!canEditDesigner) return
+    designerDirtyRef.current = true
     setLayout((p) => {
       const next = { ...p, cover: { ...(p.cover || {}), ...patch } }
       layoutRef.current = next
@@ -776,18 +784,6 @@ export default function BookDesigner({
             )}
           </div>
 
-          {/* Footer */}
-          <div className="ds-stage-footer">
-            <div className="designer-book-system">
-              <span className="designer-kicker">YOUR BOOK SYSTEM</span>
-              <strong>{designById(activeEditorDesign)?.name || designById(activeCoverDesign)?.name || 'Custom edition'}</strong>
-              <span>{font?.label || layout.bodyFont || 'Literata'} · {layout.pageSize || 'Trade paperback'} · ~{measurements.pages} pages</span>
-            </div>
-            <div className="designer-preflight-summary"><span className={blockingIssues.length ? 'blocking' : 'ready'}>{blockingIssues.length ? `${blockingIssues.length} blocking issue${blockingIssues.length === 1 ? '' : 's'}` : 'Ready to review'}</span><small>{preflightIssues.length} preflight note{preflightIssues.length === 1 ? '' : 's'}</small></div>
-            <button className="button button-primary" onClick={() => { setWorkflowStage('export'); window.location.hash = `#/novel/${id}/design/print`; navigate(`/novel/${id}/design/print`) }}>
-              Open export preview →
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -1109,6 +1105,12 @@ function BodyTab({ layout, update, designerFontOptions = buildDesignerFontOption
         <span>Drop cap on chapter openers</span>
         <label className="switch"><input type="checkbox" checked={!!layout.dropCap} onChange={(e) => update({ dropCap: e.target.checked })} /><span className="track" /></label>
       </div>
+      <Field label="Drop cap colour">
+        <div className="ds-color-custom">
+          <input type="color" className="ds-color-wheel" value={layout.dropCapColor ?? '#2a2520'} onChange={(e) => update({ dropCapColor: e.target.value })} aria-label="Drop cap colour" />
+          <span className="ds-color-custom-label">Used for the first letter</span>
+        </div>
+      </Field>
     </>
   )
 }
@@ -1257,6 +1259,7 @@ function InteriorPreview({ novel, cover, layout, chapters, font, sig, activeEdit
   const pageNumPos   = layout.pageNumPos   || 'bottom-center'
   const bodySize     = layout.bodySize     ?? 11.5
   const dropCap      = !!layout.dropCap
+  const dropCapColor = layout.dropCapColor ?? '#2a2520'
   const textAlign    = layout.textAlign    || 'left'
   const firstIndent  = layout.firstIndent  || '0'
 
@@ -1364,6 +1367,7 @@ function InteriorPreview({ novel, cover, layout, chapters, font, sig, activeEdit
                           fontSize: `${bodySize * 1.1}px`,
                           textAlign,
                           ...( { ['--first-indent' as any]: firstIndent } as CSSProperties ),
+                          ...( { ['--drop-cap-color' as any]: dropCapColor } as CSSProperties ),
                         }}
                         dangerouslySetInnerHTML={{ __html: page.blocks.map((b: PageBlock) => b.html).join('') }}
                       />

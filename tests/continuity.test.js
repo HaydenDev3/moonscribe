@@ -37,4 +37,13 @@ describe('continuity engine', () => {
     expect(report.issues.some((issue) => issue.kind === 'pov')).toBe(false)
     expect(report.issues.some((issue) => issue.kind === 'unseen')).toBe(false)
   })
+
+  it('matches a unique first name from a full character name', async () => {
+    const novel = await createNovel({ title: 'First names' })
+    const chapter = await createChapter(novel.id, { title: 'One', content: '<p>Lyra crossed the room.</p>' })
+    await updateChapter(chapter.id, { meta: { pov: 'Lyra Vale', location: '', timeOfDay: 'Night', beat: 'Arrival' } })
+    await createCharacter(novel.id, { name: 'Lyra Vale' })
+    const report = await continuityReport(novel.id)
+    expect(report.issues.some((issue) => issue.kind === 'unseen')).toBe(false)
+  })
 })

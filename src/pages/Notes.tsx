@@ -164,11 +164,11 @@ function NoteModal({ note, chapters, characters, onChange, onClose, onSave, onDe
       )}
       <div className="field">
         <label>Title</label>
-        <input value={note.title || ''} onChange={(e) => set({ title: e.target.value })} autoFocus />
+        <input spellCheck value={note.title || ''} onChange={(e) => set({ title: e.target.value })} autoFocus />
       </div>
       <div className="field">
         <label>Note</label>
-        <textarea style={{ minHeight: 160 }} value={note.content || ''} onChange={(e) => set({ content: e.target.value })} placeholder="Whatever you need to remember…" />
+        <textarea spellCheck style={{ minHeight: 160 }} value={note.content || ''} onChange={(e) => set({ content: e.target.value })} placeholder="Whatever you need to remember…" />
       </div>
       <div className="field">
         <label>Link to <span className="hint">(optional)</span></label>

@@ -364,6 +364,9 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
 .media-page-template-grid button span { font-size: 28px; text-align: center; }
 .media-page-template-grid button small { opacity: .75; line-height: 1.35; }
 .editor-page-template-popover { width: 290px; max-height: 420px; overflow: auto; }
+.editor-find-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface-elev); }
+.editor-find-bar input:not([type="checkbox"]) { min-width: 130px; flex: 1 1 150px; }
+.editor-find-option { display: inline-flex; align-items: center; gap: 4px; color: var(--grey); font-size: .7rem; white-space: nowrap; }
 .editor-page-template-popover button { display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; padding: 9px; }
 .editor-page-template-popover button > span:first-child { font-size: 20px; width: 28px; }
 .editor-page-template-popover button span:last-child { display: grid; gap: 3px; }

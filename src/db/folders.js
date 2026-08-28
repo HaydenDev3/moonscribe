@@ -77,5 +77,7 @@ export async function deleteFolder(id) {
   if (!folder) return null
   const children = (await db.getAllFromIndex('folders', 'by-novel', folder.novelId)).filter((child) => child.parentId === id)
   await Promise.all(children.map((child) => updateFolder(child.id, { parentId: folder.parentId || null })))
+  const chapters = (await db.getAllFromIndex('chapters', 'by-novel', folder.novelId)).filter((chapter) => chapter.folderId === id)
+  await Promise.all(chapters.map((chapter) => putRecord('chapters', { ...chapter, folderId: null, parentId: null, updatedAt: Date.now() })))
   return removeRecord('folders', id, folder.novelId)
 }

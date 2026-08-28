@@ -1,11 +1,12 @@
 // App shell: routing, onboarding gate, PWA registration, theme wiring.
 import React, { lazy, Suspense, useEffect, type ReactNode } from 'react'
-import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import { useApp } from './context/AppContext'
 import Landing from './pages/Landing'
 import DesktopGateway from './components/DesktopGateway'
 import { isDesktopRuntime } from './api/config'
+import { callbackSearch } from './api/desktopAuth'
 import { capabilities } from './platform/capabilities'
 import { checkForDesktopUpdate } from './platform/updater'
 import Toasts from './components/Toasts'
@@ -31,6 +32,7 @@ import AnnouncementBanner from './components/AnnouncementBanner'
 import StartupDigest from './components/StartupDigest'
 import Icon from './components/Icon'
 import { createNote } from './db/notes'
+import { updateDiscordPresence, clearDiscordPresence } from './platform/discordPresence'
 
 const PrintView = lazy(() => import('./pages/PrintView'))
 
@@ -150,8 +152,9 @@ export default function App() {
     // OAuth providers return to /dashboard with a one-time exchange query.
     // Let AppContext mount and consume it before the account gate redirects
     // back to the sign-in modal; otherwise no exchange request is made.
-    const oauthCallback = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('oauth_exchange')
-    const discordCallback = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('discord_exchange')
+    const callbackQuery = typeof window !== 'undefined' ? callbackSearch(window.location, isDesktopRuntime()) : ''
+    const oauthCallback = new URLSearchParams(callbackQuery).has('oauth_exchange')
+    const discordCallback = new URLSearchParams(callbackQuery).has('discord_exchange')
     if (!syncUsername && !oauthCallback && !discordCallback) return <Navigate to="/?signin=1" replace />
     if (!onboardingDone) return <Onboarding />
     if (isDesktopRuntime() && !guestMode && syncUsername && !hasRole?.('admin') && !hasRole?.('developer') && !hasRole?.('beta_tester')) return <DesktopGateway />
@@ -162,13 +165,14 @@ export default function App() {
   return (
     <Router>
       <ErrorBoundary>
+        <DiscordPresenceBridge enabled={!!(appState as any).settings?.discordRichPresence} locked={!!locked} active={!!syncUsername || !!guestMode} />
         <a className="skip-link" href="#main-content">Skip to main content</a>
         <AnnouncementBanner />
         <StartupDigest />
         <GlobalQuickCapture novels={appState.novels || []} toast={appState.toast} />
         <div id="main-content" tabIndex={-1}>
         <Suspense fallback={<Loading />}><Routes>
-          <Route path="/" element={isDesktopRuntime() && !syncUsername && !guestMode ? <DesktopGateway /> : <Landing />} />
+          <Route path="/" element={isDesktopRuntime() ? (syncUsername || guestMode ? <Navigate to="/dashboard" replace /> : <DesktopGateway />) : <Landing />} />
           <Route path="/privacy" element={<PublicPage page="privacy" />} />
           <Route path="/terms" element={<PublicPage page="terms" />} />
           <Route path="/cookies" element={<PublicPage page="cookies" />} />
@@ -204,10 +208,28 @@ export default function App() {
   )
 }
 
+function DiscordPresenceBridge({ enabled, locked, active }: { enabled: boolean; locked: boolean; active: boolean }) {
+  const location = useLocation()
+  const sessionStart = React.useRef(Date.now())
+  React.useEffect(() => {
+    if (!enabled || locked || !active) { void clearDiscordPresence(); return }
+    void updateDiscordPresence(true, location.pathname, sessionStart.current)
+  }, [enabled, locked, active, location.pathname])
+  React.useEffect(() => () => { void clearDiscordPresence() }, [])
+  return null
+}
+
 function GlobalQuickCapture({ novels, toast }) {
   const [open, setOpen] = React.useState(false)
   const [value, setValue] = React.useState('')
   const [novelId, setNovelId] = React.useState('')
+  const [template, setTemplate] = React.useState('idea')
+  const templates = {
+    idea: { label: 'Idea', prompt: 'What is the idea?\n\nWhy might it matter?' },
+    dialogue: { label: 'Dialogue', prompt: 'Speaker:\n“ ”\n\nContext or delivery:' },
+    research: { label: 'Research', prompt: 'Question:\n\nSource:\n\nUseful details:' },
+    task: { label: 'Task', prompt: 'Task:\n\nNext step:\n\nDue / priority:' }
+  }
   React.useEffect(() => {
     const onKeyDown = (event) => {
       if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'k') {
@@ -251,7 +273,8 @@ function GlobalQuickCapture({ novels, toast }) {
     if (!novelId && novels[0]?.id) setNovelId(novels[0].id)
   }, [novelId, novels])
   if (!open || !novels.length) return null
-  const close = () => { setOpen(false); setValue('') }
+  const close = () => { setOpen(false); setValue(''); setTemplate('idea') }
+  const chooseTemplate = (next) => { setTemplate(next); setValue(templates[next].prompt) }
   const save = async () => {
     const novel = novels.find((item) => item.id === novelId)
     if (!novel || !value.trim()) return
@@ -260,5 +283,5 @@ function GlobalQuickCapture({ novels, toast }) {
     toast?.(`Saved to ${novel.title}.`)
     close()
   }
-  return <div className="quick-capture-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><section className="quick-capture-modal" role="dialog" aria-modal="true" aria-labelledby="quick-capture-title"><header><div><span className="settings-panel-kicker">Capture</span><h2 id="quick-capture-title">Quick capture</h2></div><button className="button button-quiet" type="button" onClick={close} aria-label="Close quick capture"><Icon icon="fa-solid fa-xmark" /></button></header><textarea autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="A line, scene idea, or detail before it disappears…" aria-label="Quick capture note" rows={6} /><label>Save to<select value={novelId} onChange={(event) => setNovelId(event.target.value)}>{novels.map((novel) => <option key={novel.id} value={novel.id}>{novel.title}</option>)}</select></label><footer><span>Ctrl/Cmd + Shift + K anytime</span><button className="button button-primary" type="button" disabled={!value.trim() || !novelId} onClick={() => void save()}>Save capture</button></footer></section></div>
+  return <div className="quick-capture-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><section className="quick-capture-modal" role="dialog" aria-modal="true" aria-labelledby="quick-capture-title"><header><div><span className="settings-panel-kicker">Capture</span><h2 id="quick-capture-title">Quick capture</h2></div><button className="button button-quiet" type="button" onClick={close} aria-label="Close quick capture"><Icon icon="fa-solid fa-xmark" /></button></header><div className="quick-capture-templates" role="group" aria-label="Capture templates">{Object.entries(templates).map(([id, item]) => <button key={id} type="button" className={template === id ? 'active' : ''} onClick={() => chooseTemplate(id)}>{item.label}</button>)}</div><textarea autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="A line, scene idea, or detail before it disappears…" aria-label="Quick capture note" rows={6} /><label>Save to<select value={novelId} onChange={(event) => setNovelId(event.target.value)}>{novels.map((novel) => <option key={novel.id} value={novel.id}>{novel.title}</option>)}</select></label><footer><span>Ctrl/Cmd + Shift + K anytime</span><button className="button button-primary" type="button" disabled={!value.trim() || !novelId} onClick={() => void save()}>Save capture</button></footer></section></div>
 }

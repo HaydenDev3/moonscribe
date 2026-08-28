@@ -26,5 +26,7 @@ export function readOAuthCallback(search: string): OAuthCallback {
 }
 
 export function clearOAuthCallback(location: globalThis.Location) {
-  window.history.replaceState({}, '', `${location.pathname}${location.hash}`)
+  const hash = location.hash
+  const cleanHash = hash.includes('?') ? hash.slice(0, hash.indexOf('?')) : hash
+  window.history.replaceState({}, '', `${location.pathname}${cleanHash}`)
 }

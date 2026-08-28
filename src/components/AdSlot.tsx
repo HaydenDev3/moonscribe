@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useApp } from '../context/AppContext'
+import { isDesktopRuntime } from '../api/config'
 
 declare global {
   interface Window {
@@ -9,12 +10,13 @@ declare global {
 
 export default function AdSlot({ placement = 'secondary' }: { placement?: string }) {
   const { syncUsername } = useApp()
+  const desktop = isDesktopRuntime()
   const pushed = useRef(false)
   const configured = String(import.meta.env.VITE_AD_FREE_USERNAMES || '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean)
   const adFree = [...configured, 'storm', 'storm tattersall'].includes(String(syncUsername || '').trim().toLowerCase())
 
   useEffect(() => {
-    if (adFree) return
+    if (desktop || adFree) return
     if (pushed.current) return
     try {
       window.adsbygoogle = window.adsbygoogle || []
@@ -23,9 +25,9 @@ export default function AdSlot({ placement = 'secondary' }: { placement?: string
     } catch {
       // The AdSense loader may still be settling; the slot can retry on reload.
     }
-  }, [adFree])
+  }, [adFree, desktop])
 
-  if (adFree) return null
+  if (desktop || adFree) return null
 
   return (
     <aside className={`adsense-slot adsense-slot-${placement}`} aria-label="Advertisement">

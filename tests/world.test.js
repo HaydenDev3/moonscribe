@@ -17,13 +17,19 @@ describe('world', () => {
     const place = await createWorldItem(n.id, { kind: 'place', name: 'Alder Canal', summary: 'Glows at dusk.' })
     expect(place.kind).toBe('place')
     expect(WORLD_KINDS.map((k) => k.key)).toContain('place')
+    expect(WORLD_KINDS.map((k) => k.key)).toContain('creature')
+
+    const creature = await createWorldItem(n.id, { kind: 'creature', name: 'Red Queen', summary: 'A marsh-dwelling hunter.' })
+    expect((await listWorld(n.id)).find((item) => item.id === creature.id).kind).toBe('creature')
 
     await updateWorldItem(place.id, { tags: ['canal', 'borderland'] })
     const all = await listWorld(n.id)
-    expect(all.length).toBe(1)
-    expect(all[0].tags).toEqual(['canal', 'borderland'])
+    expect(all.length).toBe(2)
+    expect(all.find((item) => item.id === place.id).tags).toEqual(['canal', 'borderland'])
 
     await deleteWorldItem(place.id)
+    expect(await listWorld(n.id)).toHaveLength(1)
+    await deleteWorldItem(creature.id)
     expect(await listWorld(n.id)).toEqual([])
   })
 })

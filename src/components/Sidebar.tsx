@@ -14,6 +14,13 @@ import Modal from './Modal'
 import { getWorkspacePreferences, updateWorkspacePreferences, resetWorkspacePreferences } from '../db/workspacePreferences'
 import { WORKSPACE_REGISTRY } from '../workspaces/registry'
 
+function readDragPayload(event) {
+  const typed = event.dataTransfer.getData('application/x-moonscribe-item')
+  if (typed) return typed
+  const plain = event.dataTransfer.getData('text/plain')
+  return plain ? (plain.startsWith('folder:') ? plain : `chapter:${plain}`) : ''
+}
+
 // ── Add-item dropdown ────────────────────────────────────────────────────────
 function AddMenu({
   onAdd,
@@ -182,6 +189,8 @@ export default function Sidebar({
   const manuscriptMenu = (e) => {
     openContextMenu(e, canEdit ? [
       { label: 'New chapter', icon: 'fa-solid fa-file-lines', onClick: () => onAdd('chapter', null) },
+      { label: 'New prologue', icon: 'fa-solid fa-feather-pointed', onClick: () => onAdd('prologue', null) },
+      { label: 'New epilogue', icon: 'fa-solid fa-feather-pointed', onClick: () => onAdd('epilogue', null) },
       { label: 'New folder', icon: 'fa-solid fa-folder-plus', onClick: () => onAdd('folder', null) },
       { label: 'New act', icon: 'fa-solid fa-layer-group', onClick: () => onAdd('act', null) },
       'divider',
@@ -270,6 +279,7 @@ export default function Sidebar({
           onDragStart={(e) => {
             e.stopPropagation()
             e.dataTransfer.setData('text/plain', c.id)
+            e.dataTransfer.setData('application/x-moonscribe-item', `chapter:${c.id}`)
             e.dataTransfer.effectAllowed = 'move'
             setDraggingId(c.id)
           }}
@@ -366,7 +376,9 @@ export default function Sidebar({
           role="treeitem"
           aria-expanded={hasChildren ? !isCollapsed : undefined}
           tabIndex={0}
-          style={{ paddingLeft: `${8 + depth * 16}px` }}
+          // Folders use a quieter hierarchy than manuscript chapters; the
+          // previous 16px step made a second folder look accidentally buried.
+          style={{ paddingLeft: `${8 + depth * 10}px` }}
           onClick={() => hasChildren && setCollapsed((current) => { const next = new Set(current); const key = `folder:${folder.id}`; if (next.has(key)) next.delete(key); else next.add(key); return next })}
           onContextMenu={(event) => { event.preventDefault(); openContextMenu(event, [
             { label: 'New chapter inside folder', icon: 'fa-solid fa-file-circle-plus', onClick: () => onAdd('chapter', folder.id) },
@@ -375,9 +387,10 @@ export default function Sidebar({
           ]) }}
           onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move'; setDropTarget(`folder:${folder.id}`) }}
           onDragLeave={() => setDropTarget((current) => current === `folder:${folder.id}` ? null : current)}
-          onDrop={(event) => { event.preventDefault(); event.stopPropagation(); const dragId = event.dataTransfer.getData('text/plain'); if (dragId?.startsWith('folder:')) { const sourceId = dragId.slice(7); const rect = event.currentTarget.getBoundingClientRect(); const ratio = rect.height ? (event.clientY - rect.top) / rect.height : 0.5; onMoveFolder?.(sourceId, folder.id, ratio < 0.25 ? 'before' : ratio > 0.75 ? 'after' : 'inside') } else if (dragId) onMoveToFolder?.(dragId, folder.id); setDraggingId(null); setDropTarget(null) }}
+          onDragEnter={(event) => { event.preventDefault(); event.stopPropagation(); setDropTarget(`folder:${folder.id}`) }}
+          onDrop={(event) => { event.preventDefault(); event.stopPropagation(); const payload = readDragPayload(event); if (payload?.startsWith('folder:')) { const sourceId = payload.slice(7); const rect = event.currentTarget.getBoundingClientRect(); const ratio = rect.height ? (event.clientY - rect.top) / rect.height : 0.5; onMoveFolder?.(sourceId, folder.id, ratio < 0.25 ? 'before' : ratio > 0.75 ? 'after' : 'inside') } else if (payload?.startsWith('chapter:')) onMoveToFolder?.(payload.slice(8), folder.id); setDraggingId(null); setDropTarget(null) }}
           draggable
-          onDragStart={(event) => { event.stopPropagation(); event.dataTransfer.setData('text/plain', `folder:${folder.id}`); event.dataTransfer.effectAllowed = 'move'; setDraggingId(`folder:${folder.id}`) }}
+          onDragStart={(event) => { event.stopPropagation(); event.dataTransfer.setData('text/plain', `folder:${folder.id}`); event.dataTransfer.setData('application/x-moonscribe-item', `folder:${folder.id}`); event.dataTransfer.effectAllowed = 'move'; setDraggingId(`folder:${folder.id}`) }}
           onDragEnd={() => { setDraggingId(null); setDropTarget(null) }}
         >
           <span className={`binder-caret${hasChildren ? '' : ' empty'}`}><Icon icon={hasChildren ? (isCollapsed ? 'fa-solid fa-caret-right' : 'fa-solid fa-caret-down') : 'fa-solid fa-caret-right'} /></span>
@@ -499,12 +512,17 @@ export default function Sidebar({
                 )}
               </div>
 
-              {/* One compact root: folders and loose outline items share ordering. */}
-              {chapters.length === 0 && folders.length === 0 ? (
-                <p className="binder-empty">No chapters yet —<br />the first one is waiting.</p>
+              {/* Chapters and folders are separate trees. A folder is a filing
+                  container, never an outline chapter or Act. */}
+              {!!folders.length && <div className="binder-folders-section binder-folders-primary">
+                <div className="binder-section-header binder-folders-header"><span className="binder-section-label"><Icon icon="fa-solid fa-folder-tree" /> Folders</span><span className="binder-folder-count">{folders.length}</span></div>
+                <div className="binder-tree binder-folder-tree">{folders.filter((folder) => !folder.parentId).map((folder) => renderFolder(folder, 0))}</div>
+              </div>}
+              {chapters.length === 0 ? (
+                <p className="binder-empty">{folders.length ? 'No loose chapters —' : 'No chapters yet —'}<br />the first one is waiting.</p>
               ) : (
                 <div className="binder-tree">
-                  {[...folders.filter((folder) => !folder.parentId).map((folder) => ({ type: 'folder', order: folder.order || 0, value: folder })), ...tree.map((node) => ({ type: 'chapter', order: node.ch.order || 0, value: node }))].sort((a, b) => a.order - b.order).map((item) => item.type === 'folder' ? renderFolder(item.value, 0) : renderNode(item.value, 0))}
+                  {tree.map((node) => renderNode(node, 0))}
                 </div>
               )}
               {draggingId && (
@@ -512,7 +530,7 @@ export default function Sidebar({
                   type="button"
                   className="binder-root-drop visible"
                   onDragOver={(event) => { event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'move' }}
-                  onDrop={(event) => { event.preventDefault(); event.stopPropagation(); const dragId = event.dataTransfer.getData('text/plain'); if (dragId?.startsWith('folder:')) onMoveFolder?.(dragId.slice(7), null, 'root'); else if (dragId) onReorder(dragId, null, null); setDraggingId(null); setDropTarget(null) }}
+                  onDrop={(event) => { event.preventDefault(); event.stopPropagation(); const dragId = readDragPayload(event); if (dragId?.startsWith('folder:')) onMoveFolder?.(dragId.slice(7), null, 'root'); else if (dragId?.startsWith('chapter:')) onMoveToFolder?.(dragId.slice(8), null); else if (dragId) onReorder(dragId, null, null); setDraggingId(null); setDropTarget(null) }}
                 >
                   <Icon icon="fa-solid fa-arrow-turn-up" /> Move outside folder
                 </button>
@@ -626,7 +644,7 @@ export default function Sidebar({
               { label: 'Sync now', icon: 'fa-solid fa-rotate', onClick: onSyncClick },
               { label: 'Copy username', icon: 'fa-regular fa-copy', disabled: !syncUsername, onClick: () => syncUsername && navigator.clipboard?.writeText(syncUsername) },
               'divider',
-              { label: 'Sign out', icon: 'fa-solid fa-right-from-bracket', onClick: async () => { await disconnectSync(); toast('Signed out.') } },
+              { label: syncUsername ? 'Sign out' : 'Exit offline mode', icon: 'fa-solid fa-right-from-bracket', onClick: async () => { await disconnectSync(); toast(syncUsername ? 'Signed out.' : 'Offline mode closed.') } },
             ])
           }}>
             <button className="dashboard-account-identity" type="button" onClick={(event) => {
@@ -637,7 +655,7 @@ export default function Sidebar({
                 { label: 'Settings', icon: 'fa-solid fa-gear', onClick: openSettings },
                 { label: 'Sync now', icon: 'fa-solid fa-rotate', onClick: onSyncClick },
                 'divider',
-                { label: 'Sign out', icon: 'fa-solid fa-right-from-bracket', onClick: async () => { await disconnectSync(); toast('Signed out.') } },
+                { label: syncUsername ? 'Sign out' : 'Exit offline mode', icon: 'fa-solid fa-right-from-bracket', onClick: async () => { await disconnectSync(); toast(syncUsername ? 'Signed out.' : 'Offline mode closed.') } },
               ])
             }} aria-label="Open account menu">
               <span className="dashboard-account-avatar">

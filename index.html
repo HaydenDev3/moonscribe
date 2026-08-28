@@ -2,7 +2,17 @@
 <html lang="en">
   <head>
     <meta name="trustpilot-one-time-domain-verification-id" content="7e222c05-80f2-4ac2-ba62-7de9aac494ec" />
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7279660074920894" crossorigin="anonymous"></script>
+    <script>
+      // Advertising is web-only. Do not load Google's storage/cookie script
+      // inside the Tauri WebView, where it causes Tracking Prevention noise.
+      if (!/^tauri:$/i.test(window.location.protocol) && !/tauri\.localhost$/i.test(window.location.hostname)) {
+        const ads = document.createElement('script')
+        ads.async = true
+        ads.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7279660074920894'
+        ads.crossOrigin = 'anonymous'
+        document.head.appendChild(ads)
+      }
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="Write, plan, collaborate, and design your novel in MoonScribe—an immersive writing studio with continuity tools, character cards, live editing, and 3D book covers." />

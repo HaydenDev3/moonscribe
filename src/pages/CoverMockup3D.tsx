@@ -178,7 +178,9 @@ export default function CoverMockup3D(props) {
       const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect)
       const fitHeight = (height + .45) / (2 * Math.tan(verticalFov / 2))
       const fitWidth = (width + depth + .7) / (2 * Math.tan(horizontalFov / 2))
-      fitCameraDistance = Math.max(fitHeight, fitWidth) * 1.12
+      // Keep the cover prominent in the available stage, including when the
+      // designer rail is open. Manual zoom still provides the final control.
+      fitCameraDistance = Math.max(fitHeight, fitWidth) * 1.02
       applyZoom()
     }; const observer = new ResizeObserver(resize); observer.observe(mount); resize()
     const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); let travel = 0

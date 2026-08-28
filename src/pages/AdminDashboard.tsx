@@ -11,7 +11,7 @@ import '../styles/admin-audit.css'
 import '../styles/admin-flags.css'
 import '../styles/admin-rich.css'
 
-type AdminUser = { id: string; username: string; email?: string | null; roles: string[]; disabledAt?: number | null; createdAt?: number; emailVerified?: boolean; twoFactorEnabled?: boolean; online?: boolean; lastSeenAt?: number | null }
+type AdminUser = { id: string; username: string; email?: string | null; avatarUrl?: string | null; roles: string[]; disabledAt?: number | null; createdAt?: number; emailVerified?: boolean; twoFactorEnabled?: boolean; online?: boolean; lastSeenAt?: number | null }
 type Health = { online?: boolean; emailDelivery?: boolean }
 type FeatureFlag = {
   key: string
@@ -278,7 +278,8 @@ export default function AdminDashboard() {
             <h1>{section}</h1>
           </div>
           <div className="admin-environment">
-            LOCAL TESTING <b>Admin</b>
+            <span className={`admin-env-dot ${/moonscribe\.cc$/i.test(app.syncServer || '') ? 'production' : ''}`} />
+            {/moonscribe\.cc$/i.test(app.syncServer || '') ? 'PRODUCTION' : 'LOCAL / STAGING'} <b>Admin verified</b>
           </div>
         </header>
         {message && <div className="admin-notice">{message}</div>}
@@ -317,6 +318,11 @@ export default function AdminDashboard() {
                   {health ? (health.emailDelivery ? 'Configured' : 'Not configured') : '—'}
                 </strong>
               </div>
+            </div>
+            <div className="admin-commandbar">
+              <div><span>OPERATIONS SNAPSHOT</span><strong>{users.length ? `${users.filter((user) => user.online).length} active writers online` : 'Loading account activity'}</strong></div>
+              <div className="admin-mini-bars" aria-label="User activity visualisation">{[28, 46, 38, 62, 52, 78, 66, 88, 74, 94].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div>
+              <button className="button button-quiet" onClick={() => setSection('Users')}>Manage people <span>→</span></button>
             </div>
             <div className="admin-panel-grid">
               <article className="admin-panel" onContextMenu={(event) => openContextMenu(event, [{ label: 'Open Health', icon: 'fa-solid fa-heart-pulse', onClick: () => setSection('Health') }])}>
@@ -376,7 +382,7 @@ export default function AdminDashboard() {
             </div>
             <div className="admin-table">
               <div className="admin-table-head">
-                <span>Name</span>
+                <span>User</span>
                 <span>Role</span>
                 <span>Account</span>
                 <span>Actions</span>
@@ -394,7 +400,7 @@ export default function AdminDashboard() {
                   ])}>
                     <span className="admin-user-identity">
                       <button type="button" className="admin-profile-trigger" onClick={() => setSelectedUser(user)}>
-                        <span className={`admin-status-dot ${user.online ? 'online' : 'offline'}`} />
+                        {user.avatarUrl ? <img className="admin-user-avatar" src={user.avatarUrl} alt="" /> : <span className="admin-user-avatar admin-user-avatar-fallback" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span>}
                         <strong>{user.username}</strong>
                       </button>
                       <small>{user.email || 'No email attached'}</small>

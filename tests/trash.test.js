@@ -3,7 +3,7 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { getDB } from '../src/db/db'
 import { createNovel } from '../src/db/novels'
-import { createChapter, listChapters, mergeChapters, wordsAndChapters } from '../src/db/chapters'
+import { createChapter, listChapters, mergeChapters, wordsAndChapters, trashChapter } from '../src/db/chapters'
 import { createCharacter, listCharacters, trashCharacter } from '../src/db/characters'
 import { createNote, listNotes, trashNote } from '../src/db/notes'
 import { createWorldItem, listWorld, trashWorldItem } from '../src/db/world'
@@ -38,6 +38,33 @@ describe('trash', () => {
     expect(trash[0].store).toBe('chapters')
     expect(trash[0].rec.id).toBe(c.id)
     expect(trash[0].rec.trashedAt).toBeGreaterThan(0)
+  })
+
+  it('does not repair or re-dirty a deleted nested chapter during refresh', async () => {
+    const n = await createNovel({ title: 'Nested delete' })
+    const parent = await createChapter(n.id, { title: 'Parent' })
+    const middle = await createChapter(n.id, { title: 'Middle' })
+    const child = await createChapter(n.id, { title: 'Deep chapter', kind: 'subchapter', parentId: parent.id })
+    await createChapter(n.id, { title: 'Later chapter' })
+    await trashChapter(child.id)
+
+    const visible = await listChapters(n.id)
+    expect(visible.map((chapter) => chapter.id)).toEqual([parent.id, middle.id, visible.find((chapter) => chapter.title === 'Later chapter').id])
+    const db = await getDB()
+    const deleted = await db.get('chapters', child.id)
+    expect(deleted.trashedAt).toBeTypeOf('number')
+    expect(deleted.parentId).toBe(parent.id)
+  })
+
+  it('keeps later chapters visible when deleting a parent, with or without a folder', async () => {
+    const n = await createNovel({ title: 'Reparent on delete' })
+    const parent = await createChapter(n.id, { title: 'Chapter 3' })
+    const child4 = await createChapter(n.id, { title: 'Chapter 4', kind: 'subchapter', parentId: parent.id })
+    const child5 = await createChapter(n.id, { title: 'Chapter 5', kind: 'subchapter', parentId: parent.id })
+    await trashChapter(parent.id)
+    const visible = await listChapters(n.id)
+    expect(visible.map((chapter) => chapter.id)).toEqual([child4.id, child5.id])
+    expect(visible.every((chapter) => chapter.parentId === null)).toBe(true)
   })
 
   it('restores a trashed record', async () => {

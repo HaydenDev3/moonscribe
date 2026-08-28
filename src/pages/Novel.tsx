@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { getNovel, updateNovel } from '../db/novels'
 import { listChapters, updateChapter, createChapter, trashChapter, moveChapter, mergeChapters, tidyChapter, reorderChapter } from '../db/chapters'
+import { restoreTrashed } from '../db/trash'
 import { createFolder, listFolders, deleteFolder, moveFolder, updateFolder } from '../db/folders'
 import { listCharacters } from '../db/characters'
 import { listEntities } from '../db/entities'
@@ -42,6 +43,7 @@ import { listRelationships } from '../db/relationships'
 import { autoChapterMentions } from '../utils/mentions'
 import AnnotationsPanel from '../components/AnnotationsPanel'
 import { listAnnotations, createAnnotation, updateAnnotation, deleteAnnotation } from '../db/annotations'
+import { readRecentWriting, saveRecentWriting } from '../utils/recentWriting'
 const Analytics = lazy(() => import('./Analytics'))
 const BookDesigner = lazy(() => import('./BookDesigner'))
 const MediaLibrary = lazy(() => import('./MediaLibrary'))
@@ -248,7 +250,8 @@ export default function Novel() {
         .map((w) => ({ id: w.id, name: w.name, kind: kindMap[w.kind], color: w.color || null }))
       setEntities([...factions, ...artefacts, ...places, ...worldEntities])
       setRelationships(await listRelationships(id))
-      const first = chs.find((c) => c.id === n.lastChapterId) || chs[0]
+      const recent = readRecentWriting()
+      const first = chs.find((c) => recent?.novelId === id && c.id === recent.chapterId) || chs.find((c) => c.id === n.lastChapterId) || chs[0]
       if (first) {
         setOpenChapterTabs([first.id])
         currentIdRef.current = first.id
@@ -265,6 +268,12 @@ export default function Novel() {
         setChapter(first)
         setWordCount(first.wordCount || 0)
         setTitleDraft(first.title || '')
+        if (recent?.novelId === id && recent.chapterId === first.id && Number(recent.scrollTop) > 0) {
+          requestAnimationFrame(() => {
+            const wrap = document.querySelector('.editor-wrap')
+            if (wrap) wrap.scrollTop = Number(recent.scrollTop)
+          })
+        }
       }
     })()
     return () => {
@@ -476,7 +485,16 @@ export default function Novel() {
     setDirty(false)
     setSidebarOpen(false)
     updateNovel(novelRef.current.id, { lastChapterId: chId, lastOpened: Date.now() }, { sync: false })
-  }, [captureReplaySnapshot, resetSession, toast, openChapterTabs])
+    saveRecentWriting({ novelId: novelRef.current.id, chapterId: chId, mode: activeSection, scrollTop: 0 })
+  }, [captureReplaySnapshot, resetSession, toast, openChapterTabs, activeSection])
+
+  useEffect(() => {
+    const wrap = document.querySelector('.editor-wrap')
+    if (!wrap || !novelRef.current?.id || !currentIdRef.current) return
+    const remember = () => saveRecentWriting({ novelId: novelRef.current.id, chapterId: currentIdRef.current, mode: activeSection, scrollTop: wrap.scrollTop })
+    wrap.addEventListener('scroll', remember, { passive: true })
+    return () => wrap.removeEventListener('scroll', remember)
+  }, [chapter?.id, activeSection])
 
   const handleMobileTouchStart = useCallback((event) => {
     if (activeSection !== 'write' || event.touches.length !== 1) return
@@ -749,11 +767,24 @@ export default function Novel() {
   )
 
   const handleTrashChapter = useCallback(async () => {
-    await trashChapter(deleteChapterTarget.id)
+    const target = deleteChapterTarget
+    if (!target) return
+    // Preserve the outline when removing a container or parent chapter. A
+    // missing parent used to make its descendants disappear from the tree;
+    // re-parent them first, retaining their folder membership in both cases.
+    const current = await listChapters(id)
+    const children = current.filter((chapter) => chapter.parentId === target.id)
+    if (children.length) {
+      await Promise.all(children.map((chapter) => updateChapter(chapter.id, {
+        parentId: target.parentId || null,
+        folderId: chapter.folderId || null
+      })))
+    }
+    await trashChapter(target.id)
     setDeleteChapterTarget(null)
     const chs = await listChapters(id)
     setChapters(chs)
-    if (currentIdRef.current === deleteChapterTarget.id) {
+    if (currentIdRef.current === target.id) {
       const next = chs[0]
       if (next) {
         currentIdRef.current = next.id
@@ -774,8 +805,8 @@ export default function Novel() {
         setTitleDraft('')
       }
     }
-    toast('Moved to the Trash — recoverable for 30 days.')
-  }, [id, deleteChapterTarget, toast, resetSession])
+    toast('Moved to the Trash — recoverable for 30 days.', { label: 'Undo', run: async () => { await restoreTrashed('chapters', target.id); const restored = await listChapters(id); setChapters(restored); if (!chapter && restored[0]) await selectChapter(restored[0].id) } })
+  }, [id, deleteChapterTarget, toast, resetSession, chapter, selectChapter])
 
   const saveChapterEdit = useCallback(async () => {
     if (!editChapter) return
@@ -784,6 +815,7 @@ export default function Novel() {
       part: editChapter.part,
       kind: editChapter.kind,
       parentId: editChapter.parentId || null,
+      folderId: ['book', 'part', 'act'].includes(editChapter.kind) ? null : (editChapter.folderId || null),
       status: editChapter.status,
       icon: editChapter.icon || null,
       color: editChapter.color || null,
@@ -1014,7 +1046,7 @@ export default function Novel() {
     if (!chapter || ['book', 'part', 'act'].includes(chapter.kind)) return
     await updateChapter(chapterId, { folderId, parentId: null })
     setChapters(await listChapters(id))
-    toast('Chapter moved into folder.')
+    toast(folderId ? 'Chapter moved into folder.' : 'Chapter moved to manuscript root.')
   }, [chapters, id, toast])
 
   const handleMoveFolder = useCallback(async (folderId, targetId, position = 'inside') => {
@@ -1686,7 +1718,9 @@ function ChapterEditModal({ chapter, onChange, onClose, onSave }) {
     ['book', 'Book'],
     ['part', 'Part'],
     ['act', 'Act'],
+    ['prologue', 'Prologue'],
     ['chapter', 'Chapter'],
+    ['epilogue', 'Epilogue'],
     ['subchapter', 'Subchapter']
   ]
   return (

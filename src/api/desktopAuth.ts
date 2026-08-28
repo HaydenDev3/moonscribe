@@ -2,6 +2,11 @@ import { isDesktopRuntime } from './config'
 
 const EXCHANGE_CODE = /^[A-Za-z0-9_-]{20,256}$/
 
+export function callbackSearch(locationLike: Pick<Location, 'search' | 'hash'>, desktop = isDesktopRuntime()) {
+  if (desktop && locationLike.hash.includes('?')) return locationLike.hash.slice(locationLike.hash.indexOf('?'))
+  return locationLike.search || ''
+}
+
 export function desktopAuthSearch(rawUrl: string) {
   try {
     const url = new URL(rawUrl)
@@ -28,16 +33,23 @@ export function desktopAuthSearch(rawUrl: string) {
 export async function registerDesktopAuthLinks() {
   if (!isDesktopRuntime()) return
   const { getCurrent, onOpenUrl } = await import('@tauri-apps/plugin-deep-link')
-  const accept = (urls: string[]) => {
+  const { listen } = await import('@tauri-apps/api/event')
+  const accept = (urls: string[] | string) => {
+    const candidates = Array.isArray(urls) ? urls : [urls]
     for (const rawUrl of urls) {
       const search = desktopAuthSearch(rawUrl)
       if (search) {
-        window.location.replace(`/dashboard?${search}`)
+        // Desktop uses HashRouter; keeping the callback in the hash ensures
+        // both the route and the one-time exchange query survive the reload.
+        window.location.replace(`${window.location.origin}/#/dashboard?${search}`)
         return
       }
     }
   }
   await onOpenUrl(accept)
+  // The single-instance plugin receives a second launch's URI before the
+  // deep-link plugin can deliver it. Forward that URI through the same path.
+  await listen<string[]>('moonscribe://auth-callback', (event) => accept(event.payload))
   accept((await getCurrent()) || [])
 }
 

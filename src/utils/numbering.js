@@ -1,7 +1,7 @@
 // Derived chapter numbering and outline. Pure functions over the flat chapter
 // list; nothing here touches storage.
 
-export const KINDS = ['book', 'part', 'act', 'chapter', 'subchapter']
+export const KINDS = ['book', 'part', 'act', 'prologue', 'chapter', 'epilogue', 'subchapter']
 export const CONTAINER_KINDS = ['book', 'part', 'act']
 
 export function isContainer(ch) {
@@ -104,6 +104,14 @@ export function computeNumbers(chapters) {
       } else if (kind === 'part') {
         number = idx
         label = `Part ${toWords(idx)}`
+      } else if (kind === 'prologue') {
+        number = idx
+        label = 'Prologue'
+        childChapterNum = chapterCount
+      } else if (kind === 'epilogue') {
+        number = idx
+        label = 'Epilogue'
+        childChapterNum = chapterCount
       } else if (kind === 'chapter') {
         chapterCount += 1
         number = chapterCount

@@ -3,10 +3,10 @@ import { mkdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import sharp from 'sharp'
 
-const src = resolve('public/icons/icon.svg')
+const src = resolve('public/moonscribelogo.png')
 const outDir = resolve('src-tauri/icons')
 mkdirSync(outDir, { recursive: true })
-const svg = readFileSync(src)
+const source = readFileSync(src)
 
 const targets = [
   { name: 'icon-32.png', size: 32 },
@@ -16,7 +16,7 @@ const targets = [
 ]
 
 for (const target of targets) {
-  await sharp(svg)
+  await sharp(source)
     .resize(target.size, target.size)
     .png()
     .toFile(resolve(outDir, target.name))

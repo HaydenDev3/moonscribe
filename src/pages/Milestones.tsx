@@ -71,7 +71,7 @@ export default function Milestones({ novelId, embedded }) {
           </div>
           <div className="milestone-add">
             <DatePicker value={date} onChange={setDate} placeholder="Date (optional)" ariaLabel="Milestone date" />
-            <input className="text-field" style={{ flex: 1, minWidth: 180 }} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What happens next?" aria-label="Milestone title" onKeyDown={(e) => e.key === 'Enter' && add()} />
+          <input spellCheck className="text-field" style={{ flex: 1, minWidth: 180 }} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What happens next?" aria-label="Milestone title" onKeyDown={(e) => e.key === 'Enter' && add()} />
             <button className="button button-primary" onClick={add} disabled={!title.trim()}>Add</button>
           </div>
         </div>

@@ -23,9 +23,22 @@ export function annotateProse(html, { characters = [], terms = [], entities = []
   if (!html) return ''
 
   const matchers = []
+  const firstNameCounts = new Map()
+  for (const c of characters) {
+    const full = (c.name || '').trim()
+    const first = full.split(/\s+/)[0]
+    if (first.length > 1 && first !== full) firstNameCounts.set(first.toLocaleLowerCase(), (firstNameCounts.get(first.toLocaleLowerCase()) || 0) + 1)
+  }
   for (const c of characters) {
     const name = (c.name || '').trim()
-    if (name) matchers.push({ text: name, kind: 'name', id: c.id, color: c.color || '#D4A5A5' })
+    if (name) {
+      const descriptor = { kind: 'name', id: c.id, color: c.color || '#D4A5A5' }
+      matchers.push({ text: name, ...descriptor })
+      // A first-name mention is a valid reference when the full name is
+      // multi-word. Keep the full-name matcher longest-first below.
+      const first = name.split(/\s+/)[0]
+      if (first.length > 1 && first !== name && firstNameCounts.get(first.toLocaleLowerCase()) === 1) matchers.push({ text: first, ...descriptor })
+    }
   }
   for (const t of terms) {
     const spellings = [t.term, ...(t.aliases || [])]

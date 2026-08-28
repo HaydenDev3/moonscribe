@@ -8,7 +8,16 @@ export async function listChapters(novelId) {
   await waitForNativeHydration()
   const db = await getDB()
   const all = await db.getAllFromIndex('chapters', 'by-novel', novelId)
-  const byId = new Map(all.map((chapter) => [chapter.id, chapter]))
+  // Trashed chapters are recovery records, not outline nodes. Keeping them
+  // out of hierarchy repair prevents a post-delete refresh from rewriting
+  // stale parent/folder metadata and re-dirtying the deleted record.
+  const live = all.filter((chapter) => !chapter.trashedAt)
+  // A deleted/migrated folder can leave chapters pointing at an ID that no
+  // longer exists. Those chapters must return to the manuscript root rather
+  // than disappearing from the sidebar while still being counted.
+  const folders = await db.getAllFromIndex('folders', 'by-novel', novelId).catch(() => [])
+  const folderIds = new Set(folders.map((folder) => folder.id))
+  const byId = new Map(live.map((chapter) => [chapter.id, chapter]))
   const containers = new Set(['book', 'part', 'act'])
   const repairs = []
   const validParent = (chapter) => {
@@ -20,17 +29,20 @@ export async function listChapters(novelId) {
     if (containers.has(chapter.kind)) return containers.has(parent.kind) ? parent.id : null
     return null
   }
-  for (const chapter of all) {
+  for (const chapter of live) {
     const parentId = validParent(chapter)
-    const folderKind = chapter.folderId && ['book', 'part', 'act'].includes(chapter.kind) ? 'chapter' : chapter.kind
-    if ((chapter.parentId || null) !== parentId || folderKind !== chapter.kind) {
-      const repaired = { ...chapter, parentId, kind: folderKind, updatedAt: Date.now() }
+    // Outline containers (Books, Parts and Acts) are never folder children.
+    // Older records could retain a folderId after a drag or migration, which
+    // made an Act render through the folder branch of the manuscript tree.
+    const safeFolderId = containers.has(chapter.kind) ? null : (chapter.folderId && folderIds.has(chapter.folderId) ? chapter.folderId : null)
+    if ((chapter.parentId || null) !== parentId || (chapter.folderId || null) !== safeFolderId) {
+      const repaired = { ...chapter, parentId, folderId: safeFolderId, updatedAt: Date.now() }
       repairs.push(repaired)
       byId.set(chapter.id, repaired)
     }
   }
   if (repairs.length) await Promise.all(repairs.map((chapter) => db.put('chapters', chapter)))
-  return all.map((chapter) => byId.get(chapter.id)).filter((c) => !c.trashedAt).sort((a, b) => a.order - b.order)
+  return live.map((chapter) => byId.get(chapter.id)).sort((a, b) => a.order - b.order)
 }
 
 export async function getChapter(id) {
@@ -79,6 +91,18 @@ export async function createChapter(novelId, { title = '', part = '', content = 
 }
 
 export async function trashChapter(id) {
+  const db = await getDB()
+  const target = await db.get('chapters', id)
+  if (!target) return null
+  // Never leave descendants attached to a trashed node. This keeps the
+  // outline visible for both folder-backed and root-level chapters.
+  const all = await db.getAllFromIndex('chapters', 'by-novel', target.novelId)
+  const children = all.filter((chapter) => !chapter.trashedAt && chapter.parentId === id)
+  await Promise.all(children.map((chapter) => putRecord('chapters', {
+    ...chapter,
+    parentId: target.parentId || null,
+    folderId: chapter.folderId || null
+  })))
   return trashRecord('chapters', id)
 }
 

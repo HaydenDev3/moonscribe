@@ -6,8 +6,8 @@ import { putRecord } from '../db/db'
 import { switchDatabaseProfile } from '../db/db'
 import { makeLock, verifyLock } from '../db/lock'
 import * as syncEngine from '../sync/engine'
-import { apiBaseUrl, authReturnUrl } from '../api/config'
-import { openExternalUrl } from '../api/desktopAuth'
+import { apiBaseUrl, authReturnUrl, isDesktopRuntime } from '../api/config'
+import { callbackSearch, openExternalUrl } from '../api/desktopAuth'
 import { clearOAuthCallback, readOAuthCallback } from '../auth/oauthCallback'
 import {
   detectSystemFonts,
@@ -123,10 +123,15 @@ const DEFAULT_SETTINGS = {
   openLastChapter: true,
   toolbarFadeWhileTyping: false,
   hideSidebarWhileTyping: false,
+  discordRichPresence: false,
 }
 
 const DEFAULT_SYNC = { server: null, username: null, status: 'offline', discordAvatar: null, provider: null }
 const DEFAULT_ACCOUNT = { id: null, username: null, roles: ['user'], role: 'user', isAdmin: false, isDeveloper: false }
+
+function desktopOAuthRedirect(path = '/dashboard', search = '') {
+  return isDesktopRuntime() ? `${window.location.origin}/#${path}${search}` : `${path}${search}`
+}
 
 function normalizeRoles(input) {
   const raw = Array.isArray(input) ? input : String(input || '').split(',')
@@ -164,9 +169,9 @@ export function AppProvider({ children }) {
   const toastId = useRef(0)
   const idleTimer = useRef(null)
 
-  const toast = useCallback((msg) => {
+  const toast = useCallback((msg, action = null) => {
     const id = ++toastId.current
-    setToasts((items) => [...items, { id, msg }])
+    setToasts((items) => [...items, { id, msg, action }])
     setTimeout(() => setToasts((items) => items.filter((item) => item.id !== id)), 4200)
     if (settings.soundEnabled && settings.notificationSounds) {
       import('../utils/sounds').then(({ playFeedback }) => playFeedback('notification.normal', {
@@ -257,14 +262,18 @@ export function AppProvider({ children }) {
         provider: cfg.token ? authProvider : null
       })
 
-      const callback = readOAuthCallback(window.location.search)
-      const sp = new URLSearchParams(window.location.search)
+      // HashRouter keeps desktop callback parameters after the hash
+      // (`/#/dashboard?oauth_exchange=...`), so window.location.search is
+      // empty even though the one-time exchange code is present.
+      const callbackQuery = callbackSearch(window.location, isDesktopRuntime())
+      const callback = readOAuthCallback(callbackQuery)
+      const sp = new URLSearchParams(callbackQuery)
       const exchangeCode = callback.exchangeCode
-      const oauthCode = window.location.search.includes('oauth_exchange') ? exchangeCode : null
+      const oauthCode = callbackQuery.includes('oauth_exchange') ? exchangeCode : null
       const oauthProvider = callback.provider
       const magicToken = sp.get('magic_token')
-      const dError = window.location.search.includes('discord_error') ? callback.error : null
-      const oauthError = window.location.search.includes('oauth_error') ? callback.error : null
+      const dError = callbackQuery.includes('discord_error') ? callback.error : null
+      const oauthError = callbackQuery.includes('oauth_error') ? callback.error : null
       if (magicToken) {
         setAuthFlow({ state: 'processing', provider: 'magic', error: null })
         try {
@@ -292,10 +301,19 @@ export function AppProvider({ children }) {
             new Promise((_, reject) => window.setTimeout(() => reject(new Error(`${label} timed out. Please try again.`)), ms)),
           ])
           const oauthServer = discordServer()
-          const callbackServer = new URLSearchParams(window.location.search).get('oauth_server')?.replace(/\/+$/, '')
+          const callbackServer = sp.get('oauth_server')?.replace(/\/+$/, '')
           const exchangePath = oauthCode ? '/api/auth/oauth/exchange' : '/api/auth/discord/exchange'
           const exchangeCodeValue = oauthCode || exchangeCode
-          const exchangeOrigins = [...new Set([callbackServer, oauthServer, typeof window !== 'undefined' ? window.location.origin : ''].filter(Boolean))]
+          const browserOrigin = typeof window !== 'undefined' ? window.location.origin.replace(/\/+$/, '') : ''
+          const isLocalOrigin = (value) => {
+            try { return ['localhost', '127.0.0.1', '[::1]'].includes(new URL(value).hostname) } catch { return false }
+          }
+          // A development server may stamp localhost into oauth_server even
+          // when the user reached it through an HTTPS tunnel. From a browser,
+          // use the visible origin first so the request gets the tunnel's CORS
+          // headers. Keep localhost as a fallback for true local development.
+          const callbackOrigins = callbackServer && (!browserOrigin || isLocalOrigin(browserOrigin) || !isLocalOrigin(callbackServer)) ? [callbackServer] : []
+          const exchangeOrigins = [...new Set([browserOrigin, ...callbackOrigins, oauthServer].filter(Boolean))]
           let response = null
           let account = null
           let lastError = null
@@ -333,6 +351,10 @@ export function AppProvider({ children }) {
             setAuthFlow({ state: 'success', provider: account.provider || oauthProvider || 'discord', error: null })
             // OAuth should always finish in the signed-in library. This also
             // heals bookmarks or older callback URLs that still land on `/`.
+            if (isDesktopRuntime()) {
+              window.location.replace(desktopOAuthRedirect('/dashboard'))
+              return
+            }
             if (window.location.pathname !== '/dashboard') {
               window.location.replace('/dashboard')
               return
@@ -842,11 +864,20 @@ export function AppProvider({ children }) {
 
   const disconnectSync = useCallback(async () => {
     await syncEngine.disconnect()
+    if (guestMode) {
+      // Guest mode is a local profile, not a sync session. Return to the
+      // normal signed-out profile so the guest identity can actually exit
+      // without deleting its local writing.
+      await switchDatabaseProfile('local')
+      await setMeta('guestMode', false)
+      setGuestMode(false)
+      await refreshNovels()
+    }
     await setMeta('discordAvatar', null)
     await setMeta('discordUsername', null)
     await setMeta('authProvider', null)
     setSync({ server: null, username: null, status: 'offline', discordAvatar: null, provider: null })
-  }, [])
+  }, [guestMode, refreshNovels])
 
   const signOutOtherDevices = useCallback(async () => {
     const removed = await syncEngine.signOutOtherDevices()

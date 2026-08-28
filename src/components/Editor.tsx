@@ -192,6 +192,8 @@ export default function Editor({
   const [findQuery, setFindQuery] = useState('')
   const [replaceQuery, setReplaceQuery] = useState('')
   const [findMatches, setFindMatches] = useState(0)
+  const [findCaseSensitive, setFindCaseSensitive] = useState(false)
+  const [findWholeWord, setFindWholeWord] = useState(false)
   const editingLinkRef = useRef<ReturnType<typeof document.createElement> | null>(null)
 
   // ── Pagination ───────────────────────────────────────────────────────────
@@ -210,9 +212,15 @@ export default function Editor({
   const toolbarTimerRef = useRef(null)
   const currentFindRef = useRef<{ node: globalThis.Text; start: number; length: number } | null>(null)
 
+  useEffect(() => {
+    const openFromPalette = () => setFindOpen(true)
+    window.addEventListener('moonscribe:find-replace-open', openFromPalette)
+    return () => window.removeEventListener('moonscribe:find-replace-open', openFromPalette)
+  }, [])
+
   const findInChapter = useCallback((query: string) => {
     const root = ref.current
-    const needle = query.trim().toLocaleLowerCase()
+    const needle = query.trim()
     if (!root || !needle) {
       setFindMatches(0)
       return
@@ -223,11 +231,16 @@ export default function Editor({
     while ((node = walker.nextNode())) nodes.push(node as globalThis.Text)
     const matches: Array<{ node: globalThis.Text; start: number }> = []
     for (const textNode of nodes) {
-      const value = textNode.data.toLocaleLowerCase()
+      const value = findCaseSensitive ? textNode.data : textNode.data.toLocaleLowerCase()
+      const target = findCaseSensitive ? needle : needle.toLocaleLowerCase()
       let from = 0
       while (from < value.length) {
-        const start = value.indexOf(needle, from)
+        const start = value.indexOf(target, from)
         if (start < 0) break
+        if (findWholeWord && (/[\p{L}\p{N}_]/u.test(value[start - 1] || '') || /[\p{L}\p{N}_]/u.test(value[start + needle.length] || ''))) {
+          from = start + needle.length
+          continue
+        }
         matches.push({ node: textNode, start })
         from = start + needle.length
       }
@@ -246,13 +259,14 @@ export default function Editor({
       currentFindRef.current = { node: next.node, start: next.start, length: needle.length }
       next.node.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }
-  }, [])
+  }, [findCaseSensitive, findWholeWord])
 
   const replaceCurrentMatch = useCallback(() => {
     const match = currentFindRef.current
     if (!match || !findQuery.trim()) return
     const value = match.node.data
-    if (value.slice(match.start, match.start + match.length).toLocaleLowerCase() !== findQuery.trim().toLocaleLowerCase()) {
+    const actual = value.slice(match.start, match.start + match.length)
+    if ((findCaseSensitive ? actual : actual.toLocaleLowerCase()) !== (findCaseSensitive ? findQuery.trim() : findQuery.trim().toLocaleLowerCase())) {
       findInChapter(findQuery)
       return
     }
@@ -262,7 +276,7 @@ export default function Editor({
     findInChapter(findQuery)
   // report is declared later in this component and is intentionally omitted.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [findInChapter, findQuery, replaceQuery])
+  }, [findCaseSensitive, findInChapter, findQuery, replaceQuery])
 
   const replaceAllMatches = useCallback(() => {
     const root = ref.current
@@ -272,7 +286,9 @@ export default function Editor({
     const nodes: globalThis.Text[] = []
     let node
     while ((node = walker.nextNode())) nodes.push(node as globalThis.Text)
-    const pattern = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi')
+    const boundary = findWholeWord ? '\\b' : ''
+    const flags = findCaseSensitive ? 'g' : 'gi'
+    const pattern = new RegExp(`${boundary}${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${boundary}`, flags)
     let replaced = 0
     for (const textNode of nodes) {
       const before = textNode.data
@@ -287,7 +303,7 @@ export default function Editor({
     }
   // report is declared later in this component and is intentionally omitted.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [findInChapter, findQuery, replaceQuery, toast])
+  }, [findCaseSensitive, findInChapter, findQuery, findWholeWord, replaceQuery, toast])
 
   useEffect(() => {
     if (pageLayout?.pageSize) setPageSize(migratePageSize(pageLayout.pageSize))
@@ -1178,6 +1194,15 @@ export default function Editor({
 
     const range = sel.getRangeAt(0)
 
+    // A toolbar selection can outlive a chapter switch or an editor rerender.
+    // Never apply formatting to a detached/stale range, which otherwise makes
+    // a pale yellow highlight appear on unrelated prose later.
+    if (!el.contains(range.commonAncestorContainer)) {
+      savedRange.current = null
+      sel.removeAllRanges()
+      return
+    }
+
     if (range.collapsed) {
       // Word/Docs-style behaviour: choosing a font with only a caret should
       // affect the next characters typed, not silently do nothing. Browser
@@ -1908,7 +1933,9 @@ export default function Editor({
     if (designId) { event.preventDefault(); onApplyDesign?.(designId); return }
     const templateId = event.dataTransfer?.getData(TEMPLATE_MIME)
     if (templateId) { event.preventDefault(); insertPageTemplate(templateId); return }
-    handleImageDrop(event)
+    if (event.dataTransfer?.files?.length) { handleImageDrop(event); return }
+    // Do not let arbitrary dragged UI text become manuscript content.
+    event.preventDefault()
   }, [handleImageDrop, insertPageTemplate, onApplyDesign])
 
   // ── Selection toolbar state ──────────────────────────────────────────────
@@ -2802,9 +2829,11 @@ export default function Editor({
         <input autoFocus value={findQuery} onChange={(event) => { setFindQuery(event.target.value); findInChapter(event.target.value) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findInChapter(findQuery) } if (event.key === 'Escape') setFindOpen(false) }} placeholder="Find in this chapter…" aria-label="Find in this chapter" />
         <span className="editor-find-count">{findMatches ? `${findMatches} found` : findQuery ? 'Not found' : ''}</span>
         <input value={replaceQuery} onChange={(event) => setReplaceQuery(event.target.value)} placeholder="Replace with…" aria-label="Replace with" />
+        <label className="editor-find-option"><input type="checkbox" checked={findCaseSensitive} onChange={(event) => { setFindCaseSensitive(event.target.checked); currentFindRef.current = null; findInChapter(findQuery) }} /> Match case</label>
+        <label className="editor-find-option"><input type="checkbox" checked={findWholeWord} onChange={(event) => { setFindWholeWord(event.target.checked); currentFindRef.current = null; findInChapter(findQuery) }} /> Whole word</label>
         <button type="button" className="button button-quiet" disabled={!currentFindRef.current || !findQuery.trim()} onClick={replaceCurrentMatch}>Replace</button>
         <button type="button" className="button button-quiet" disabled={!findQuery.trim() || !findMatches} onClick={replaceAllMatches}>Replace all</button>
-        <button type="button" className="button button-quiet" onClick={() => { setFindOpen(false); setFindQuery(''); setFindMatches(0) }} aria-label="Close find"><Icon icon="fa-solid fa-xmark" /></button>
+        <button type="button" className="button button-quiet" onClick={() => { setFindOpen(false); setFindQuery(''); setReplaceQuery(''); setFindMatches(0); currentFindRef.current = null }} aria-label="Close find"><Icon icon="fa-solid fa-xmark" /></button>
       </div>}
       {/* ─────────────────────────────────────────────────────────────────── */}
       {/* TOOLBAR                                                             */}
@@ -3744,13 +3773,7 @@ export default function Editor({
                   handleContextMenu
                 }
                 onDragOver={(e) => {
-                  if (
-                    e.dataTransfer.types.includes(
-                      'Files',
-                    )
-                  ) {
-                    e.preventDefault()
-                  }
+                  if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes(TEMPLATE_MIME) || e.dataTransfer.types.includes('application/x-moonscribe-design')) e.preventDefault()
                 }}
                 onDrop={
                   handleTemplateOrImageDrop

@@ -91,6 +91,9 @@ export default function ConflictModal() {
           <button className="button button-ghost" disabled={!!busy} onClick={() => resolve('theirs')}>
             {busy === 'theirs' ? 'Keeping…' : 'Keep the other'}
           </button>
+          <button className="button button-primary" disabled={!!busy} onClick={() => resolve('both')}>
+            {busy === 'both' ? 'Preserving…' : 'Keep both versions'}
+          </button>
         </div>
         <p className="muted small" style={{ textAlign: 'center', margin: 'var(--space-3) 0 0' }}>
           Live shared chapters resolve through collaboration and do not use this dialog.

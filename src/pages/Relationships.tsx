@@ -198,7 +198,7 @@ function RelationshipModal({ rel, characters, onChange, onClose, onSave }) {
       </div>
       <div className="field">
         <label>What binds them <span className="hint">(a short line)</span></label>
-        <textarea value={rel.description || ''} onChange={(e) => set({ description: e.target.value })} placeholder="Sister and keeper of secrets…" />
+        <textarea spellCheck value={rel.description || ''} onChange={(e) => set({ description: e.target.value })} placeholder="Sister and keeper of secrets…" />
       </div>
       <div className="field">
         <label>How it grew <span className="hint">(the road between them)</span></label>

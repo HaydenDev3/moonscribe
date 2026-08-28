@@ -216,7 +216,7 @@ function TermModal({ term, onChange, onClose, onSave, onDelete, draftKey: dk, dr
       )}
       <div className="field">
         <label>Term</label>
-        <input value={term.term || ''} onChange={(e) => set({ term: e.target.value })} autoFocus placeholder="Aetherglass" />
+        <input spellCheck value={term.term || ''} onChange={(e) => set({ term: e.target.value })} autoFocus placeholder="Aetherglass" />
       </div>
       <div className="actions-row" style={{ gap: 'var(--space-3)' }}>
         <div className="field" style={{ flex: 1 }}>
@@ -229,16 +229,16 @@ function TermModal({ term, onChange, onClose, onSave, onDelete, draftKey: dk, dr
         </div>
         <div className="field" style={{ flex: 1 }}>
           <label>Pronunciation <span className="hint">(optional)</span></label>
-          <input value={term.pronunciation || ''} onChange={(e) => set({ pronunciation: e.target.value })} placeholder="AY-ther-glass" />
+          <input spellCheck={false} value={term.pronunciation || ''} onChange={(e) => set({ pronunciation: e.target.value })} placeholder="AY-ther-glass" />
         </div>
       </div>
       <div className="field">
         <label>Definition</label>
-        <textarea style={{ minHeight: 120 }} value={term.definition || ''} onChange={(e) => set({ definition: e.target.value })} placeholder="What it means in your world…" />
+        <textarea spellCheck style={{ minHeight: 120 }} value={term.definition || ''} onChange={(e) => set({ definition: e.target.value })} placeholder="What it means in your world…" />
       </div>
       <div className="field">
         <label>Also spelled <span className="hint">(comma-separated — these underline too)</span></label>
-        <input value={term.aliasText || ''} onChange={(e) => set({ aliasText: e.target.value })} placeholder="aether-glass, aetherglas" />
+        <input spellCheck value={term.aliasText || ''} onChange={(e) => set({ aliasText: e.target.value })} placeholder="aether-glass, aetherglas" />
       </div>
       <div className="modal-foot" style={{ justifyContent: 'space-between' }}>
         <div>{!term.__new && <button className="button button-rose" onClick={() => onDelete?.(term)}>Delete</button>}</div>

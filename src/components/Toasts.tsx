@@ -7,7 +7,7 @@ export default function Toasts() {
     <div className="toast-wrap" role="status" aria-live="polite" aria-atomic="true">
       {toasts.map((t) => (
         <div key={t.id} className="toast">
-          {t.msg}
+          <span>{t.msg}</span>{t.action && <button type="button" className="toast-undo" onClick={() => { void t.action.run(); }}>{t.action.label || 'Undo'}</button>}
         </div>
       ))}
     </div>

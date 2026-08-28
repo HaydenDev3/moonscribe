@@ -152,6 +152,35 @@ export async function currentStreak() {
   return streak
 }
 
+// Rolling writing streaks used by the dashboard. A period counts when any
+// words were written during it; these remain local statistics and require no
+// changes to novel records.
+export async function writingStreaks(now = new Date()) {
+  const db = await getDB()
+  const rows = await db.getAll('stats')
+  const dates = rows.filter((row) => row.kind !== 'session' && row.words > 0).map((row) => row.date)
+  const daySet = new Set(dates)
+  const weekSet = new Set(dates.map((date) => weekKey(date)))
+  const monthSet = new Set(dates.map((date) => String(date).slice(0, 7)))
+  const currentDay = toISODate(now)
+  return {
+    daily: consecutive(daySet, currentDay, (date) => shiftDate(date, -1)),
+    weekly: consecutive(weekSet, weekKey(currentDay), (key) => shiftWeek(key, -1)),
+    monthly: consecutive(monthSet, currentDay.slice(0, 7), (key) => shiftMonth(key, -1))
+  }
+}
+
+function consecutive(set, current, previous) {
+  let count = 0
+  let key = current
+  while (set.has(key)) { count++; key = previous(key) }
+  return count
+}
+function shiftDate(value, amount) { const d = new Date(`${value}T12:00:00`); d.setDate(d.getDate() + amount); return toISODate(d) }
+function weekKey(value) { const d = new Date(`${value}T12:00:00`); const day = d.getDay() || 7; d.setDate(d.getDate() - day + 1); return toISODate(d) }
+function shiftWeek(value, amount) { return shiftDate(value, amount * 7) }
+function shiftMonth(value, amount) { const [year, month] = value.split('-').map(Number); const d = new Date(year, month - 1 + amount, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+
 function toISODate(d) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')

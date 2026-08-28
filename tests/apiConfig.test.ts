@@ -16,4 +16,9 @@ describe('shared cloud API configuration', () => {
   it('allows an explicit staging API without exposing a secret', () => {
     expect(apiBaseUrl({ VITE_API_URL: 'https://staging-api.moonscribe.cc/' }, { protocol: 'tauri:' })).toBe('https://staging-api.moonscribe.cc')
   })
+
+  it('does not send a tunneled browser OAuth flow back to localhost', () => {
+    expect(authReturnUrl({ VITE_APP_URL: 'http://localhost:5173' }, { protocol: 'https:', origin: 'https://writer.ngrok-free.dev' }))
+      .toBe('https://writer.ngrok-free.dev/dashboard')
+  })
 })

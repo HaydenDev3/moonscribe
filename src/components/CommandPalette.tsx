@@ -21,7 +21,7 @@ const GROUPS = [
   ,{ key: 'settings', label: 'Settings', icon: 'fa-solid fa-sliders' }
 ]
 const SETTING_RESULTS = [
-  ['themes','Themes and colour','Parchment, Midnight, AMOLED and accent colours'],['layout','App layout','Writer Studio, Visual Library or Compact'],['paper','Paper texture','Paper grain and intensity'],['font','Editor typography','Font size, line height and reading width'],['motion','Motion and animation','Reduce motion and interface effects'],['security','Lock & security','App lock, sessions and account security'],['sync','Sync','Cloud library, Discord and signed-in devices'],['keybinds','Keyboard shortcuts','View all MoonScribe keybinds'],['quick-capture','Quick capture','Save a note to a novel without leaving your current workspace']
+  ['themes','Themes and colour','Parchment, Midnight, AMOLED and accent colours'],['layout','App layout','Writer Studio, Visual Library or Compact'],['paper','Paper texture','Paper grain and intensity'],['font','Editor typography','Font size, line height and reading width'],['motion','Motion and animation','Reduce motion and interface effects'],['security','Lock & security','App lock, sessions and account security'],['sync','Sync','Cloud library, Discord and signed-in devices'],['keybinds','Keyboard shortcuts','View all MoonScribe keybinds'],['quick-capture','Quick capture','Save a note to a novel without leaving your current workspace'],['find-replace','Find and replace','Search and replace text in the active chapter']
 ].map(([id,title,subtitle]) => ({ id, title, subtitle }))
 
 const SECTION_FOR = { characters: 'characters', notes: 'notes', world: 'world', relationships: 'relationships', glossary: 'glossary' }
@@ -97,6 +97,7 @@ export default function CommandPalette() {
       }
       if (group === 'settings') {
         if (r.id === 'quick-capture') window.dispatchEvent(new CustomEvent('moonscribe:quick-capture-open'))
+        else if (r.id === 'find-replace') window.dispatchEvent(new CustomEvent('moonscribe:find-replace-open'))
         else { openSettings(); window.dispatchEvent(new CustomEvent('moonscribe:settings-search', { detail: r.title })) }
         return
       }
@@ -172,8 +173,9 @@ export default function CommandPalette() {
                           onMouseEnter={() => setActive(index)}
                           onClick={() => go(g.key, r)}
                         >
-                          <span className="palette-item-title">{r.title || 'Untitled'}</span>
+                          <span className="palette-item-title">{highlight(r.title || 'Untitled', r.match || query)}</span>
                           {r.subtitle && <span className="palette-item-sub">{r.subtitle}</span>}
+                          {r.preview && <span className="palette-item-preview">{highlight(r.preview, r.match || query)}</span>}
                         </button>
                       )
                     })}
@@ -188,3 +190,13 @@ export default function CommandPalette() {
     document.body
   )
 }
+
+function highlight(text, query) {
+  const value = String(text || '')
+  const q = String(query || '').trim()
+  if (!q) return value
+  const parts = value.split(new RegExp(`(${escapeRegExp(q)})`, 'ig'))
+  return parts.map((part, index) => part.toLowerCase() === q.toLowerCase() ? <mark key={index}>{part}</mark> : part)
+}
+
+function escapeRegExp(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }

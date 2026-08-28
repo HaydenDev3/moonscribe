@@ -4,6 +4,7 @@ import { useDraftRecovery, readDraft, draftKey } from '../utils/draftRecovery'
 import { useParams } from 'react-router-dom'
 import { getNovel } from '../db/novels'
 import { WORLD_KINDS, listWorld, createWorldItem, updateWorldItem, trashWorldItem } from '../db/world'
+import { restoreTrashed } from '../db/trash'
 import { useApp } from '../context/AppContext'
 import SubPageTopbar from '../components/SubPageTopbar'
 import Modal from '../components/Modal'
@@ -13,7 +14,7 @@ import { timeAgo } from '../utils/dates'
 import { useContextMenu } from '../components/ContextMenu'
 import Icon from '../components/Icon'
 
-const KIND_COLORS = { place: '#7BA3C9', faction: '#B49BCB', item: '#E3C18A', lore: '#A8C5A8', timeline: '#D8B48F' }
+const KIND_COLORS = { place: '#7BA3C9', faction: '#B49BCB', item: '#E3C18A', creature: '#D4A5A5', lore: '#A8C5A8', timeline: '#D8B48F' }
 
 const compactText = (value = '', limit = 220) => {
   const text = value.replace(/\s+/g, ' ').trim()
@@ -55,9 +56,11 @@ export default function World({ novelId, embedded }) {
 
   const save = async (clearDraftFn) => {
     if (!editing) return
+    const duplicate = items.find((item) => item.id !== editing.id && item.kind === editing.kind && String(item.name || '').trim().toLocaleLowerCase() === String(editing.name || '').trim().toLocaleLowerCase())
+    if (duplicate && !window.confirm(`“${duplicate.name}” already exists in this section. Save another entry with the same name?`)) return
     if (editing.__new) {
       await createWorldItem(nid, editing)
-      toast(`${editing.name || 'That place'} now exists.`)
+      toast(`${editing.name || `That ${active?.label?.toLowerCase().replace(/s$/, '') || 'entry'}`} now exists.`)
     } else {
       await updateWorldItem(editing.id, editing)
       toast('Updated.')
@@ -78,7 +81,7 @@ export default function World({ novelId, embedded }) {
     await trashWorldItem(deleting.id)
     setDeleting(null)
     load()
-    toast('Moved to the Trash — recoverable for 30 days.')
+    toast('Moved to the Trash — recoverable for 30 days.', { label: 'Undo', run: async () => { await restoreTrashed('world', deleting.id); load() } })
   }
 
   const current = items.filter((i) => i.kind === kind)
@@ -212,7 +215,7 @@ function WorldModal({ item, onChange, onClose, onSave, isNew, draftKey: dk, draf
       )}
       <div className="field">
         <label>Name</label>
-        <input value={item.name || ''} onChange={(e) => set({ name: e.target.value })} autoFocus placeholder="The Alder Canal…" />
+        <input spellCheck value={item.name || ''} onChange={(e) => set({ name: e.target.value })} autoFocus placeholder="The Alder Canal…" />
       </div>
       <div className="field">
         <label>Kind</label>
@@ -226,15 +229,15 @@ function WorldModal({ item, onChange, onClose, onSave, isNew, draftKey: dk, draf
       </div>
       <div className="field">
         <label>Summary <span className="hint">(what it is, in a line or two)</span></label>
-        <textarea value={item.summary || ''} onChange={(e) => set({ summary: e.target.value })} placeholder="A slow canal that glows faintly at dusk…" />
+        <textarea spellCheck value={item.summary || ''} onChange={(e) => set({ summary: e.target.value })} placeholder="A slow canal that glows faintly at dusk…" />
       </div>
       <div className="field">
         <label>Details <span className="hint">(secrets, rules, history)</span></label>
-        <textarea style={{ minHeight: 140 }} value={item.details || ''} onChange={(e) => set({ details: e.target.value })} placeholder="Who built it, what it costs to use, what it hides…" />
+        <textarea spellCheck style={{ minHeight: 140 }} value={item.details || ''} onChange={(e) => set({ details: e.target.value })} placeholder="Who built it, what it costs to use, what it hides…" />
       </div>
       <div className="field">
         <label>Tags <span className="hint">(comma separated)</span></label>
-        <input value={(item.tags || []).join(', ')} onChange={(e) => set({ tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="canal, magic, borderland" />
+        <input spellCheck value={(item.tags || []).join(', ')} onChange={(e) => set({ tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="canal, magic, borderland" />
       </div>
       <div className="modal-foot">
         <button className="button button-ghost" onClick={() => onClose(clearDraft)}>Cancel</button>

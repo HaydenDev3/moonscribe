@@ -19,10 +19,11 @@ import { addTodayWords, todayWords } from '../src/db/stats'
 import { recordSession, todaySessionStats } from '../src/db/stats'
 import { exportBackup, importBackup } from '../src/db/backup'
 import { toWire, fromWire } from '../src/sync/serialize'
+import { createFolder, listFolders, moveFolder } from '../src/db/folders'
 
 beforeEach(async () => {
   const db = await getDB()
-  await Promise.all(['novels', 'chapters', 'characters', 'notes', 'relationships', 'stats', 'meta'].map((s) => db.clear(s)))
+  await Promise.all(['novels', 'chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'meta'].map((s) => db.clear(s)))
 })
 
 describe('novels', () => {
@@ -117,6 +118,21 @@ describe('chapters', () => {
     // refuse to nest a parent inside its own subtree
     list = await reorderChapter(n.id, book.id, { parentId: c2.id })
     expect(list.find((c) => c.id === book.id).parentId).toBeNull()
+  })
+
+  it('moves chapters into folders without turning outline Acts into folders', async () => {
+    const n = await createNovel({ title: 'Drag test' })
+    const folder = await createFolder(n.id, { name: 'Drafts' })
+    const act = await createChapter(n.id, { title: 'Act I', kind: 'act' })
+    const chapter = await createChapter(n.id, { title: 'Scene', folderId: folder.id })
+
+    expect(chapter.kind).toBe('chapter')
+    expect(chapter.folderId).toBe(folder.id)
+    expect((await listChapters(n.id)).find((item) => item.id === act.id).folderId).toBeNull()
+
+    const nested = await createFolder(n.id, { name: 'Nested', parentId: folder.id })
+    await moveFolder(nested.id, null, 0)
+    expect((await listFolders(n.id)).find((item) => item.id === nested.id).parentId).toBeNull()
   })
 
   it('caps stored versions at 20', async () => {

@@ -39,6 +39,20 @@ export default function PrintView() {
     })()
   }, [id])
 
+  // Keep the print surface live when edits arrive from another tab/device.
+  useEffect(() => {
+    const refresh = (event: Event) => {
+      const record = 'detail' in event ? (event as CustomEvent).detail : null
+      if (String(record?.novelId || '') !== String(id)) return
+      Promise.all([getNovel(id), listChapters(id)]).then(([nextNovel, nextChapters]) => {
+        if (nextNovel) setNovel(nextNovel)
+        setChapters(nextChapters)
+      }).catch(() => {})
+    }
+    window.addEventListener('moonscribe:remote-record', refresh)
+    return () => window.removeEventListener('moonscribe:remote-record', refresh)
+  }, [id])
+
   const fontFamily = FONTS[layout.bodyFont] || FONTS.literata
   const bodyPx = (layout.bodySize ?? 11.5) * 1.25
   const symbol = layout.sceneBreak || '❦'
@@ -87,7 +101,7 @@ export default function PrintView() {
       </div>
 
       <div className={`device-preview device-${device}`} style={activeDevice.width ? { width: activeDevice.width, height: activeDevice.height } : undefined}>
-      <div className={`book-view ${layout.dropCap ? 'dropcap' : ''}`} style={{ fontFamily: fontFamily, fontSize: device === 'print' ? `${bodyPx}px` : `${Math.max(13, bodyPx)}px`, ['--print-paper' as any]: theme.paper, ['--print-ink' as any]: theme.ink, ['--print-accent' as any]: theme.accent, width: device === 'print' ? `${w}mm` : '100%', minHeight: device === 'print' ? `${h}mm` : '100%', padding: device === 'print' ? `${margin}mm` : device === 'iphone' ? '42px 28px' : '54px 44px' } as CSSProperties}>
+      <div className={`book-view ${layout.dropCap ? 'dropcap' : ''}`} style={{ fontFamily: fontFamily, fontSize: device === 'print' ? `${bodyPx}px` : `${Math.max(13, bodyPx)}px`, ['--print-paper' as any]: theme.paper, ['--print-ink' as any]: theme.ink, ['--print-accent' as any]: theme.accent, ['--drop-cap-color' as any]: layout.dropCapColor ?? theme.ink, width: device === 'print' ? `${w}mm` : '100%', minHeight: device === 'print' ? `${h}mm` : '100%', padding: device === 'print' ? `${margin}mm` : device === 'iphone' ? '42px 28px' : '54px 44px' } as CSSProperties}>
         {layout.includeFrontMatter !== false && <div className="title-page">
           <div className="t-title">{novel.title}</div>
           <div className="t-by">{coverByline(layout, novel)}</div>
@@ -98,14 +112,14 @@ export default function PrintView() {
         {chapters.length === 0 && <p className="muted" style={{ textAlign: 'center' }}>No chapters yet.</p>}
 
         {chapters.map((c, i) => (
-          <div className="chapter-block" key={c.id}>
+          <div className={`chapter-block${i === 0 ? ' first-chapter' : ''}`} key={c.id}>
             {c.part && (i === 0 || chapters[i - 1].part !== c.part) && (
               <h2 className="t-chapter left" style={{ fontSize: '1.2em', marginTop: '2em' }}>{c.part}</h2>
             )}
             <div className={`t-chapter ${layout.chapterStyle === 'left' ? 'left' : ''} ${isContainer(c) ? 't-container' : ''}`}>
               {titleFor(c, numbers)}
             </div>
-            <div className="chapter-body" dangerouslySetInnerHTML={{ __html: decorate(c.content || '', symbol) }} />
+            <div className={`chapter-body${layout.dropCap && !isContainer(c) ? ' dropcap' : ''}`} dangerouslySetInnerHTML={{ __html: decorate(c.content || '', symbol) }} />
           </div>
         ))}
       </div>

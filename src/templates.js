@@ -66,3 +66,14 @@ export const NOVEL_TEMPLATES = [
     ]
   }
 ]
+
+// Opt-in starter copy for quick planning records. These are drafts only;
+// callers still decide when to persist them.
+export const WORKSPACE_TEMPLATES = [
+  { key: 'chapter', label: 'Chapter', title: 'Chapter title', content: '' },
+  { key: 'scene-idea', label: 'Scene idea', title: 'Scene idea', content: 'What happens?\n\nWhy does it matter?' },
+  { key: 'character', label: 'Character', title: 'Character name', content: 'Who are they, and what do they want?' },
+  { key: 'creature', label: 'Creature', title: 'Creature name', content: 'What does it look like, and how does it behave?' },
+  { key: 'world', label: 'World entry', title: 'World entry', content: 'What is important to remember?' },
+  { key: 'note', label: 'Note', title: 'Note', content: '' }
+]

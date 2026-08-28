@@ -10,8 +10,8 @@
   color-scheme: light;
 
   /* ---- brand raw tokens (source of truth: the brand kit) ---- */
-  --color-bg: #f3f2f2;
-  --color-surface: #eae9e9;
+  --color-bg: #ebe7df;
+  --color-surface: #f3efe7;
   --color-ink: #201f1d;
   --color-accent: #b68235;
 
@@ -44,7 +44,7 @@
   --twilight: var(--color-neutral-900);
   --cream: var(--color-bg);
   --ivory: var(--color-surface);
-  --ivory-warm: #efeeee;
+  --ivory-warm: #e8e2d8;
   --rose: #a86a52;        /* restrained functional danger in a single-accent kit */
   --rose-deep: #8f5540;
   --charcoal: var(--color-ink);
@@ -70,7 +70,7 @@
   --bg: var(--cream);
   --surface: var(--ivory);
   --surface-warm: var(--ivory-warm);
-  --surface-elev: #ffffff;
+  --surface-elev: #f7f3eb;
   --border: var(--divider);
   --border-soft: var(--divider-soft);
 

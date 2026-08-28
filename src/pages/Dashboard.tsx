@@ -27,6 +27,7 @@ import DashboardHome from '../dashboard/DashboardHome'
 import ProfileAvatar from '../components/ProfileAvatar'
 import GlobalMedia from '../dashboard/GlobalMedia'
 import AdSlot from '../components/AdSlot'
+import { readRecentWriting } from '../utils/recentWriting'
 
 const COVER_STYLES = [
   { key: 'moonstone', label: 'Moonstone' },
@@ -367,7 +368,10 @@ export default function Dashboard() {
         .slice(0, 5)
       const recentNovel = [...activeNovels]
         .sort((a, b) => (b.lastOpened || b.updatedAt || 0) - (a.lastOpened || a.updatedAt || 0))[0]
-      const resumeChapter = recentNovel
+      const recentContext = readRecentWriting()
+      const resumeChapter = recentContext?.novelId && allChapters.some((chapter) => chapter.novelId === recentContext.novelId && chapter.id === recentContext.chapterId)
+        ? allChapters.find((chapter) => chapter.novelId === recentContext.novelId && chapter.id === recentContext.chapterId)
+        : recentNovel
         ? allChapters.filter((chapter) => chapter.novelId === recentNovel.id)
           .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0] || null
         : null
@@ -955,7 +959,7 @@ function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLib
       { label: 'Sync now', icon: 'fa-solid fa-rotate', onClick: onSync },
       { label: 'Copy username', icon: 'fa-regular fa-copy', disabled: !syncUsername, onClick: () => syncUsername && navigator.clipboard?.writeText(syncUsername) },
       'divider',
-      { label: 'Sign out', icon: 'fa-solid fa-right-from-bracket', onClick: onSignOut },
+      { label: syncUsername ? 'Sign out' : 'Exit offline mode', icon: 'fa-solid fa-right-from-bracket', onClick: onSignOut },
     ])
   }
   const item = (key, label, icon, onClick) => (

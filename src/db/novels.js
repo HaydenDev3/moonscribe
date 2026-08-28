@@ -140,6 +140,7 @@ export function defaultLayout() {
     bodyFont: 'literata',
     bodySize: 11.5,
     dropCap: false,
+    dropCapColor: '#2a2520',
     sceneBreak: '❦',
     titleStyle: 'centered', // centered | ornament
     chapterStyle: 'centered', // centered | left

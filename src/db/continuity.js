@@ -17,7 +17,9 @@ function mentions(name, text) {
 }
 
 function characterAppears(character, text) {
-  return [character?.name, ...(Array.isArray(character?.aliases) ? character.aliases : [])].filter(Boolean).some((name) => mentions(name, text))
+  const fullName = String(character?.name || '').trim()
+  const firstName = fullName.split(/\s+/)[0]
+  return [fullName, firstName, ...(Array.isArray(character?.aliases) ? character.aliases : [])].filter(Boolean).some((name) => mentions(name, text))
 }
 
 // Build a report for one novel. Returns { issues, counts } where each issue is
@@ -51,7 +53,11 @@ export async function continuityReport(novelId) {
   // POV set in scene metadata but the character never appears in the scene.
   for (const { c, text } of texts) {
     const pov = c.meta?.pov
-    const povProfile = pov && characters.find((character) => [character.name, ...(character.aliases || [])].some((name) => String(name).toLowerCase() === String(pov).toLowerCase()))
+    const povProfile = pov && characters.find((character) => {
+      const full = String(character.name || '').trim()
+      const first = full.split(/\s+/)[0]
+      return [full, first, ...(character.aliases || [])].some((name) => String(name).toLowerCase() === String(pov).toLowerCase())
+    })
     if (pov && text && !(povProfile ? characterAppears(povProfile, text) : mentions(pov, text))) {
       issues.push({
         severity: SEVERITY.flag,

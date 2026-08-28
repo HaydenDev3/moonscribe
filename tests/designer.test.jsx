@@ -78,7 +78,7 @@ describe('Book designer (cover studio)', () => {
     expect(container.querySelector('.studio-rail-head strong').textContent).toContain('Cover text')
     expect(container.querySelector('.designer-workflow-bar')).not.toBeNull()
     expect([...container.querySelectorAll('.designer-workflow-step')].map((button) => button.textContent)).toHaveLength(5)
-    expect(container.querySelector('.designer-book-system')).not.toBeNull()
+    expect(container.querySelector('.designer-book-system')).toBeNull()
   })
 
   it('switches preview modes and toggles print guides', async () => {
