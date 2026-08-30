@@ -338,6 +338,8 @@ export default function Dashboard() {
   })
   const libraryRef = useRef<HTMLDivElement | null>(null)
   const [dashboardView, setDashboardView] = useState<'home' | 'library' | 'media' | 'journal' | 'insights'>('home')
+  const currentStory = novels.find((novel) => novel.title === dashboardData.recent[0]?.novelTitle)
+  const currentStoryCover = useBlobUrl(currentStory?.cover)
   const dashboardWidgetsKey = `dashboardWidgets:${syncUsername || 'local'}`
 
   useEffect(() => {
@@ -686,6 +688,7 @@ export default function Dashboard() {
         resumeChapter={resumeChapter}
         recent={dashboardData.recent}
         showCurrentStory={hasCurrentStory}
+        currentStoryCover={currentStoryCover}
       />
       <main className={`dashboard-main ${sidebarCollapsed ? 'dashboard-sidebar-collapsed' : ''}`}>
       <div className={`dashboard dashboard-layout-${settings.appLayout || 'studio'}`}>
@@ -699,7 +702,7 @@ export default function Dashboard() {
             >
               <Icon icon="fa-solid fa-sliders" /> {customizingDashboard ? 'Done' : 'Customize'}
             </button>
-            <SyncStatus onClick={() => setConnectOpen(true)} />
+            <SyncStatus onClick={() => void syncNow()} />
             <UserPill onConnectClick={() => setConnectOpen(true)} />
           </div>
         </div>
@@ -948,7 +951,7 @@ function HeroCard({ novel, chapter, counts, todayWords, streak, onOpen, onOpenCh
   )
 }
 
-function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLibrary, onMedia, onJournal, onInsights, onSearch, onNew, onOpenChapter, onSettings, onSignOut, onAdmin, syncUsername, syncStatus, syncAvatar, syncProvider, onSync, resumeChapter, recent, showCurrentStory = true }) {
+function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLibrary, onMedia, onJournal, onInsights, onSearch, onNew, onOpenChapter, onSettings, onSignOut, onAdmin, syncUsername, syncStatus, syncAvatar, syncProvider, onSync, resumeChapter, recent, currentStoryCover, showCurrentStory = true }) {
   const { openContextMenu } = useContextMenu()
   const openProfileMenu = (event) => {
     event.preventDefault()
@@ -986,7 +989,7 @@ function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLib
         <div className="dashboard-current-story">
           <span>Current story</span>
           <button onClick={onContinue} title={collapsed ? 'Continue writing' : undefined}>
-            <Icon icon="fa-solid fa-sparkles" />
+            {currentStoryCover ? <img className="dashboard-current-story-cover" src={currentStoryCover} alt="" /> : <Icon icon="fa-solid fa-sparkles" />}
             <span className="dashboard-sidebar-label">{recent[0]?.novelTitle || 'Choose a story'}<small>{resumeChapter?.title || 'Start where you left off'}</small></span>
           </button>
         </div>

@@ -1,5 +1,7 @@
 .notification-badge { position: absolute; top: 1px; right: 1px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 99px; background: var(--accent, #b68235); color: #fff; font: 700 10px/16px system-ui; text-align: center; }
-.notification-popover { position: absolute; z-index: 1200; top: calc(100% + 10px); right: 0; width: min(400px, calc(100vw - 32px)); max-height: min(480px, calc(100dvh - 150px)); overflow: auto; padding: 10px; border: 1px solid var(--border, #3a3030); border-radius: 14px; background: var(--panel, #151116); box-shadow: 0 18px 50px #0008; }
+.notification-bell { position: relative; z-index: 1; }
+.workspace-topbar:has(.notification-popover) { z-index: 2000; }
+.notification-popover { position: absolute; z-index: 2001; top: calc(100% + 10px); right: 0; width: min(400px, calc(100vw - 32px)); max-height: min(480px, calc(100dvh - 150px)); overflow: auto; padding: 10px; border: 1px solid var(--border, #3a3030); border-radius: 14px; background: var(--panel, #151116); box-shadow: 0 18px 50px #0008; isolation: isolate; }
 .notification-tabs { display:flex; gap:4px; padding:8px 0; border-bottom:1px solid var(--border, #3a3030); }
 .notification-tabs button { border:0; border-radius:999px; padding:5px 9px; background:transparent; color:var(--muted,#a99ba0); font-size:11px; cursor:pointer; }
 .notification-tabs button.active { background:#b6823522; color:var(--charcoal,#fff); }

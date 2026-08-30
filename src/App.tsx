@@ -17,7 +17,7 @@ const Settings = lazy(() => import('./components/Settings'))
 const AccountCentre = lazy(() => import('./components/AccountCentre'))
 import Onboarding from './pages/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
-import FeatureGuard from './components/FeatureGuard'
+import FeatureGuard, { clearFeatureStatus } from './components/FeatureGuard'
 import NotFound from './pages/NotFound'
 import LockScreen from './components/LockScreen'
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
@@ -112,7 +112,15 @@ export default function App() {
   const { onboardingDone, appLock, locked, unlockApp, syncUsername, accountReady, guestMode, hasRole, accountCentreOpen, closeAccountCentre } = appState
 
   useEffect(() => {
-    registerSW({ immediate: true })
+    // A development service worker can keep an older Vite bundle alive after
+    // hot reloads. That leaves feature guards reporting errors from code that
+    // no longer exists, so localhost must always use the live module graph.
+    if (import.meta.env.DEV) {
+      clearFeatureStatus('novel')
+      navigator.serviceWorker?.getRegistrations?.().then((registrations) => registrations.forEach((registration) => { void registration.unregister() }))
+    } else {
+      registerSW({ immediate: true })
+    }
     purgeExpired()
   }, [])
 

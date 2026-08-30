@@ -42,6 +42,17 @@ MoonScribe brings drafting, story memory, collaboration, and finished-book desig
 
 </details>
 
+### Moodboard workspace
+
+MoonScribe’s Moodboard is a private, local-first creative-direction board for collecting the feeling, texture, palette, and references that guide a story. Add notes, images, links, and colour palettes, then arrange them freely on the atmospheric board.
+
+- Drag tiles to compose the board and use **Smart stack** to group references by type.
+- Drag from a tile’s ↗ connect control onto another tile to create a persistent visual relationship.
+- Use zoom, pan, fullscreen, and **Fit board** to move from close editing to presentation mode.
+- Connections, positions, notes, and references remain available offline through the existing IndexedDB storage.
+
+The board is designed around a curated moodboard workflow: establish a creative direction, gather references, identify reusable visual ingredients, and return to the board as the story develops.
+
 ## 🧩 Built with
 
 <p>
@@ -102,6 +113,21 @@ npm test
 npm run build
 npm audit --omit=dev --audit-level=moderate
 ```
+
+### Current release review
+
+Recommended release: **1.1.2 — Account Centre Polish**.
+
+The latest Account Centre update includes circular profile imagery, live account/security status presentation, spaced danger actions with lightweight hover feedback, and improved profile banner treatment. The shared browser-test fixture race has also been resolved by running the UI test files serially.
+
+Release checks currently pass:
+
+- TypeScript
+- ESLint
+- Production build
+- Full test suite: 40 files, 234 tests
+
+Headless tests may print expected warnings for Three.js WebGL context creation and Node localStorage because they run without a GPU or browser storage implementation. The npm security audit remains inconclusive when the registry audit endpoint is unavailable; rerun it in a networked release environment before publishing.
 
 ## 📚 Documentation
 

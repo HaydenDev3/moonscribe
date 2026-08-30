@@ -99,6 +99,7 @@ export default function Sidebar({
   onSyncClick,
   onTitleChange,
   onTitleSave,
+  onToggleFavorite,
 }) {
   const { openContextMenu } = useContextMenu()
   const { settings, updateSettings, toast, syncUsername, syncStatus, syncDiscordAvatar, syncProvider, openSettings, disconnectSync } = useApp()
@@ -107,6 +108,7 @@ export default function Sidebar({
   const [navCollapsed, setNavCollapsed] = useState(() => new Set(['World', 'Craft', 'Journal', 'Archive']))
   const [manuscriptCollapsed, setManuscriptCollapsed] = useState(false)
   const [mediaCollapsed, setMediaCollapsed] = useState(false)
+  const [showAllMedia, setShowAllMedia] = useState(false)
   const [folderSettings, setFolderSettings] = useState(null)
   const [folderSettingsTab, setFolderSettingsTab] = useState('overview')
   const [query, setQuery] = useState('')
@@ -169,6 +171,7 @@ export default function Sidebar({
     const i = flat.findIndex((x) => x.id === c.id)
     openContextMenu(e, canEdit ? [
       { label: 'Edit', icon: 'fa-solid fa-pen', onClick: () => onEdit(c) },
+      { label: c.favorite ? 'Remove from favorites' : 'Add to favorites', icon: c.favorite ? 'fa-solid fa-star' : 'fa-regular fa-star', onClick: () => onToggleFavorite?.(c) },
       { label: 'Move up', icon: 'fa-solid fa-arrow-up', disabled: i <= 0, onClick: () => onMove(c.id, -1) },
       { label: 'Move down', icon: 'fa-solid fa-arrow-down', disabled: i === -1 || i >= flat.length - 1, onClick: () => onMove(c.id, 1) },
       'divider',
@@ -315,6 +318,7 @@ export default function Sidebar({
           {/* Title */}
           <Icon icon={container ? folderIcon : 'fa-regular fa-file-lines'} className="binder-node-icon" style={folderColor ? { color: folderColor } : undefined} />
           <span className="binder-label">{label}</span>
+          {c.favorite && <Icon icon="fa-solid fa-star binder-favorite" aria-label="Favorite chapter" />}
           {tabPeople.length > 0 && (
             <span
               className="binder-live-badge"
@@ -378,7 +382,7 @@ export default function Sidebar({
           tabIndex={0}
           // Folders use a quieter hierarchy than manuscript chapters; the
           // previous 16px step made a second folder look accidentally buried.
-          style={{ paddingLeft: `${8 + depth * 10}px` }}
+          style={{ paddingLeft: `${depth * 10}px` }}
           onClick={() => hasChildren && setCollapsed((current) => { const next = new Set(current); const key = `folder:${folder.id}`; if (next.has(key)) next.delete(key); else next.add(key); return next })}
           onContextMenu={(event) => { event.preventDefault(); openContextMenu(event, [
             { label: 'New chapter inside folder', icon: 'fa-solid fa-file-circle-plus', onClick: () => onAdd('chapter', folder.id) },
@@ -540,7 +544,8 @@ export default function Sidebar({
                   <Icon icon={mediaCollapsed ? 'fa-solid fa-caret-right' : 'fa-solid fa-caret-down'} /><Icon icon="fa-regular fa-images" /><span>Media</span><small>{mediaFiles.length} files</small>
                 </button>
                 {!mediaCollapsed && <div className="binder-children binder-media-files">
-                  {mediaFiles.map((file) => <button className="binder-item binder-media-file" key={file.id} type="button" onClick={onMediaSelect} onContextMenu={(event) => { event.preventDefault(); openContextMenu(event, [{ label: 'Open Media Library', icon: 'fa-solid fa-images', onClick: onMediaSelect }, { label: 'Delete file', icon: 'fa-solid fa-trash', danger: true, onClick: () => onMediaDelete?.(file) }]) }}><img src={file.image} alt="" className="binder-media-thumb" /><span className="binder-label">{file.text || 'Untitled image'}</span></button>)}
+                  {(showAllMedia ? mediaFiles : mediaFiles.slice(0, 5)).map((file) => <button className="binder-item binder-media-file" key={file.id} type="button" onClick={onMediaSelect} onContextMenu={(event) => { event.preventDefault(); openContextMenu(event, [{ label: 'Open Media Library', icon: 'fa-solid fa-images', onClick: onMediaSelect }, { label: 'Delete file', icon: 'fa-solid fa-trash', danger: true, onClick: () => onMediaDelete?.(file) }]) }}><img src={file.image} alt="" className="binder-media-thumb" /><span className="binder-label">{file.text || 'Untitled image'}</span></button>)}
+                  {mediaFiles.length > 5 && <button type="button" className="binder-item binder-media-more" onClick={() => setShowAllMedia((value) => !value)}><Icon icon={showAllMedia ? 'fa-solid fa-chevron-up' : 'fa-solid fa-ellipsis'} /><span>{showAllMedia ? 'Show fewer files' : `View all ${mediaFiles.length} files`}</span></button>}
                   {!mediaFiles.length && <button className="binder-media-file binder-media-empty" type="button" onClick={onMediaSelect}><Icon icon="fa-solid fa-plus" /><span>Add your first file</span></button>}
                 </div>}
               </div>

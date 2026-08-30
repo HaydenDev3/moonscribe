@@ -292,6 +292,21 @@ export default function BookDesigner({
   const designerFontOptions = useMemo(() => buildDesignerFontOptions({ systemFonts, customFonts }), [customFonts, systemFonts])
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || (event.target as HTMLElement)?.isContentEditable) return
+      if (event.key === 'g') { event.preventDefault(); setShowGuides((value) => !value) }
+      if (event.key === 'f') { event.preventDefault(); setCoverFocused((value) => !value) }
+      if (event.key === ' ') { event.preventDefault(); setSpinFrozen((value) => !value) }
+      if (event.key === '1') setPreviewMode('cover')
+      if (event.key === '2') setPreviewMode('interior')
+      if (event.key === '3') setPreviewMode('flat-wrap')
+      if (event.key === 'Escape' && coverFocused) setCoverFocused(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [coverFocused])
+
+  useEffect(() => {
     ;(async () => {
       const n = await getNovel(id)
       setNovel(n)
@@ -713,6 +728,13 @@ export default function BookDesigner({
             </div>
 
             <div className="ds-stage-actions designer-stage-tools">
+              <button type="button" className="ds-action-btn designer-more-button" aria-label="More designer options" title="More options" onClick={(event) => openContextMenu(event, [
+                { label: showGuides ? 'Hide guides' : 'Show guides', icon: 'fa-solid fa-ruler-combined', onClick: () => setShowGuides((value) => !value) },
+                { label: 'Undo', icon: 'fa-solid fa-rotate-left', disabled: !canUndo, onClick: undo },
+                { label: 'Redo', icon: 'fa-solid fa-rotate-right', disabled: !canRedo, onClick: redo },
+                { label: 'Interior preview', icon: 'fa-solid fa-file-lines', onClick: () => { setPreviewMode('interior'); setStageView('page') } },
+                { label: spinFrozen ? 'Resume spin' : 'Freeze spin', icon: spinFrozen ? 'fa-solid fa-play' : 'fa-solid fa-pause', onClick: () => setSpinFrozen((value) => !value) },
+              ])}><Icon icon="fa-solid fa-ellipsis" /></button>
               <button className="ds-action-btn" disabled={!canUndo} onClick={undo} title="Undo (Ctrl+Z)"><Icon icon="fa-solid fa-rotate-left" /></button>
                 <button className="ds-action-btn" disabled={!canRedo} onClick={redo} title="Redo (Ctrl+Y)"><Icon icon="fa-solid fa-rotate-right" /></button>
                 <button type="button" className={`ds-action-btn ds-guides-action ${showGuides ? 'active' : ''}`} onClick={() => setShowGuides((value) => !value)} title="Toggle print guides" aria-pressed={showGuides}><Icon icon="fa-solid fa-ruler-combined" /><span>Guides</span></button>
@@ -1460,7 +1482,7 @@ function Cover3D({ novel, cover, autoSpin, immersive, surface, environment, meas
 
   return (
     <div className="cover-renderer-shell">
-      <div className="cover-renderer-status"><span className="designer-save-dot" />3D preview · {window.localStorage?.getItem?.('moonscribe_3d_quality') || 'balanced'}</div>
+      <div className="cover-renderer-status"><span className="designer-save-dot" />3D preview · {window.localStorage?.getItem?.('moonscribe_3d_quality') || 'crisp'}</div>
     <Comp
       title={novel.title}
       subtitle={cover.subtitle || ''}
@@ -1498,7 +1520,7 @@ function Cover3D({ novel, cover, autoSpin, immersive, surface, environment, meas
       trimWidthMm={measurements.trimWidthMm}
       trimHeightMm={measurements.trimHeightMm}
       spineMm={measurements.spineMm}
-      quality={window.localStorage?.getItem?.('moonscribe_3d_quality') || 'balanced'}
+      quality={window.localStorage?.getItem?.('moonscribe_3d_quality') || 'crisp'}
       reducedMotion={window.matchMedia?.('(prefers-reduced-motion: reduce)').matches}
       onStatusChange={(status, info) => { setRendererStatus(status); if (info) setDiagnostics(info) }}
     />

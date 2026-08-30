@@ -7,6 +7,7 @@ export const NOVEL_NAV = [
       { to: 'planning', label: 'Planning cockpit', icon: 'fa-solid fa-compass-drafting' },
       { to: 'characters', label: 'Characters', icon: 'fa-solid fa-user' },
       { to: 'relationships', label: 'Relationships', icon: 'fa-regular fa-heart' },
+      { to: 'family-tree', label: 'Family tree', icon: 'fa-solid fa-people-roof' },
       { to: 'world', label: 'Worldbuilding', icon: 'fa-solid fa-globe' },
       { to: 'glossary', label: 'Glossary', icon: 'fa-solid fa-book-open' },
       { to: 'moodboard', label: 'Moodboard', icon: 'fa-regular fa-images' },
@@ -19,6 +20,8 @@ export const NOVEL_NAV = [
       { to: 'media', label: 'Media Library', icon: 'fa-regular fa-images' },
       { to: 'files', label: 'Project files', icon: 'fa-solid fa-folder-tree' },
       { to: 'analytics', label: 'Analytics', icon: 'fa-solid fa-chart-line' },
+      { to: 'story-memory', label: 'Story Memory', icon: 'fa-solid fa-brain' },
+      { to: 'prose-tools', label: 'Prose tools', icon: 'fa-solid fa-spell-check' },
       { to: 'corkboard', label: 'Draft board', icon: 'fa-solid fa-border-all' },
       { to: 'continuity', label: 'Continuity', icon: 'fa-solid fa-circle-check' }
     ]

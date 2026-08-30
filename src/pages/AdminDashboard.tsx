@@ -29,6 +29,7 @@ type AuditEvent = {
   createdAt: number
 }
 type Announcement = { id: string; title: string; body: string; severity: string; published?: boolean; createdAt: number; created_by?: string }
+type AdminMail = { id: string; direction: 'received' | 'sent'; sender: string; recipients: string; subject: string; text: string; html?: string; status: string; readAt?: number | null; createdAt: number }
 const roleFor = (roles: string[]) =>
   roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user'
 
@@ -60,6 +61,11 @@ export default function AdminDashboard() {
   const [announcementSeverity, setAnnouncementSeverity] = useState('info')
   const [publishingAnnouncement, setPublishingAnnouncement] = useState(false)
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [mail, setMail] = useState<AdminMail[]>([])
+  const [mailTo, setMailTo] = useState('')
+  const [mailSubject, setMailSubject] = useState('')
+  const [mailBody, setMailBody] = useState('')
+  const [selectedMail, setSelectedMail] = useState<AdminMail | null>(null)
 
   useEffect(() => {
     if (!isAdmin) return
@@ -70,7 +76,7 @@ export default function AdminDashboard() {
         const cfg = await syncEngine.getConfig()
         if (!cfg.server || !cfg.token) throw new Error('No authenticated server session.')
         const base = cfg.server.replace(/\/+$/, '')
-        const [usersResponse, healthResponse, auditResponse, flagsResponse, announcementsResponse] = await Promise.all([
+        const [usersResponse, healthResponse, auditResponse, flagsResponse, announcementsResponse, mailResponse] = await Promise.all([
           fetch(`${base}/api/admin/users`, { headers: { Authorization: `Bearer ${cfg.token}` } }),
           fetch(`${base}/api/auth/status`),
           fetch(`${base}/api/admin/audit`, { headers: { Authorization: `Bearer ${cfg.token}` } }),
@@ -78,12 +84,14 @@ export default function AdminDashboard() {
             headers: { Authorization: `Bearer ${cfg.token}` },
           }),
           fetch(`${base}/api/admin/announcements`, { headers: { Authorization: `Bearer ${cfg.token}` } }),
+          fetch(`${base}/api/admin/mail`, { headers: { Authorization: `Bearer ${cfg.token}` } }),
         ])
         const userPayload = await usersResponse.json().catch(() => ({}))
         const healthPayload = await healthResponse.json().catch(() => ({}))
         const auditPayload = await auditResponse.json().catch(() => ({}))
         const flagsPayload = await flagsResponse.json().catch(() => ({}))
         const announcementsPayload = await announcementsResponse.json().catch(() => ({}))
+        const mailPayload = await mailResponse.json().catch(() => ({}))
         if (!usersResponse.ok) throw new Error(userPayload.error || 'Could not load users.')
         if (!cancelled) {
           setUsers(userPayload.users || [])
@@ -91,6 +99,7 @@ export default function AdminDashboard() {
           setAudit(auditPayload.events || [])
           setFlags(flagsPayload.flags || [])
           setAnnouncements(announcementsPayload.announcements || [])
+          setMail(mailPayload.messages || [])
         }
       } catch (error: any) {
         if (!cancelled) setMessage(error.message || 'Could not load admin data.')
@@ -208,6 +217,22 @@ export default function AdminDashboard() {
     setAnnouncements((current) => current.filter((announcement) => announcement.id !== item.id))
     setMessage('Announcement deleted.')
   }
+  const sendMail = async (event: FormEvent) => {
+    event.preventDefault()
+    const cfg = await syncEngine.getConfig()
+    if (!cfg.server || !cfg.token) return
+    const response = await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/mail/send`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` }, body: JSON.stringify({ to: mailTo, subject: mailSubject, text: mailBody }) })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) { setMessage(payload.error || 'Could not send email.'); return }
+    setMailTo(''); setMailSubject(''); setMailBody(''); setMessage('Email sent.')
+    setSection('Email')
+  }
+  const markMailRead = async (item: AdminMail) => {
+    setSelectedMail(item); if (item.readAt) return
+    const cfg = await syncEngine.getConfig(); if (!cfg.server || !cfg.token) return
+    await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/mail/${item.id}/read`, { method: 'POST', headers: { Authorization: `Bearer ${cfg.token}` } })
+    setMail((current) => current.map((mailItem) => mailItem.id === item.id ? { ...mailItem, readAt: Date.now() } : mailItem))
+  }
   const visibleAudit = audit.filter((event) => auditFilter === 'all' || event.action === auditFilter)
   const auditActions = [...new Set(audit.map((event) => event.action))]
   const auditMenu = (event: MouseEvent, item: AuditEvent) => openContextMenu(event, [
@@ -237,12 +262,13 @@ export default function AdminDashboard() {
     )
 
   const nav = [
-    ['Dashboard', 'Overview'],
-    ['Users', 'People'],
-    ['Health', 'System'],
-    ['Audit log', 'System'],
-    ['Feature flags', 'Releases'],
-    ['Announcements', 'Releases'],
+    ['Dashboard', 'Overview', 'fa-solid fa-house'],
+    ['Users', 'People', 'fa-solid fa-users'],
+    ['Health', 'System', 'fa-solid fa-heart-pulse'],
+    ['Audit log', 'System', 'fa-solid fa-list-check'],
+    ['Feature flags', 'Releases', 'fa-solid fa-flag'],
+    ['Announcements', 'Releases', 'fa-solid fa-bullhorn'],
+    ['Email', 'Releases', 'fa-solid fa-envelope'],
   ]
   const healthy = health?.online !== false
   return (
@@ -256,13 +282,13 @@ export default function AdminDashboard() {
             <small>{group}</small>
             {nav
               .filter(([, sectionName]) => sectionName === group)
-              .map(([label]) => (
+              .map(([label, , icon]) => (
                 <button
                   key={label}
                   className={section === label ? 'active' : ''}
                   onClick={() => setSection(label)}
                 >
-                  {label}
+                  <><i className={icon} aria-hidden="true" /> <span>{label}</span></>
                 </button>
               ))}
           </div>
@@ -496,6 +522,13 @@ export default function AdminDashboard() {
               <button className="button button-primary" disabled={publishingAnnouncement}>{publishingAnnouncement ? 'Publishing…' : 'Publish announcement'}</button>
             </form>
             <div className="admin-announcement-history"><h3>Published announcements</h3>{announcements.length ? announcements.map((item) => <div className="admin-announcement-item" key={item.id} onContextMenu={(event) => openContextMenu(event, [{ label: 'Delete announcement', icon: 'fa-solid fa-trash', onClick: () => void deleteAnnouncement(item) }])}><div><strong>{item.title}</strong><small>{item.severity} · {new Date(item.createdAt).toLocaleString()}</small><p>{item.body}</p></div><button className="button button-quiet" onClick={() => void deleteAnnouncement(item)} aria-label={`Delete ${item.title}`}><i className="fa-solid fa-trash" /></button></div>) : <span className="admin-muted">No announcements have been published.</span>}</div>
+          </article>
+        )}
+        {section === 'Email' && (
+          <article className="admin-panel admin-mail-panel">
+            <div className="admin-panel-heading"><div><span className="admin-kicker">Mailbox</span><h2>Email</h2><p>Receive inbound messages and send mail from the MoonScribe account service.</p></div><span className="admin-mail-count">{mail.filter((item) => item.direction === 'received' && !item.readAt).length} unread</span></div>
+            <div className="admin-mail-layout"><div className="admin-mail-list">{mail.length ? mail.map((item) => <button type="button" className={`admin-mail-row ${item.readAt ? '' : 'unread'}`} key={item.id} onClick={() => void markMailRead(item)}><span className="admin-mail-direction">{item.direction === 'received' ? 'IN' : 'OUT'}</span><span><strong>{item.subject}</strong><small>{item.direction === 'received' ? item.sender : `To ${item.recipients}`} · {new Date(item.createdAt).toLocaleString()}</small></span></button>) : <span className="admin-muted">No messages yet. Configure the inbound webhook to receive mail.</span>}</div><div className="admin-mail-reader">{selectedMail ? <><small>{selectedMail.direction === 'received' ? `From ${selectedMail.sender}` : `To ${selectedMail.recipients}`}</small><h3>{selectedMail.subject}</h3><time>{new Date(selectedMail.createdAt).toLocaleString()}</time><pre>{selectedMail.text || 'No plain-text body.'}</pre></> : <span className="admin-muted">Select a message to read it.</span>}</div></div>
+            <form className="admin-mail-compose" onSubmit={sendMail}><h3>Compose</h3><input type="email" required value={mailTo} onChange={(event) => setMailTo(event.target.value)} placeholder="Recipient email" /><input required value={mailSubject} onChange={(event) => setMailSubject(event.target.value)} placeholder="Subject" /><textarea required rows={5} value={mailBody} onChange={(event) => setMailBody(event.target.value)} placeholder="Write your message…" /><button className="button button-primary">Send email</button></form>
           </article>
         )}
         {section === 'Health' && (

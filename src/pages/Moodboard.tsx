@@ -28,10 +28,12 @@ export default function Moodboard({ novelId, embedded }) {
   const [fullscreen, setFullscreen] = useState(false)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [connecting, setConnecting] = useState(null)
+  const [connectionDraft, setConnectionDraft] = useState(null)
   const fileRef = useRef(null)
   const boardRef = useRef(null)
   const dragState = useRef(null)
   const panState = useRef(null)
+  const connectionState = useRef(null)
 
   const load = useCallback(async () => {
     setNovel(await getNovel(nid))
@@ -222,6 +224,45 @@ export default function Moodboard({ novelId, embedded }) {
     if (moved) updateTile(tile.id, { x: moved.x, y: moved.y })
   }
 
+  const beginConnection = (event, tile) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const rect = boardRef.current?.getBoundingClientRect()
+    if (!rect) return
+    const point = { x: (event.clientX - rect.left - pan.x) / zoom, y: (event.clientY - rect.top - pan.y) / zoom }
+    connectionState.current = { from: tile.id }
+    setConnectionDraft({ from: tile.id, x: point.x, y: point.y })
+    event.currentTarget.setPointerCapture?.(event.pointerId)
+  }
+
+  useEffect(() => {
+    if (!connectionDraft) return
+    const move = (event) => {
+      const rect = boardRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setConnectionDraft((draft) => draft && ({ ...draft, x: (event.clientX - rect.left - pan.x) / zoom, y: (event.clientY - rect.top - pan.y) / zoom }))
+    }
+    const end = async (event) => {
+      const current = connectionState.current
+      connectionState.current = null
+      setConnectionDraft(null)
+      if (!current) return
+      const rect = boardRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const point = { x: (event.clientX - rect.left - pan.x) / zoom, y: (event.clientY - rect.top - pan.y) / zoom }
+      const target = tiles.find((tile) => tile.id !== current.from && point.x >= (tile.x || 0) && point.x <= (tile.x || 0) + (tile.w || 200) && point.y >= (tile.y || 0) && point.y <= (tile.y || 0) + (tile.h || 150))
+      if (!target) return
+      const source = tiles.find((tile) => tile.id === current.from)
+      if (!source || (source.links || []).includes(target.id)) return
+      await updateTile(source.id, { links: [...new Set([...(source.links || []), target.id])] })
+      setTiles(await listMoodboard(nid))
+      toast('Tiles connected.')
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', end, { once: true })
+    return () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end) }
+  }, [connectionDraft, nid, pan.x, pan.y, tiles, toast, zoom])
+
   const onBoardWheel = (event) => {
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault()
@@ -264,12 +305,13 @@ export default function Moodboard({ novelId, embedded }) {
     <div className={`${embedded ? '' : 'app'} ${fullscreen ? 'moodboard-fullscreen' : ''}`}>
       {!embedded && <SubPageTopbar novel={novel} title="Moodboard" />}
       <div className="page page-wide moodboard-page">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 'var(--space-5)', flexWrap: 'wrap' }}>
+        <div className="moodboard-command-bar">
           <div>
+            <div className="moodboard-kicker">CREATIVE DIRECTION</div>
             <h2 style={{ margin: 0 }}>Moodboard</h2>
-            <p className="muted small" style={{ margin: '4px 0 0' }}>Images and notes, scattered like a desk in full swing. Drag them anywhere.</p>
+            <p className="muted small" style={{ margin: '4px 0 0' }}>Collect the feeling, texture, palette, and references that should guide this story.</p>
           </div>
-          <div className="actions-row">
+          <div className="actions-row moodboard-actions">
             <button className="button button-ghost" onClick={() => addNote(NOTE_COLORS[Math.floor(Math.random() * NOTE_COLORS.length)])}>
               <Icon icon="fa-solid fa-pen" style={{ marginRight: 6 }} /> Add note
             </button>
@@ -302,6 +344,7 @@ export default function Moodboard({ novelId, embedded }) {
 
           <div ref={boardRef} className="moodboard moodboard-spatial" onClick={() => setSelected(null)} onWheel={onBoardWheel} onPointerDown={onBoardPointerDown} onPointerMove={onBoardPointerMove} onPointerUp={onBoardPointerUp}>
             <MoodboardScene3D />
+            <div className="moodboard-board-label"><span className="moodboard-board-dot" /> STORY ATMOSPHERE <span>·</span> {tiles.length} {tiles.length === 1 ? 'reference' : 'references'}</div>
             {tiles.length === 0 && <div className="mb-empty-overlay">
               <Icon icon="fa-regular fa-images" />
               <h3>Build the world around your story</h3>
@@ -315,6 +358,11 @@ export default function Moodboard({ novelId, embedded }) {
                 if (!target) return null
                 return <line key={`${source.id}-${targetId}`} x1={(source.x || 0) + (source.w || 200) / 2} y1={(source.y || 0) + (source.h || 150) / 2} x2={(target.x || 0) + (target.w || 200) / 2} y2={(target.y || 0) + (target.h || 150) / 2} />
               }))}
+              {connectionDraft && (() => {
+                const source = tiles.find((tile) => tile.id === connectionDraft.from)
+                if (!source) return null
+                return <line className="mb-connection-draft" x1={(source.x || 0) + (source.w || 200) / 2} y1={(source.y || 0) + (source.h || 150) / 2} x2={connectionDraft.x} y2={connectionDraft.y} />
+              })()}
             </svg>
             {tiles.map((t) => (
               <Tile
@@ -328,6 +376,7 @@ export default function Moodboard({ novelId, embedded }) {
                 onSaveText={saveText}
                 onSelect={() => setSelected(t.id)}
                 onContextMenu={(e) => tileMenu(e, t)}
+                onConnectStart={beginConnection}
               />
             ))}
             </div>
@@ -439,7 +488,7 @@ function PaletteModal({ draft, onChange, onClose, onSave }) {
   )
 }
 
-function Tile({ tile, selected, dragging, onPointerDown, onPointerMove, onPointerUp, onSaveText, onSelect, onContextMenu }) {
+function Tile({ tile, selected, dragging, onPointerDown, onPointerMove, onPointerUp, onSaveText, onSelect, onContextMenu, onConnectStart }) {
   const [draft, setDraft] = useState(tile.text)
   useEffect(() => setDraft(tile.text), [tile.text])
 
@@ -474,7 +523,7 @@ function Tile({ tile, selected, dragging, onPointerDown, onPointerMove, onPointe
         onContextMenu={onContextMenu}
       >
         <img src={tile.image} alt="" draggable={false} />
-        <span className="mb-handle">⋮⋮</span>
+        <span className="mb-handle">⋮⋮</span><button className="mb-connect-handle" title="Drag to connect" aria-label="Drag to connect this tile" onPointerDown={(e) => onConnectStart(e, tile)}>↗</button>
       </div>
     )
   }
@@ -498,7 +547,7 @@ function Tile({ tile, selected, dragging, onPointerDown, onPointerMove, onPointe
             <div className="mb-link-url">{tile.url || ''}</div>
           </div>
         </div>
-        <span className="mb-handle">⋮⋮</span>
+        <span className="mb-handle">⋮⋮</span><button className="mb-connect-handle" title="Drag to connect" aria-label="Drag to connect this tile" onPointerDown={(e) => onConnectStart(e, tile)}>↗</button>
       </div>
     )
   }
@@ -521,7 +570,7 @@ function Tile({ tile, selected, dragging, onPointerDown, onPointerMove, onPointe
             <span key={i} className="mb-palette-swatch" style={{ background: c }} title={c} />
           ))}
         </div>
-        <span className="mb-handle">⋮⋮</span>
+        <span className="mb-handle">⋮⋮</span><button className="mb-connect-handle" title="Drag to connect" aria-label="Drag to connect this tile" onPointerDown={(e) => onConnectStart(e, tile)}>↗</button>
       </div>
     )
   }
@@ -546,7 +595,7 @@ function Tile({ tile, selected, dragging, onPointerDown, onPointerMove, onPointe
         onBlur={() => onSaveText(tile, draft)}
         onPointerDown={(e) => e.stopPropagation()}
       />
-      <span className="mb-handle">⋮⋮</span>
+      <span className="mb-handle">⋮⋮</span><button className="mb-connect-handle" title="Drag to connect" aria-label="Drag to connect this tile" onPointerDown={(e) => onConnectStart(e, tile)}>↗</button>
     </div>
   )
 }

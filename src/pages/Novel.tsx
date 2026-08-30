@@ -34,6 +34,7 @@ import { designById, DESIGN_MIME } from '../designs/registry'
 const Characters = lazy(() => import('./Characters'))
 const Entities = lazy(() => import('./Entities'))
 const Relationships = lazy(() => import('./Relationships'))
+const FamilyTree = lazy(() => import('./FamilyTree'))
 const World = lazy(() => import('./World'))
 const Glossary = lazy(() => import('./Glossary'))
 const Moodboard = lazy(() => import('./Moodboard'))
@@ -45,6 +46,8 @@ import AnnotationsPanel from '../components/AnnotationsPanel'
 import { listAnnotations, createAnnotation, updateAnnotation, deleteAnnotation } from '../db/annotations'
 import { readRecentWriting, saveRecentWriting } from '../utils/recentWriting'
 const Analytics = lazy(() => import('./Analytics'))
+const StoryMemory = lazy(() => import('./StoryMemory'))
+const ProseTools = lazy(() => import('./ProseTools'))
 const BookDesigner = lazy(() => import('./BookDesigner'))
 const MediaLibrary = lazy(() => import('./MediaLibrary'))
 const ProjectFiles = lazy(() => import('./ProjectFiles'))
@@ -77,11 +80,12 @@ const TIME_OF_DAY = ['Dawn', 'Morning', 'Midday', 'Afternoon', 'Dusk', 'Night', 
 
 const EMPTY_META = { pov: '', location: '', timeOfDay: '', tone: '', beat: '' }
 
-const BINDER_SECTIONS = ['characters', 'relationships', 'world', 'glossary', 'moodboard', 'trash']
+const BINDER_SECTIONS = ['characters', 'relationships', 'family-tree', 'world', 'glossary', 'moodboard', 'trash']
 
 const SECTION_LABELS = {
   characters: 'Characters',
   relationships: 'Relationships',
+  'family-tree': 'Family tree',
   planning: 'Planning cockpit',
   files: 'Project files',
   world: 'Worldbuilding',
@@ -90,6 +94,8 @@ const SECTION_LABELS = {
   trash: 'Trash',
   design: 'Designer',
   analytics: 'Analytics',
+  'story-memory': 'Story Memory',
+  'prose-tools': 'Prose tools',
   corkboard: 'Corkboard',
   timeline: 'Timeline',
   continuity: 'Continuity',
@@ -123,6 +129,12 @@ export default function Novel() {
   const [dirty, setDirty] = useState(false)
   const [savedAt, setSavedAt] = useState(null)
   const [reading, setReading] = useState(false)
+  const [mobileReadPreferenceApplied, setMobileReadPreferenceApplied] = useState(false)
+  useEffect(() => {
+    if (mobileReadPreferenceApplied || typeof window === 'undefined') return
+    if (window.matchMedia('(max-width: 600px)').matches && activeSection === 'write') setReading(true)
+    setMobileReadPreferenceApplied(true)
+  }, [activeSection, mobileReadPreferenceApplied])
   const [restoreTick, setRestoreTick] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
@@ -1212,6 +1224,11 @@ export default function Novel() {
         onSyncClick={async () => { try { await syncNow?.(); toast('Synced.') } catch { toast('Sync needs attention.') } }}
         onTitleChange={(title) => setNovel((n) => n ? { ...n, title } : n)}
         onTitleSave={() => novel && updateNovel(novel.id, { title: novel.title })}
+        onToggleFavorite={async (target) => {
+          const next = await updateChapter(target.id, { favorite: !target.favorite })
+          patchChapterLocal(target.id, { favorite: next?.favorite })
+          toast(next?.favorite ? 'Added to favorites.' : 'Removed from favorites.')
+        }}
       />
       {sidebarOpen && <button type="button" className="mobile-sidebar-backdrop" aria-label="Close chapters sidebar" onClick={() => setSidebarOpen(false)} />}
 
@@ -1347,11 +1364,16 @@ export default function Novel() {
             {activeSection === 'characters' && <Characters novelId={id} embedded />}
             {activeSection === 'entities' && <Entities novelId={id} embedded />}
             {activeSection === 'relationships' && <Relationships novelId={id} embedded />}
+            {activeSection === 'family-tree' && <FamilyTree novelId={id} embedded />}
             {activeSection === 'world' && <World novelId={id} embedded />}
             {activeSection === 'glossary' && <Glossary novelId={id} embedded />}
             {activeSection === 'moodboard' && <Moodboard novelId={id} embedded />}
             {activeSection === 'trash' && <Trash novelId={id} embedded />}
           </div>
+        ) : activeSection === 'story-memory' ? (
+          <div className="mode-body story-memory-mode"><StoryMemory novelId={id} embedded /></div>
+        ) : activeSection === 'prose-tools' ? (
+          <div className="mode-body prose-tools-mode"><ProseTools novelId={id} embedded /></div>
         ) : JOURNAL_SECTIONS.includes(activeSection) ? (
           <div className="mode-body">
             {activeSection === 'corkboard' && <Corkboard novelId={id} embedded />}
@@ -1814,7 +1836,13 @@ function SecondarySplitEditor({
     revisionRef.current = 0
     savedRevisionRef.current = 0
     clearTimeout(timerRef.current)
-  }, [chapter?.id, chapter?.title, chapter?.wordCount, chapter?.updatedAt, chapter?.content])
+  // `onPatch` updates the parent chapter after every save. Do not treat that
+  // normal acknowledgement as a new document: resetting the editor here
+  // remounts it, which reports its content again and starts a save loop in the
+  // secondary split pane. A new chapter is the only change that needs a reset.
+  // This reset intentionally runs only when switching chapters; save acknowledgements must not remount the editor.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chapter?.id])
 
   useEffect(() => () => { clearTimeout(timerRef.current); clearTimeout(liveTimerRef.current) }, [])
 
@@ -1880,7 +1908,7 @@ function SecondarySplitEditor({
           <button className="button button-quiet" onClick={onPromote} title="Make this the main chapter">
             <Icon icon="fa-solid fa-arrow-up-right-from-square" /> Main
           </button>
-          <button className="button button-quiet" onClick={() => { saveContent(); onClose() }} title="Close split view">
+          <button className="button button-quiet" onClick={async () => { await saveContent(); onClose() }} title="Close split view">
             <Icon icon="fa-solid fa-xmark" />
           </button>
         </div>

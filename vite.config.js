@@ -73,6 +73,9 @@ export default defineConfig({
     chunkSizeWarningLimit: 900
   },
   test: {
-    environment: 'happy-dom'
+    environment: 'happy-dom',
+    // UI integration suites share the fake IndexedDB and DOM globals. Running
+    // files serially prevents one suite clearing another suite's fixture data.
+    fileParallelism: false
   }
 })

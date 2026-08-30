@@ -72,10 +72,29 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
 .editor-media-icon { min-width: 32px; min-height: 30px; color: var(--grey); }
 .editor-media-popover { position: absolute; z-index: 40; top: calc(100% + 8px); left: 0; width: 260px; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-elev); box-shadow: 0 18px 42px rgba(0,0,0,.3); }
 .editor-media-popover > strong { display: block; margin-bottom: 8px; color: var(--charcoal); font-size: .76rem; }
-.editor-media-popover > div { display: grid; gap: 5px; max-height: 260px; overflow-y: auto; }
+.editor-media-popover > div { display: grid; gap: 5px; max-height: 260px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; scrollbar-gutter: stable; }
 .editor-media-popover button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 5px; border-radius: 6px; color: var(--charcoal); text-align: left; }
 .editor-media-popover button:hover { background: var(--hover-bg); }
 .editor-media-popover img { width: 36px; height: 30px; object-fit: cover; border-radius: 4px; }
+
+/* Account centre: compact, data-safe presentation and explicit action severity. */
+.account-avatar { border-radius: 50%; overflow: hidden; box-shadow: 0 0 0 2px rgba(199,167,110,.22), 0 8px 20px rgba(0,0,0,.25); }
+.account-avatar img { width: 100%; height: 100%; display: block; object-fit: cover; border-radius: inherit; }
+.account-grid { align-items: stretch; }
+.account-info { min-width: 0; overflow: hidden; }
+.account-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-nav-actions + button, .account-nav-actions ~ .account-nav-danger { border: 1px solid rgba(190,72,70,.28); color: #c9857d; box-shadow: inset 0 0 0 1px rgba(190,72,70,.05); transition: border-color .18s ease, background .18s ease, box-shadow .18s ease, color .18s ease; }
+.account-nav-actions ~ button { margin-top: 6px; }
+.account-nav-actions ~ button { transform: translateZ(0); }
+.account-nav > button { transition: background-color .12s ease, color .12s ease, border-color .12s ease; }
+.account-nav-actions + button:hover, .account-nav-actions ~ .account-nav-danger:hover { border-color: rgba(231,108,99,.75); background: rgba(190,72,70,.12); color: #f0aaa2; box-shadow: 0 0 18px rgba(190,72,70,.2); }
+.account-hero { position: relative; isolation: isolate; overflow: hidden; padding: 24px 18px 26px; border: 1px solid rgba(199,167,110,.13); border-radius: 16px; background: linear-gradient(118deg, rgba(20,26,39,.78), rgba(25,18,32,.5)), radial-gradient(circle at 86% 18%, rgba(199,167,110,.16), transparent 38%); box-shadow: inset 0 1px rgba(255,255,255,.07), 0 18px 45px rgba(0,0,0,.18); }
+.account-hero::after { content: ''; position: absolute; z-index: -1; top: -55%; right: 9%; width: 35%; height: 220%; transform: rotate(24deg); background: linear-gradient(90deg, transparent, rgba(255,255,255,.045), transparent); animation: account-shine 9s ease-in-out infinite; pointer-events: none; }
+.account-hero + .account-grid { margin-top: 18px; }
+.account-grid { gap: 10px; }
+.account-info { padding: 13px; }
+@keyframes account-shine { 0%, 62% { opacity: 0; transform: translateX(-90%) rotate(24deg); } 72%, 84% { opacity: 1; } 100% { opacity: 0; transform: translateX(260%) rotate(24deg); } }
+@media (prefers-reduced-motion: reduce) { .account-hero::after { animation: none; display: none; } }
 .ds-preset-grid, .ds-font-grid, .ds-shadow-grid { display: flex !important; flex-wrap: nowrap !important; overflow-x: auto; gap: 10px; padding: 4px 2px 12px; scroll-snap-type: x proximity; }
 .ds-preset-grid > *, .ds-font-grid > *, .ds-shadow-grid > * { flex: 0 0 128px; scroll-snap-align: start; }
 .ds-media-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-height: 58vh; overflow-y: auto; padding-right: 4px; }
@@ -112,6 +131,33 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
   .chapter-edit-title { font-size: clamp(1.35rem, 6vw, 1.8rem); }
   .editor-page, .book-page, .manuscript-page { width: 100%; max-width: 100%; min-width: 0; margin-inline: 0; box-shadow: none; }
   .editor-content, .editor-body { padding-inline: 16px; }
+}
+
+.family-tree-page{display:grid;gap:20px}.family-tree-header{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;padding-bottom:18px;border-bottom:1px solid var(--border)}.family-tree-header h2{margin:6px 0;color:var(--charcoal);font:600 clamp(2rem,4vw,3rem) var(--font-heading)}.family-tree-header p{margin:0;color:var(--grey)}.family-tree-canvas{display:grid;gap:16px}.family-tree-group{padding:18px;border:1px solid var(--border);border-radius:18px;background:color-mix(in srgb,var(--surface) 90%,transparent);box-shadow:var(--shadow-sm)}.family-tree-group h3{margin:0 0 14px;color:var(--charcoal);font:600 1.15rem var(--font-heading)}.family-tree-nodes{display:flex;flex-wrap:wrap;gap:12px}.family-tree-node{display:grid;grid-template-columns:42px 1fr;align-items:center;column-gap:10px;min-width:190px;padding:10px;border:1px solid var(--border);border-radius:14px;background:var(--surface-elev);color:var(--charcoal);text-align:left;cursor:pointer;transition:transform .2s,border-color .2s,box-shadow .2s}.family-tree-node:hover,.family-tree-node.active{transform:translateY(-2px);border-color:var(--accent);box-shadow:0 10px 25px rgba(0,0,0,.12)}.family-tree-avatar{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;color:#fff;font:700 .75rem var(--font-ui)}.family-tree-node strong,.family-tree-node small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.family-tree-node small{color:var(--grey);font-size:.66rem}.family-tree-detail{padding:20px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:18px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 7%,var(--surface)),var(--surface));box-shadow:var(--shadow-sm)}.family-tree-detail-head{display:flex;align-items:center;gap:12px}.family-tree-detail h3{margin:0;color:var(--charcoal);font:600 1.35rem var(--font-heading)}.family-tree-detail-head p{margin:3px 0 0;color:var(--grey);font-size:.75rem}.family-tree-bio{color:var(--grey);line-height:1.6}.family-tree-detail h4{margin:20px 0 9px;color:var(--grey);font:700 .68rem var(--font-ui);letter-spacing:.12em;text-transform:uppercase}.family-tree-link{display:grid;gap:3px;width:100%;padding:10px 0;border:0;border-top:1px solid var(--border);background:transparent;color:var(--charcoal);text-align:left;cursor:pointer}.family-tree-link span{color:var(--grey);font-size:.72rem}.family-tree-empty{padding:48px;border:1px dashed var(--border);border-radius:18px;color:var(--grey);text-align:center}@media(max-width:600px){.family-tree-header{align-items:flex-start;flex-direction:column}.family-tree-header .button{width:100%}.family-tree-group,.family-tree-detail{padding:15px}.family-tree-node{min-width:100%;}.family-tree-nodes{display:grid}}
+
+/* Phone writing room: keep the manuscript primary and turn utility chrome into
+   compact, scrollable rails instead of allowing it to squeeze the page. */
+@media (max-width: 480px) {
+  .workspace-topbar .crumbs { font-size: .7rem; }
+  .workspace-topbar .topbar-actions .button { min-width: 40px; padding-inline: 9px; }
+  .workspace-topbar .topbar-actions .button span:not(.sr-only) { display: none; }
+  .chapter-tabbar { gap: 4px; padding: 5px 8px; }
+  .chapter-work-tab { max-width: 72vw; min-height: 42px; padding-inline: 10px; }
+  .chapter-tab-limit { display: none; }
+  .editor-toolbar { max-height: 106px; border-block: 1px solid var(--border); }
+  .editor-toolbar .tb-row { gap: 1px; padding-block: 4px; }
+  .editor-toolbar .tb-btn { min-width: 36px; min-height: 36px; }
+  .editor-canvas { padding: 20px 14px 150px; }
+  .editor-content, .editor-body { padding-inline: 4px; font-size: 1rem; line-height: 1.8; }
+  .editor-footer { position: sticky; bottom: 0; z-index: 12; min-height: 48px; overflow-x: auto; background: color-mix(in srgb, var(--surface-elev) 94%, transparent); backdrop-filter: blur(16px); }
+  .editor-footer-metrics .editor-footer-primary { font-size: .72rem; }
+  .editor-footer-goal { display: none; }
+  .editor-footer-actions { margin-left: auto; }
+}
+
+@media (max-width: 600px) {
+  .workspace:has(.editor-canvas) .editor-canvas { min-height: calc(100dvh - 150px); }
+  .workspace:has(.editor-canvas) .editor-head { padding-top: 4px; }
 }
 
 /* Compact writing workspace: the editor remains usable in split-screen and

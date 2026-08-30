@@ -82,6 +82,7 @@ export default function UserPill({ onConnectClick }) {
   // Studio dashboard.
   const editorRoute = /^\/novel\/[^/]+\/?$/.test(location.pathname)
   const showOpenStudio = !onDashboard && !editorRoute
+  const showHome = !onDashboard && location.pathname !== '/'
   const statusColor = syncStatus === 'synced' ? '#22c55e' : syncStatus === 'error' ? '#ef4444' : '#94a3b8'
 
   return (
@@ -124,9 +125,9 @@ export default function UserPill({ onConnectClick }) {
           {showOpenStudio && <button className="user-pill-item" onClick={() => { navigate('/dashboard'); setOpen(false) }}>
             <Icon icon="fa-solid fa-arrow-right" /> Open Studio
           </button>}
-          <button className="user-pill-item" onClick={() => { navigate('/'); setOpen(false) }}>
+          {showHome && <button className="user-pill-item" onClick={() => { navigate('/'); setOpen(false) }}>
             <Icon icon="fa-solid fa-house" /> Home
-          </button>
+          </button>}
           <button className="user-pill-item" onClick={sync}>
             <Icon icon="fa-solid fa-rotate" /> Sync now
           </button>

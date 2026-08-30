@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { listChapters } from '../db/chapters'
+import { listChapters, updateChapter } from '../db/chapters'
 import { computeNumbers, titleFor, isContainer } from '../utils/numbering'
 import { listCharacters } from '../db/characters'
+import { listWorld } from '../db/world'
+import { listGlossary } from '../db/glossary'
 import EmptyState from '../components/EmptyState'
 import Icon from '../components/Icon'
 import Select from '../components/Select'
@@ -63,11 +65,20 @@ export default function Timeline({ novelId, embedded }) {
   const [filterPov, setFilterPov] = useState('')
   const [filterBeat, setFilterBeat] = useState('')
   const [filterTime, setFilterTime] = useState('')
-  const [view, setView] = useState('timeline') // 'timeline' | 'grid'
+  const [view, setView] = useState('timeline') // 'timeline' | 'grid' | 'constellation'
+  const [query, setQuery] = useState('')
+  const [filterPart, setFilterPart] = useState('')
+  const [incompleteOnly, setIncompleteOnly] = useState(false)
+  const [notes, setNotes] = useState({})
+  const [worldItems, setWorldItems] = useState([])
+  const [glossary, setGlossary] = useState([])
 
   const load = useCallback(async () => {
-    setChapters(await listChapters(nid))
-    setCharacters(await listCharacters(nid))
+    const [nextChapters, nextCharacters, nextWorld, nextGlossary] = await Promise.all([listChapters(nid), listCharacters(nid), listWorld(nid), listGlossary(nid)])
+    setChapters(nextChapters)
+    setCharacters(nextCharacters)
+    setWorldItems(nextWorld)
+    setGlossary(nextGlossary)
   }, [nid])
 
   useEffect(() => { load() }, [load])
@@ -83,6 +94,10 @@ export default function Timeline({ novelId, embedded }) {
 
   const filtered = scenes.filter((c) => {
     const m = c.meta || {}
+    const haystack = `${c.title || ''} ${c.content || ''} ${m.pov || ''} ${m.location || ''} ${m.beat || ''} ${m.timelineNote || ''}`.toLowerCase()
+    if (query && !haystack.includes(query.toLowerCase())) return false
+    if (filterPart && c.folderId !== filterPart && c.parentId !== filterPart) return false
+    if (incompleteOnly && [m.pov, m.location, m.timeOfDay, m.beat, m.timelineNote].every(Boolean)) return false
     if (filterPov && m.pov !== filterPov) return false
     if (filterBeat && !(m.beat || '').toLowerCase().includes(filterBeat.toLowerCase())) return false
     if (filterTime && resolveTimeKey(m.timeOfDay) !== filterTime) return false
@@ -106,10 +121,22 @@ export default function Timeline({ novelId, embedded }) {
 
   const allPovs = [...new Set(scenes.map((c) => c.meta?.pov).filter(Boolean))]
   const allBeats = [...new Set(scenes.map((c) => c.meta?.beat).filter(Boolean))]
+  const allParts = chapters.filter(isContainer)
 
   const open = (c) => navigate(`/novel/${nid}`, { state: { chapterId: c.id } })
 
   const totalWords = filtered.reduce((s, c) => s + (c.wordCount || 0), 0)
+  const clearFilters = () => { setQuery(''); setFilterPov(''); setFilterBeat(''); setFilterTime(''); setFilterPart(''); setIncompleteOnly(false) }
+  const saveNote = async (chapter, value) => {
+    const meta = { ...(chapter.meta || {}), timelineNote: value }
+    setNotes((current) => ({ ...current, [chapter.id]: value }))
+    await updateChapter(chapter.id, { meta })
+    setChapters((current) => current.map((item) => item.id === chapter.id ? { ...item, meta } : item))
+  }
+  const mapNodes = useMemo(() => {
+    const records = [...characters.map((x) => ({ ...x, kind: 'character', label: x.name || x.title })), ...worldItems.map((x) => ({ ...x, kind: x.kind || 'world', label: x.name || x.title })), ...glossary.map((x) => ({ ...x, kind: 'glossary', label: x.term || x.name }))].filter((x) => x.label)
+    return filtered.map((chapter, index) => ({ chapter, index, links: records.filter((record) => `${chapter.title || ''} ${chapter.content || ''} ${chapter.meta?.location || ''}`.toLowerCase().includes(record.label.toLowerCase())).slice(0, 8) }))
+  }, [filtered, characters, worldItems, glossary])
 
   if (scenes.length === 0) {
     return (
@@ -136,6 +163,7 @@ export default function Timeline({ novelId, embedded }) {
             </p>
           </div>
           <div className="tl-toolbar">
+            <input className="tl-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search scenes…" aria-label="Search timeline scenes" />
             {/* View toggle */}
             <div className="pill-toggle">
               <button className={`pill ${view === 'timeline' ? 'active' : ''}`} onClick={() => setView('timeline')}>
@@ -143,6 +171,9 @@ export default function Timeline({ novelId, embedded }) {
               </button>
               <button className={`pill ${view === 'grid' ? 'active' : ''}`} onClick={() => setView('grid')}>
                 <Icon icon="fa-solid fa-border-all" /> Grid
+              </button>
+              <button className={`pill ${view === 'constellation' ? 'active' : ''}`} onClick={() => setView('constellation')}>
+                <Icon icon="fa-solid fa-diagram-project" /> Constellation
               </button>
             </div>
             {/* Filters */}
@@ -182,8 +213,12 @@ export default function Timeline({ novelId, embedded }) {
                   .map((k) => ({ value: k, label: k[0].toUpperCase() + k.slice(1) })),
               ]}
             />
-            {(filterPov || filterBeat || filterTime) && (
-              <button className="button button-quiet" onClick={() => { setFilterPov(''); setFilterBeat(''); setFilterTime('') }}>
+            {allParts.length > 0 && <Select value={filterPart} onChange={setFilterPart} ariaLabel="Filter by part" width={140} options={[{ value: '', label: 'All parts' }, ...allParts.map((p) => ({ value: p.id, label: p.title || p.part }))]} />}
+            <button className={`button button-quiet ${incompleteOnly ? 'active' : ''}`} onClick={() => setIncompleteOnly((value) => !value)} aria-pressed={incompleteOnly}>
+              <Icon icon="fa-solid fa-list-check" /> Incomplete
+            </button>
+            {(query || filterPov || filterBeat || filterTime || filterPart || incompleteOnly) && (
+              <button className="button button-quiet" onClick={clearFilters}>
                 <Icon icon="fa-solid fa-xmark" /> Clear
               </button>
             )}
@@ -257,7 +292,9 @@ export default function Timeline({ novelId, embedded }) {
                                   {m.beat}
                                 </span>
                               )}
+                              {![m.pov, m.location, m.timeOfDay, m.beat].every(Boolean) && <span className="tl-missing-meta"><Icon icon="fa-solid fa-circle-exclamation" /> Metadata incomplete</span>}
                               <div className="tl-words">{formatWords(c.wordCount || 0)}</div>
+                              <input className="tl-note-input" value={notes[c.id] ?? m.timelineNote ?? ''} onChange={(e) => setNotes((current) => ({ ...current, [c.id]: e.target.value }))} onBlur={(e) => void saveNote(c, e.target.value)} onClick={(e) => e.stopPropagation()} placeholder="Add a planning note…" aria-label={`Planning note for ${titleFor(c, numbers)}`} />
                               {/* Word-count bar */}
                               <div className="tl-wbar" style={{ width: `${wBar}%`, background: povColor || 'var(--accent)' }} />
                             </div>
@@ -270,7 +307,7 @@ export default function Timeline({ novelId, embedded }) {
               )
             })}
           </div>
-        ) : (
+        ) : view === 'grid' ? (
           /* Grid view */
           <div className="tl-grid">
             {filtered.map((c) => {
@@ -301,6 +338,11 @@ export default function Timeline({ novelId, embedded }) {
                 </div>
               )
             })}
+          </div>
+        ) : (
+          <div className="tl-constellation" role="list" aria-label="Timeline constellation map">
+            <div className="tl-constellation-toolbar"><span><Icon icon="fa-solid fa-diagram-project" /> Derived from manuscript mentions and scene metadata</span><button className="button button-quiet" onClick={() => setView('timeline')}>List fallback</button></div>
+            {mapNodes.map(({ chapter, links, index }) => <div className="tl-map-cluster" key={chapter.id} role="listitem"><button className="tl-map-node tl-map-chapter" onClick={() => open(chapter)}><span>{numbers.get(chapter.id)?.label || index + 1}</span>{titleFor(chapter, numbers)}</button><div className="tl-map-links">{links.length ? links.map((link) => <button key={`${chapter.id}-${link.id}`} className={`tl-map-node tl-map-${link.kind}`} onClick={() => open(chapter)}>{link.label}</button>) : <span className="tl-map-none">No linked entries detected</span>}</div></div>)}
           </div>
         )}
       </div>

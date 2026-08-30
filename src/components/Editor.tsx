@@ -142,13 +142,17 @@ export default function Editor({
 
   const liveCollaborators = useMemo(() => {
     const textLength = Math.max(1, (ref.current?.innerText || String(initialHtml || '').replace(/<[^>]+>/g, '')).length)
+    const estimatedLines = Math.max(1, Math.ceil(textLength / 72))
     return collaborators
       .filter((person) => person?.chapterId === chapterId && person.status !== 'offline')
       .map((person, index) => {
         const rawOffset = Number(person.cursorOffset)
         const fallback = Math.min(0.94, Math.max(0.06, ((Number(person.lineNumber) || index + 1) - 1) / 42))
-        const topRatio = Number.isFinite(rawOffset) && rawOffset >= 0
-          ? Math.min(0.96, Math.max(0.035, rawOffset / textLength))
+        // Cursor offsets are character positions, not rendered vertical
+        // positions. Use the reported logical line so markers stay aligned
+        // when font, width, or zoom changes between collaborators.
+        const topRatio = Number.isFinite(Number(person.lineNumber)) && Number(person.lineNumber) > 0
+          ? Math.min(0.96, Math.max(0.035, (Number(person.lineNumber) - 1) / estimatedLines))
           : fallback
         return {
           ...person,
@@ -3282,27 +3286,6 @@ export default function Editor({
           </div>
 
           <span className="tb-sep" />
-
-          <div
-            className="tb-ai-wrap"
-            style={{
-              position:
-                'relative',
-            }}
-          >
-            <button
-              className="tb-btn tb-btn-ai"
-              title="AI actions for selected text"
-              aria-label="AI actions"
-              disabled={readOnly}
-              onMouseDown={(e) =>
-                e.preventDefault()
-              }
-              onClick={() => {}}
-            >
-              AI
-            </button>
-          </div>
 
           {dictationSupported && (
             <Btn

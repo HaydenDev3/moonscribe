@@ -26,6 +26,10 @@ export function autoChapterMentions(chapters, characters) {
     if (c.name && c.name.trim()) {
       const full = c.name.trim()
       idByName[full] = c.id
+      for (const alias of (c.aliases || [])) {
+        const value = String(alias || '').trim()
+        if (value) idByName[value] = c.id
+      }
       const first = full.split(/\s+/)[0]
       if (first.length > 1 && first !== full) firstNames.set(first, (firstNames.get(first) || []).concat(c.id))
     }

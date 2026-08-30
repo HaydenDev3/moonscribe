@@ -21,7 +21,7 @@ import {
 
 const AppContext = createContext(null)
 
-const THEMES = ['light', 'dark', 'amoled', 'ember', 'moss', 'sandstone', 'midnight']
+const THEMES = ['light', 'dark', 'amoled', 'ember', 'moss', 'sandstone', 'midnight', 'custom']
 const DEFAULT_SETTINGS = {
   customGradientStart: '',
   customGradientEnd: '',
@@ -808,6 +808,35 @@ export function AppProvider({ children }) {
     }
   }, [toast])
 
+  const refreshAccount = useCallback(async () => {
+    try {
+      const profile = await syncEngine.validateSession()
+      if (!profile) return null
+      const roles = normalizeRoles(profile.roles || profile.role || 'user')
+      setAccount({
+        id: profile.id || null,
+        username: profile.username || null,
+        roles,
+        role: roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user',
+        isAdmin: roles.includes('admin'),
+        isDeveloper: roles.includes('developer'),
+      })
+      return profile
+    } catch {
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    const refreshOnFocus = () => { if (document.visibilityState === 'visible') void refreshAccount() }
+    window.addEventListener('focus', refreshOnFocus)
+    document.addEventListener('visibilitychange', refreshOnFocus)
+    return () => {
+      window.removeEventListener('focus', refreshOnFocus)
+      document.removeEventListener('visibilitychange', refreshOnFocus)
+    }
+  }, [refreshAccount])
+
   const signInWithPasskey = useCallback(async () => {
     const server = discordServer()
     const optionsResponse = await fetch(`${server}/api/auth/passkey/options`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
@@ -1003,6 +1032,7 @@ export function AppProvider({ children }) {
       isAdmin: hasRole('admin'),
       isDeveloper: hasRole('developer'),
       syncNow,
+      refreshAccount,
       connectSync,
       connectDiscord,
       connectGoogle,
@@ -1017,7 +1047,7 @@ export function AppProvider({ children }) {
       deleteCustomFont,
       refreshSystemFonts,
     }),
-    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, accountCentreOpen, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, connectSync, connectDiscord, connectGoogle, signInWithPasskey, sendMagicLink, completeTwoFactorSignIn, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, authFlow]
+    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, accountCentreOpen, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, refreshAccount, connectSync, connectDiscord, connectGoogle, signInWithPasskey, sendMagicLink, completeTwoFactorSignIn, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, authFlow]
   )
 
   return (

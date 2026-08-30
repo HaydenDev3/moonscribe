@@ -28,6 +28,15 @@ function portIsOpen(port) {
   })
 }
 
+async function waitForPort(port, timeoutMs = 10_000) {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await portIsOpen(port)) return true
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  return false
+}
+
 function restartMoonScribeApi(port) {
   if (process.platform !== 'win32') return
   try {
@@ -54,6 +63,12 @@ async function start() {
   // leaves old email/auth code alive after a React restart.
   if (await portIsOpen(3001)) restartMoonScribeApi(3001)
   children.push(spawnNode(['--env-file-if-exists=.env.local', 'server/index.js']))
+
+  if (!await waitForPort(3001)) {
+    console.error('   MoonScribe API did not become ready on http://localhost:3001.')
+    close(1)
+    return
+  }
 
   if (await portIsOpen(5173)) {
     console.log('   Vite already running on http://localhost:5173; reusing it.')

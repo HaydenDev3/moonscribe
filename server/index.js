@@ -23,7 +23,7 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 import { DatabaseSync } from 'node:sqlite'
 import { WebSocketServer } from 'ws'
 import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse } from '@simplewebauthn/server'
-import { isEmailConfigured, sendAccountUpdateEmail, sendMagicLink, sendReminderEmail, sendTwoFactorCode, sendVerificationCode } from './email.js'
+import { isEmailConfigured, sendAccountUpdateEmail, sendMagicLink, sendReminderEmail, sendTwoFactorCode, sendVerificationCode, sendTransactionalEmail } from './email.js'
 import { migrateSqliteToSupabase, restoreSupabaseToSqlite, supabasePersistenceEnabled, mirrorRecords, mirrorUserProfile, mirrorUserAndSession, mirrorOauthExchange, consumeSupabaseOauthExchange, mergeSupabaseUser } from './supabasePersistence.js'
 import { loadBabyLoveGrowthArticles, startBabyLoveGrowthSync } from './babylovegrowth.js'
 
@@ -357,6 +357,12 @@ function setupSchema(db) {
       severity TEXT NOT NULL DEFAULT 'info', published INTEGER NOT NULL DEFAULT 1,
       created_by TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS admin_mail (
+      id TEXT PRIMARY KEY, direction TEXT NOT NULL, sender TEXT NOT NULL, recipients TEXT NOT NULL,
+      subject TEXT NOT NULL, text_body TEXT NOT NULL DEFAULT '', html_body TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'received', provider_id TEXT, read_at INTEGER, created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_admin_mail_created ON admin_mail(created_at DESC);
     CREATE TABLE IF NOT EXISTS oauth_exchanges (
       code         TEXT PRIMARY KEY,
       user_id      TEXT NOT NULL,
@@ -1299,6 +1305,23 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       return
     }
 
+    if (path === '/api/email/inbound' && req.method === 'POST') {
+      const expected = String(process.env.MOONSCRIBE_INBOUND_EMAIL_TOKEN || '')
+      const supplied = String(req.headers['x-moonscribe-inbound-token'] || '')
+      if (!expected || supplied !== expected) return json(res, 401, { error: 'Inbound email is not authorized.' })
+      readBody(req, 2 * 1024 * 1024).then((body) => {
+        const sender = String(body.from || body.sender || '').trim()
+        const recipients = Array.isArray(body.to) ? body.to.join(', ') : String(body.to || body.recipient || '').trim()
+        const subject = String(body.subject || '(no subject)').slice(0, 300)
+        const text = String(body.text || body.text_body || '').slice(0, 1000000)
+        const html = String(body.html || body.html_body || '').slice(0, 1000000)
+        const id = String(body.id || body.email_id || randomBytes(12).toString('hex'))
+        database.prepare('INSERT OR REPLACE INTO admin_mail (id, direction, sender, recipients, subject, text_body, html_body, status, provider_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, 'received', sender || 'Unknown sender', recipients, subject, text, html, 'received', id, Date.now())
+        json(res, 201, { ok: true, id })
+      }).catch((error) => json(res, 400, { error: error.message || 'Could not receive email.' }))
+      return
+    }
+
     // ---- protected sync endpoints ----
     const bearerToken = (req.headers.authorization || '').replace(/^Bearer\s+/i, '')
     const userId = userFromToken(database, bearerToken || requestCookie(req, 'moonscribe_session'))
@@ -1311,6 +1334,32 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     if (!userId) {
       json(res, 401, { error: 'Not signed in. Create an account or sign in.' })
       return
+    }
+
+    if (path === '/api/admin/mail' && req.method === 'GET') {
+      const user = database.prepare('SELECT role, roles FROM users WHERE id = ?').get(userId)
+      if (!userRoleInfo(user).isAdmin) return json(res, 403, { error: 'Admin access required.' })
+      const messages = database.prepare('SELECT id, direction, sender, recipients, subject, text_body, html_body, status, provider_id, read_at, created_at FROM admin_mail ORDER BY created_at DESC LIMIT 200').all()
+      return json(res, 200, { messages: messages.map((mail) => ({ id: mail.id, direction: mail.direction, sender: mail.sender, recipients: mail.recipients, subject: mail.subject, text: mail.text_body, html: mail.html_body, status: mail.status, providerId: mail.provider_id, readAt: mail.read_at, createdAt: mail.created_at })) })
+    }
+    if (path === '/api/admin/mail/send' && req.method === 'POST') {
+      const user = database.prepare('SELECT username, role, roles FROM users WHERE id = ?').get(userId)
+      if (!userRoleInfo(user).isAdmin) return json(res, 403, { error: 'Admin access required.' })
+      readBody(req, 512 * 1024).then(async ({ to, subject, text, html }) => {
+        const result = await sendTransactionalEmail({ to: String(to || '').trim(), subject: String(subject || '').trim(), text: String(text || ''), html: String(html || text || '') })
+        if (!result.ok) return json(res, 503, { error: result.reason === 'EMAIL_NOT_CONFIGURED' ? 'Email delivery is not configured. Add RESEND_API_KEY to the server.' : 'Email could not be sent.' })
+        const id = randomBytes(12).toString('hex')
+        database.prepare('INSERT INTO admin_mail (id, direction, sender, recipients, subject, text_body, html_body, status, provider_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, 'sent', process.env.RESEND_FROM || 'MoonScribe', String(to), String(subject), String(text || ''), String(html || text || ''), 'sent', result.response?.data?.id || result.response?.id || null, Date.now())
+        json(res, 201, { ok: true, id })
+      }).catch((error) => json(res, 400, { error: error.message || 'Could not send email.' }))
+      return
+    }
+    if (path.startsWith('/api/admin/mail/') && req.method === 'POST') {
+      const user = database.prepare('SELECT role, roles FROM users WHERE id = ?').get(userId)
+      if (!userRoleInfo(user).isAdmin) return json(res, 403, { error: 'Admin access required.' })
+      const id = path.slice('/api/admin/mail/'.length).replace(/\/read$/, '')
+      const result = database.prepare('UPDATE admin_mail SET read_at = COALESCE(read_at, ?) WHERE id = ?').run(Date.now(), id)
+      return json(res, result.changes ? 200 : 404, result.changes ? { ok: true } : { error: 'Message not found.' })
     }
 
     if (path === '/api/auth/passkeys/register/options' && req.method === 'POST') {

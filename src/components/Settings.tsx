@@ -160,9 +160,17 @@ export default function Settings() {
           {!query && cat === 'sessions' && <SessionsDevices />}
           {!query && cat === 'about' && (
             <section className="settings-panel">
+              <div className="settings-panel-kicker">The quiet writing studio</div>
               <h2>MoonScribe</h2>
               <p className="muted">A quiet, private place to write — made with love, for Storm Tattersall. Every word stays on your device by default; nothing is ever counted against you.</p>
               <p className="muted small">Online across your devices · offline-safe · yours.</p>
+              <div className="settings-detail-grid about-detail-grid">
+                <span><small>Built for</small><b>Long-form stories</b></span><span><small>Privacy</small><b>Local-first</b></span><span><small>Writing modes</small><b>Draft · Plan · Design</b></span>
+              </div>
+              <div className="settings-section-card about-feature-card"><div className="settings-section-head"><span className="settings-section-icon"><Icon icon="fa-solid fa-feather-pointed" /></span><div><strong>Everything your story needs</strong><small>Draft chapters, remember your world, review together, and carry the book through publication.</small></div></div><div className="about-feature-list"><span><Icon icon="fa-solid fa-cloud-arrow-down" /> Offline by default</span><span><Icon icon="fa-solid fa-shield-halved" /> Your manuscript stays yours</span><span><Icon icon="fa-solid fa-book-open" /> Built for the whole book</span></div></div>
+              <div className="settings-row" style={{ marginTop: 'var(--space-5)' }}>
+                <div><div className="settings-row-title">Version 1.1.2</div><div className="settings-row-sub">Released 31 August 2026 — The Complete Writer’s Studio</div><div className="settings-row-detail">Story Memory and evidence links, family-tree relationship mapping, prose tools, continuity and timeline improvements, richer moodboards, book-design upgrades, responsive mobile layouts, media-library organization, account and admin refinements, reliable offline sync, and a clearer notification layer.</div></div>
+              </div>
               <div className="settings-row" style={{ marginTop: 'var(--space-5)' }}>
                 <div><div className="settings-row-title">Version 1.1.1</div><div className="settings-row-sub">Released 28 August 2026 — Quality-of-life update</div></div>
               </div>
@@ -661,9 +669,13 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
       <div className="settings-subheading">Studio theme</div>
       <div className="theme-choice-grid">
         {themes.map(([value, label, bg, ink]) => <button key={value} className={`theme-choice ${(settings.theme || 'light') === value ? 'active' : ''}`} onClick={() => updateSettings({ theme: value })} aria-pressed={(settings.theme || 'light') === value}><span className="theme-choice-preview" style={{ background: bg, color: ink }}><i /><i /><i /></span><span>{label}</span>{(settings.theme || 'light') === value && <Icon icon="fa-solid fa-check" />}</button>)}
+        <button type="button" className={`theme-choice theme-choice-custom ${(settings.theme || 'light') === 'custom' ? 'active' : ''}`} onClick={() => updateSettings({ theme: 'custom' })} aria-pressed={(settings.theme || 'light') === 'custom'}>
+          <span className="theme-choice-preview" style={{ background: `linear-gradient(135deg, ${settings.customGradientStart || '#17161c'}, ${settings.customGradientEnd || '#3b2b22'})`, color: settings.accentColor === 'blue' ? '#9bb8d4' : '#d8b878' }}><i /><i /><i /></span>
+          <span>Custom theme</span>{(settings.theme || 'light') === 'custom' && <Icon icon="fa-solid fa-check" />}
+        </button>
       </div>
 
-      <div className="settings-subheading">Custom gradient</div>
+      <div className="settings-subheading">Custom theme colours</div>
       <p className="settings-row-sub">Build a personal studio atmosphere. The live preview updates as you choose each colour.</p>
       <div className="custom-gradient-card">
         <div className="custom-gradient-preview" style={{ background: `linear-gradient(135deg, ${settings.customGradientStart || '#17161c'}, ${settings.customGradientEnd || '#3b2b22'})` }}><span>MoonScribe</span><small>Custom studio preview</small></div>
