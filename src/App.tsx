@@ -105,11 +105,14 @@ export default function App() {
     accountCentreOpen?: boolean
     closeAccountCentre?: () => void
     guestMode?: boolean
+    sync?: { status?: string }
     hasRole?: (role: string) => boolean
     novels?: Array<{ id: string; title: string }>
     toast?: (message: string) => void
   }
   const { onboardingDone, appLock, locked, unlockApp, syncUsername, accountReady, guestMode, hasRole, accountCentreOpen, closeAccountCentre } = appState
+  const hasNovel = (appState.novels || []).length > 0
+  const initialLibrarySync = !!syncUsername && ['connecting', 'syncing'].includes(appState.sync?.status)
 
   useEffect(() => {
     // A development service worker can keep an older Vite bundle alive after
@@ -164,7 +167,7 @@ export default function App() {
     const oauthCallback = new URLSearchParams(callbackQuery).has('oauth_exchange')
     const discordCallback = new URLSearchParams(callbackQuery).has('discord_exchange')
     if (!syncUsername && !oauthCallback && !discordCallback) return <Navigate to="/?signin=1" replace />
-    if (!onboardingDone) return <Onboarding />
+    if (!onboardingDone && !hasNovel && !initialLibrarySync) return <Onboarding />
     if (isDesktopRuntime() && !guestMode && syncUsername && !hasRole?.('admin') && !hasRole?.('developer') && !hasRole?.('beta_tester')) return <DesktopGateway />
     return content
   }

@@ -25,6 +25,7 @@ const THEMES = ['light', 'dark', 'amoled', 'ember', 'moss', 'sandstone', 'midnig
 const DEFAULT_SETTINGS = {
   customGradientStart: '',
   customGradientEnd: '',
+  customTextColor: '',
   paperTexture: false,
   theme: 'light',
   reduceMotion: false,
@@ -432,8 +433,9 @@ export function AppProvider({ children }) {
     root.style.setProperty('--custom-app-gradient', start && end ? `linear-gradient(135deg, ${start}, ${end})` : '')
     root.style.setProperty('--custom-app-start', start)
     root.style.setProperty('--custom-app-end', end)
+    root.style.setProperty('--custom-app-text', settings.customTextColor || '')
     root.dataset.customGradient = start && end ? 'true' : 'false'
-  }, [settings.customGradientStart, settings.customGradientEnd])
+  }, [settings.customGradientStart, settings.customGradientEnd, settings.customTextColor])
 
   useEffect(() => {
     document.documentElement.classList.toggle('paper-texture', settings.paperTexture)
@@ -724,6 +726,20 @@ export function AppProvider({ children }) {
       if (indicatorTimer) clearTimeout(indicatorTimer)
       indicatorTimer = undefined
       const applyStatus = () => setSync((s) => ({ ...s, status }))
+      if (status === 'synced') {
+        void syncEngine.validateSession().then((profile) => {
+          if (!profile) return
+          const roles = normalizeRoles(profile.roles || profile.role || 'user')
+          setAccount({
+            id: profile.id || null,
+            username: profile.username || null,
+            roles,
+            role: roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user',
+            isAdmin: roles.includes('admin'),
+            isDeveloper: roles.includes('developer'),
+          })
+        }).catch(() => {})
+      }
       if (status === 'syncing' || status === 'connecting') {
         indicatorTimer = setTimeout(applyStatus, 400)
       } else {

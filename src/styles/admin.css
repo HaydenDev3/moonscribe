@@ -61,3 +61,44 @@
 .admin-announcement-history { max-width: 1080px; }
 @media(max-width:850px){.admin-users .admin-table-row{grid-template-columns:minmax(180px,1fr) auto auto}.admin-users .admin-user-actions{grid-column:1 / -1;justify-self:stretch}.admin-users .admin-user-actions .cselect{flex:1}.admin-rich-editor{grid-template-columns:1fr}.admin-rich-preview{min-height:150px}}
 .admin-mail-count{padding:8px 12px;border:1px solid rgba(104,196,155,.25);border-radius:99px;color:#a6e6c6;background:rgba(104,196,155,.08);font:.7rem var(--font-ui)}.admin-mail-layout{display:grid;grid-template-columns:minmax(260px,.8fr) minmax(0,1.2fr);gap:14px;margin-top:22px}.admin-mail-list,.admin-mail-reader{min-height:300px;border:1px solid rgba(255,255,255,.1);border-radius:14px;background:rgba(0,0,0,.16);overflow:auto}.admin-mail-row{display:grid;grid-template-columns:36px 1fr;gap:10px;width:100%;padding:13px 14px;border:0;border-bottom:1px solid rgba(255,255,255,.08);background:transparent;color:inherit;text-align:left;cursor:pointer}.admin-mail-row:hover,.admin-mail-row.unread{background:rgba(229,174,91,.08)}.admin-mail-row strong,.admin-mail-row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.admin-mail-row small,.admin-mail-reader small,.admin-mail-reader time{margin-top:5px;color:var(--grey);font-size:.68rem}.admin-mail-direction{align-self:start;padding-top:2px;color:var(--accent);font:700 .58rem var(--font-ui);letter-spacing:.08em}.admin-mail-reader{padding:20px}.admin-mail-reader h3{margin:10px 0 0;color:#fff8ee;font:600 1.5rem var(--font-heading)}.admin-mail-reader time{display:block}.admin-mail-reader pre{margin-top:24px;white-space:pre-wrap;font:400 .86rem/1.65 var(--font-ui);color:#d8d4cc}.admin-mail-compose{display:grid;gap:10px;max-width:720px;margin-top:22px;padding-top:22px;border-top:1px solid rgba(255,255,255,.1)}.admin-mail-compose h3{margin:0 0 4px;color:#fff8ee}.admin-mail-compose input,.admin-mail-compose textarea{width:100%;box-sizing:border-box;padding:11px 12px;border:1px solid rgba(255,255,255,.13);border-radius:10px;background:rgba(0,0,0,.22);color:var(--twilight);font:inherit}.admin-mail-compose textarea{resize:vertical}.admin-mail-compose .button{justify-self:start}@media(max-width:800px){.admin-mail-layout{grid-template-columns:1fr}.admin-mail-reader{min-height:220px}}
+
+/* MoonScribe studio admin: calm, editorial surfaces instead of a control-room UI. */
+.admin-console { background: radial-gradient(circle at 80% 0%, rgba(198,157,93,.16), transparent 34%), var(--bg); color: var(--charcoal); }
+.admin-sidebar { border-right-color: var(--border-soft); background: color-mix(in srgb, var(--surface) 78%, transparent); backdrop-filter: blur(24px) saturate(1.08); box-shadow: 8px 0 35px rgba(66,45,25,.06); }
+.admin-brand { color: var(--charcoal); }
+.admin-nav-group button { color: var(--grey); }
+.admin-nav-group button:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); color: var(--charcoal); }
+.admin-nav-group button.active { color: var(--charcoal); background: color-mix(in srgb, var(--accent) 15%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 22%, var(--border)); box-shadow: inset 0 1px rgba(255,255,255,.45); }
+.admin-main, .admin-topbar h1, .admin-welcome h2, .admin-panel h2, .admin-panel h3 { color: var(--charcoal); }
+.admin-topbar { border-bottom-color: var(--border); }
+.admin-environment { color: var(--accent-deep); border-color: color-mix(in srgb, var(--accent) 25%, var(--border)); background: color-mix(in srgb, var(--surface) 70%, transparent); }
+.admin-metric-grid>div, .admin-panel { border-color: var(--border); background: color-mix(in srgb, var(--surface) 76%, transparent); box-shadow: 0 14px 35px rgba(66,45,25,.07), inset 0 1px rgba(255,255,255,.55); }
+.admin-metric-grid strong { color: var(--charcoal); }
+.admin-commandbar { background: linear-gradient(105deg, color-mix(in srgb, var(--accent) 13%, var(--surface)), color-mix(in srgb, var(--surface-elev) 72%, transparent)); box-shadow: 0 16px 45px rgba(66,45,25,.08); }
+.admin-table-head, .admin-table-row { border-top-color: var(--border-soft); }
+.admin-table-row:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.admin-panel-heading input, .admin-table-row select { color: var(--charcoal); border-color: var(--border); background: color-mix(in srgb, var(--surface) 82%, transparent); }
+
+/* Users: responsive directory cards with a clearer action hierarchy. */
+.admin-users { padding: clamp(18px, 3vw, 30px); }
+.admin-users .admin-panel-heading { align-items: flex-start; padding-bottom: 4px; }
+.admin-users .admin-panel-heading h2 { font-size: clamp(1.45rem, 2.5vw, 2rem); }
+.admin-users .admin-panel-heading p { max-width: 34ch; margin-top: 5px; }
+.admin-users .admin-panel-heading input { min-width: min(320px, 42vw); padding: 12px 14px; border-radius: 14px; }
+.admin-users .admin-table { gap: 10px; }
+.admin-users .admin-table-row { grid-template-columns: minmax(220px, 1fr) minmax(76px, auto) minmax(150px, auto) auto; align-items: center; padding: 15px 16px; border-radius: 16px; background: color-mix(in srgb, var(--surface) 68%, transparent); box-shadow: 0 8px 24px rgba(50,35,20,.05), inset 0 1px rgba(255,255,255,.42); }
+.admin-users .admin-table-row:hover { transform: translateY(-1px); }
+.admin-users .admin-user-identity small { padding-left: 42px; }
+.admin-users .admin-user-actions { gap: 10px; }
+.admin-users .admin-table > div > .admin-user-profile { margin: -2px 10px 8px; border-radius: 14px; box-shadow: 0 10px 26px rgba(50,35,20,.08); }
+.admin-users .admin-user-actions .cselect { min-width: 145px; }
+@media (max-width: 760px) {
+  .admin-users .admin-panel-heading { flex-direction: column; }
+  .admin-users .admin-panel-heading input { width: 100%; min-width: 0; }
+  .admin-users .admin-table-row { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
+  .admin-users .admin-user-identity { grid-column: 1 / -1; }
+  .admin-users .admin-role { justify-self: start; }
+  .admin-users .admin-table-row > span:nth-child(3) { justify-self: end; }
+  .admin-users .admin-user-actions { grid-column: 1 / -1; justify-self: stretch; }
+  .admin-users .admin-user-actions .cselect { flex: 1; min-width: 0; }
+}

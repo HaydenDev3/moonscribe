@@ -1,7 +1,7 @@
 {
   "name": "moonscribe",
   "private": true,
-  "version": "1.1.1",
+  "version": "1.1.2",
   "type": "module",
   "description": "A quiet, private place to write — made for two.",
   "scripts": {

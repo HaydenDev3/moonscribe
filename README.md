@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/HaydenDev3/moonscribe"><img alt="Version 1.1.1" src="https://img.shields.io/badge/version-1.1.1-8b7cf6?style=for-the-badge&logo=semver&logoColor=white" /></a>
+  <a href="https://github.com/HaydenDev3/moonscribe"><img alt="Version 1.1.2" src="https://img.shields.io/badge/version-1.1.2-8b7cf6?style=for-the-badge&logo=semver&logoColor=white" /></a>
   <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white" />
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
   <img alt="PWA installable" src="https://img.shields.io/badge/PWA-installable-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white" />

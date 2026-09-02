@@ -1298,7 +1298,7 @@ export default function Novel() {
             </span>
           </div>
           <div className="actions-row">
-            {canShare ? <CollaborationPresence novelId={id} chapterId={chapter?.id} chapterTitle={chapter?.title} workspace={SECTION_LABELS[activeSection] || activeSection} onPresenceChange={setCollaboratorPresence} onRecord={applyLiveRecord} /> : <span className="beta-locked-tab" title="Share is available to Beta Testers, Developers, and Admins"><Icon icon="fa-solid fa-lock" /> Live sharing</span>}
+            {canShare && <CollaborationPresence novelId={id} chapterId={chapter?.id} chapterTitle={chapter?.title} workspace={SECTION_LABELS[activeSection] || activeSection} onPresenceChange={setCollaboratorPresence} onRecord={applyLiveRecord} />}
             <button className={`button button-ghost ${!canShare ? 'beta-locked-button' : ''}`} onClick={() => canShare && setShareOpen(true)} disabled={!canShare} title={canShare ? 'Invite writers and manage access' : 'Share is locked during the beta'}><Icon icon={canShare ? 'fa-solid fa-user-plus' : 'fa-solid fa-lock'} style={{ marginRight: 6 }} /> Share</button>
             {activeSection === 'write' ? (
               reading ? (

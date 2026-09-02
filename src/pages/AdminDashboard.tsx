@@ -417,7 +417,8 @@ export default function AdminDashboard() {
                 <p className="admin-muted">Loading users…</p>
               ) : (
                 filteredUsers.map((user) => (
-                  <div className="admin-table-row" key={user.id} onContextMenu={(event) => openContextMenu(event, [
+                  <div key={user.id}>
+                  <div className="admin-table-row" onContextMenu={(event) => openContextMenu(event, [
                     { label: 'Copy username', icon: 'fa-solid fa-copy', onClick: () => navigator.clipboard?.writeText(user.username) },
                     { label: 'Set as Beta Tester', icon: 'fa-solid fa-flask', onClick: () => void updateRole(user.id, 'beta_tester') },
                     { label: 'Set as Admin', icon: 'fa-solid fa-shield-halved', onClick: () => void updateRole(user.id, 'admin') },
@@ -449,10 +450,11 @@ export default function AdminDashboard() {
                       popClassName="admin-role-menu"
                     />{!user.roles.includes('admin') && <><button type="button" className="admin-disable-user" onClick={() => void toggleDisabled(user)} aria-label={`${user.disabledAt ? 'Restore' : 'Disable'} ${user.username}`} title={`${user.disabledAt ? 'Restore' : 'Disable'} account`}><i className={`fa-solid ${user.disabledAt ? 'fa-unlock' : 'fa-ban'}`} /></button><button type="button" className="admin-delete-user" onClick={() => void deleteUser(user)} aria-label={`Delete ${user.username}`} title="Delete user permanently"><i className="fa-solid fa-trash" /></button></>}</div>
                   </div>
+                  {selectedUser?.id === user.id && <AdminUserProfile user={selectedUser} onClose={() => setSelectedUser(null)} />}
+                  </div>
                 ))
               )}
             </div>
-            {selectedUser && <AdminUserProfile user={selectedUser} onClose={() => setSelectedUser(null)} />}
           </article>
         )}
         {section === 'Audit log' && (

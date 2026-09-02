@@ -35,15 +35,12 @@ const CATEGORIES = [
   { key: 'overview', label: 'Overview', icon: 'fa-solid fa-sliders', group: 'General', terms: 'home start screen preferences settings' },
   { key: 'appearance', label: 'Appearance', icon: 'fa-solid fa-palette', group: 'Experience', terms: 'theme colour paper custom motion' },
   { key: 'editor', label: 'Editor', icon: 'fa-solid fa-pen-nib', group: 'Experience', terms: 'writing font spelling autocorrect page' },
-  { key: 'writing', label: 'Writing experience', icon: 'fa-solid fa-feather-pointed', group: 'Experience', terms: 'autosave typewriter focus writing session' },
   { key: 'sounds', label: 'Sounds & feedback', icon: 'fa-solid fa-volume-high', group: 'Experience', terms: 'sound ambient clicks notifications feedback' },
   { key: 'notifications', label: 'Notifications', icon: 'fa-regular fa-bell', group: 'Experience', terms: 'email reminder browser inbox collaboration announcement' },
   { key: 'dashboard', label: 'Dashboard', icon: 'fa-solid fa-house', group: 'Experience', terms: 'home library sidebar widgets landing view' },
-  { key: 'sync', label: 'Sync', icon: 'fa-solid fa-arrows-rotate', group: 'Data & sync', terms: 'cloud sync offline conflicts server' },
   { key: 'privacy', label: 'Import, export & storage', icon: 'fa-solid fa-database', group: 'Data & sync', terms: 'backup export import delete encryption storage' },
   { key: 'backups', label: 'Backups', icon: 'fa-solid fa-box-archive', group: 'Data & sync', terms: 'backup restore download safety' },
   { key: 'lock', label: 'Lock & security', icon: 'fa-solid fa-lock', group: 'Privacy & safety', terms: 'password pin idle authorization security' },
-  { key: 'sessions', label: 'Sessions & devices', icon: 'fa-solid fa-laptop', group: 'Privacy & safety', terms: 'devices sessions revoke login signed in' },
   { key: 'accessibility', label: 'Accessibility', icon: 'fa-solid fa-universal-access', group: 'Accessibility', terms: 'contrast readable motion keyboard focus' },
   { key: 'keybinds', label: 'Keybinds', icon: 'fa-regular fa-keyboard', group: 'Accessibility', terms: 'shortcuts keyboard commands' },
   { key: 'performance', label: 'Performance', icon: 'fa-solid fa-gauge-high', group: 'Advanced', terms: 'speed autosave responsiveness animation' },
@@ -127,9 +124,8 @@ export default function Settings() {
               toast={toast}
             />
           )}
-          {!query && cat === 'editor' && <EditorSettings settings={settings} updateSettings={updateSettings} />}
+          {!query && cat === 'editor' && <><EditorSettings settings={settings} updateSettings={updateSettings} /><WritingExperience settings={settings} updateSettings={updateSettings} /></>}
           {!query && cat === 'overview' && <SettingsOverview onOpenCategory={setCat} />}
-          {!query && cat === 'writing' && <WritingExperience settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'sounds' && <SoundsFeedback settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'notifications' && <NotificationPreferences settings={settings} updateSettings={updateSettings} />}
           {!query && cat === 'dashboard' && <DashboardPreferences settings={settings} updateSettings={updateSettings} />}
@@ -143,21 +139,6 @@ export default function Settings() {
           {!query && (cat === 'privacy' || cat === 'backups') && (
             <PrivacyData toast={toast} refreshNovels={refreshNovels} fileRef={fileRef} />
           )}
-          {!query && cat === 'sync' && (
-            <section className="settings-panel">
-              <div className="settings-panel-kicker">Identity &amp; devices</div>
-              <h2>Sync</h2>
-              <p className="muted">Manage who you are in MoonScribe, where your library lives, and which devices can reach it.</p>
-              <SyncPanel onOpen={() => setCat('sync')} />
-              <DiscordPresencePanel settings={settings} updateSettings={updateSettings} />
-              <RolePermissions />
-              <div className="settings-section-card">
-                <div className="settings-section-head"><span className="settings-section-icon"><Icon icon="fa-solid fa-laptop-file" /></span><div><strong>Local writing identity</strong><small>Your offline library is available without an account.</small></div><span className="settings-status-pill safe">Active</span></div>
-                <div className="settings-detail-grid"><span><small>Storage</small><b>This browser</b></span><span><small>Ownership</small><b>Private to you</b></span><span><small>Offline access</small><b>Available</b></span></div>
-              </div>
-            </section>
-          )}
-          {!query && cat === 'sessions' && <SessionsDevices />}
           {!query && cat === 'about' && (
             <section className="settings-panel">
               <div className="settings-panel-kicker">The quiet writing studio</div>
@@ -221,7 +202,7 @@ function SettingsSearchResults({ query, settings, updateSettings, onOpenCategory
 function SettingsOverview({ onOpenCategory }) {
   const shortcuts = [
     ['appearance', 'Appearance', 'Theme, typography and atmosphere', 'fa-solid fa-palette'],
-    ['writing', 'Writing experience', 'Autosave, focus and session comfort', 'fa-solid fa-feather-pointed'],
+    ['editor', 'Editor', 'Typography, writing comfort and focus', 'fa-solid fa-pen-nib'],
     ['dashboard', 'Dashboard', 'Home, library and sidebar preferences', 'fa-solid fa-house'],
   ]
   return (
@@ -678,10 +659,11 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
       <div className="settings-subheading">Custom theme colours</div>
       <p className="settings-row-sub">Build a personal studio atmosphere. The live preview updates as you choose each colour.</p>
       <div className="custom-gradient-card">
-        <div className="custom-gradient-preview" style={{ background: `linear-gradient(135deg, ${settings.customGradientStart || '#17161c'}, ${settings.customGradientEnd || '#3b2b22'})` }}><span>MoonScribe</span><small>Custom studio preview</small></div>
+        <div className="custom-gradient-preview" style={{ background: `linear-gradient(135deg, ${settings.customGradientStart || '#17161c'}, ${settings.customGradientEnd || '#3b2b22'})`, color: settings.customTextColor || '#fff' }}><span>MoonScribe</span><small>Custom studio preview</small></div>
         <div className="custom-gradient-controls">
           <label>Start<input type="color" value={settings.customGradientStart || '#17161c'} onChange={(event) => updateSettings({ customGradientStart: event.target.value })} /></label>
           <label>End<input type="color" value={settings.customGradientEnd || '#3b2b22'} onChange={(event) => updateSettings({ customGradientEnd: event.target.value })} /></label>
+          <label>Text<input type="color" value={settings.customTextColor || '#ffffff'} onChange={(event) => updateSettings({ customTextColor: event.target.value })} /></label>
           <button type="button" className="button button-secondary" onClick={() => updateSettings({ customGradientStart: '', customGradientEnd: '' })}>Reset</button>
         </div>
       </div>
@@ -766,7 +748,7 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
         <button className="button button-secondary" onClick={refreshSystemFonts}>Refresh fonts</button>
       </div>
       <div className="font-shelf">
-        {renderFontShelf((systemFonts || []).sort((a, b) => String(a.label || a.family).localeCompare(String(b.label || b.family))), 'system')}
+        <Select ariaLabel="System font" width={260} value={settings.editorFontFamily || ''} onChange={(value) => updateSettings({ editorFontFamily: value })} options={[{ value: '', label: 'Choose a system font' }, ...(systemFonts || []).sort((a, b) => String(a.label || a.family).localeCompare(String(b.label || b.family))).map((font) => ({ value: font.family, label: font.label || font.family }))]} />
         {!systemFonts?.length && <span className="muted small">No system fonts detected yet.</span>}
       </div>
 
@@ -804,7 +786,6 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
       <div className="settings-subheading">Text effects</div>
       <div className="settings-section-card effects-card">
         <div className="effects-card-intro"><strong>Keep the page calm</strong><small>Choose how much visual texture MoonScribe adds around your writing.</small></div>
-        <div className="settings-row"><div><div className="settings-row-title">Paper texture</div><div className="settings-row-sub">A subtle grain behind pages and previews.</div></div><Toggle checked={!!settings.paperTexture} onChange={(v) => updateSettings({ paperTexture: v })} /></div>
         <div className="settings-row"><div><div className="settings-row-title">Decorative effects</div><div className="settings-row-sub">Keep glow, ornaments and atmospheric accents.</div></div><Toggle checked={!settings.simplifiedDecorations} onChange={(v) => updateSettings({ simplifiedDecorations: !v })} /></div>
       </div>
     </section>
@@ -941,6 +922,8 @@ function Performance({ settings, updateSettings }) {
         <Toggle checked={!settings.reduceMotion} onChange={(v) => updateSettings({ reduceMotion: !v })} />
       </div>
       <div className="settings-health-card"><Icon icon="fa-solid fa-shield-heart" /><div><strong>Local-first draft protection</strong><span>Typing stays in the live document immediately; storage, snapshots and sync run behind it.</span></div></div>
+      <div className="settings-row"><div><div className="settings-row-title">Background sync</div><div className="settings-row-sub">Keep cloud reconciliation ready while MoonScribe is open.</div></div><Toggle checked={settings.backgroundSync !== false} onChange={(v) => updateSettings({ backgroundSync: v })} /></div>
+      <div className="settings-row"><div><div className="settings-row-title">Lightweight interface</div><div className="settings-row-sub">Reduce decorative rendering to keep older devices responsive.</div></div><Toggle checked={!!settings.simplifiedDecorations} onChange={(v) => updateSettings({ simplifiedDecorations: v })} /></div>
     </section>
   )
 }
