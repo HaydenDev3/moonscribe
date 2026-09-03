@@ -74,7 +74,11 @@ function rawGet(path) {
 }
 
 async function register(username, password = 'secret1234') {
-  const res = await post('/api/auth/register', { username, password })
+  const res = await post('/api/auth/register', { username, password, policy_acceptances: [
+    { policyKey: 'privacy', version: '1.0' },
+    { policyKey: 'terms', version: '1.0' },
+    { policyKey: 'acceptable-use', version: '1.0' }
+  ] })
   return { status: res.status, body: await res.json() }
 }
 

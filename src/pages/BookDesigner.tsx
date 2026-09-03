@@ -12,6 +12,7 @@ import { downloadBlob } from '../utils/download'
 import { PAGE_PRESETS, pageSizeMm } from '../utils/pageSize'
 import Icon from '../components/Icon'
 import { sanitizeStoredHtml } from '../utils/formatHtml'
+import { buildBookPreview } from '../utils/bookPreview'
 import { fileToDataUrl } from '../db/moodboard'
 import { coverGeometry } from '../utils/coverGeometry'
 import { buildDesignerFontOptions } from '../utils/fonts'
@@ -20,6 +21,7 @@ import { clearPresence, subscribePresence, updatePresence } from '../sync/engine
 import { listMoodboard } from '../db/moodboard'
 import { ASSET_MIME } from '../designs/assets'
 import { PAGE_TEMPLATES } from '../designs/pageTemplates'
+import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -31,6 +33,11 @@ const BOOK_ENVIRONMENTS = [
   { value: 'window', label: 'Window light' },
   { value: 'forest', label: 'Forest dusk' },
   { value: 'night', label: 'Night table' },
+  { value: 'atelier', label: 'Sunlit atelier' },
+  { value: 'greenhouse', label: 'Glass greenhouse' },
+  { value: 'observatory', label: 'Observatory' },
+  { value: 'parlour', label: 'Velvet parlour' },
+  { value: 'cabin', label: 'Writer’s cabin' },
 ]
 const BOOK_SIZE_OPTIONS = PAGE_PRESETS.map((preset) => ({
   value: preset.key,
@@ -676,7 +683,7 @@ export default function BookDesigner({
             </button>
           </div>
           <div className="ds-panel-body studio-rail-scroll" data-section={section}>
-            {renderSection(section, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements, designerFontOptions, libraryImages })}
+            {renderSection(section, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements, designerFontOptions, libraryImages, chapters })}
           </div>
         </div>
 
@@ -715,16 +722,16 @@ export default function BookDesigner({
           {/* Top bar */}
           <div className="ds-stage-bar studio-bar">
             <div className="ds-stage-tabs studio-seg designer-stage-main">
-              {PREVIEW_MODES.map((mode) => (
-                <button key={mode.key} className={`ds-stage-tab ${previewMode === mode.key ? 'active' : ''}`} onClick={() => {
+              <TabsList className="designer-stage-tabs-list">{PREVIEW_MODES.map((mode) => (
+                <TabsTrigger key={mode.key} className={`ds-stage-tab ${previewMode === mode.key ? 'active' : ''}`} onClick={() => {
                   setPreviewMode(mode.key)
                   if (mode.key === 'cover' || mode.key === 'flat-wrap') { setStageView('cover'); setCoverFocused(false) }
                   if (mode.key === 'interior') { setStageView('page'); window.location.hash = `#/novel/${id}/design/print`; navigate(`/novel/${id}/design/print`) }
                   if (mode.key === 'comparison') setStageView('page')
                 }}>
                   <Icon icon={mode.icon} /> {mode.label}
-                </button>
-              ))}
+                </TabsTrigger>
+              ))}</TabsList>
             </div>
 
             <div className="ds-stage-actions designer-stage-tools">
@@ -819,7 +826,7 @@ function PageTemplatesTab({ activeEditorDesign, applyEditorDesign, toast }) {
 
 // ─── section renderer ─────────────────────────────────────────────────────────
 
-function renderSection(section, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements, designerFontOptions, libraryImages }) {
+function renderSection(section, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements, designerFontOptions, libraryImages, chapters }) {
   switch (section) {
     case 'cover':     return <CoverTab cover={cover} updateCover={updateCover} />
     case 'palette':   return <PaletteTab cover={cover} updateCover={updateCover} />
@@ -828,7 +835,7 @@ function renderSection(section, { cover, novel, layout, sig, updateCover, update
     case 'media':     return <MediaDesignerTab images={libraryImages} cover={cover} updateCover={updateCover} surface={coverSurface} setSurface={setCoverSurface} />
     case 'shapes':    return <ShapesTab cover={cover} layout={layout} updateCover={updateCover} update={update} />
     case 'atmosphere': return <AtmosphereTab layout={layout} update={update} toast={toast} />
-    case 'body':      return <BodyTab layout={layout} update={update} designerFontOptions={designerFontOptions} />
+    case 'body':      return <BodyTab layout={layout} update={update} designerFontOptions={designerFontOptions} chapters={chapters} />
     case 'headers':   return <HeadersTab layout={layout} update={update} />
     case 'title':     return <TitleTab layout={layout} update={update} />
     case 'signature': return <SignatureTab sig={sig} update={update} />
@@ -1104,7 +1111,7 @@ function AtmosphereTab({ layout, update, toast }) {
   )
 }
 
-function BodyTab({ layout, update, designerFontOptions = buildDesignerFontOptions({}) }) {
+function BodyTab({ layout, update, designerFontOptions = buildDesignerFontOptions({}), chapters = [] }) {
   return (
     <>
       <Field label="Font">
@@ -1127,6 +1134,9 @@ function BodyTab({ layout, update, designerFontOptions = buildDesignerFontOption
         <span>Drop cap on chapter openers</span>
         <label className="switch"><input type="checkbox" checked={!!layout.dropCap} onChange={(e) => update({ dropCap: e.target.checked })} /><span className="track" /></label>
       </div>
+      <Field label="Drop cap starts on">
+        <Select ariaLabel="Drop cap chapter" width="100%" value={layout.dropCapChapterId || 'all'} onChange={(value) => update({ dropCapChapterId: value === 'all' ? '' : value })} options={[{ value: 'all', label: 'Every chapter' }, ...chapters.filter((chapter) => !['book', 'part', 'act'].includes(chapter.kind)).map((chapter) => ({ value: chapter.id, label: chapter.title || 'Untitled chapter' }))]} />
+      </Field>
       <Field label="Drop cap colour">
         <div className="ds-color-custom">
           <input type="color" className="ds-color-wheel" value={layout.dropCapColor ?? '#2a2520'} onChange={(e) => update({ dropCapColor: e.target.value })} aria-label="Drop cap colour" />
@@ -1146,6 +1156,10 @@ function TitleTab({ layout, update }) {
       <Field label="Chapter heading style">
         <Select ariaLabel="Chapter heading style" width="100%" value={layout.chapterStyle || 'centered'} onChange={(v) => update({ chapterStyle: v })} options={CHAPTER_STYLES.map((s) => ({ value: s.id, label: s.label }))} />
       </Field>
+      <div className="ds-toggle-row">
+        <span>Include chapter titles in exports</span>
+        <label className="switch"><input type="checkbox" checked={layout.showChapterTitles !== false} onChange={(event) => update({ showChapterTitles: event.target.checked })} /><span className="track" /></label>
+      </div>
       <SectionDivider>Dedication</SectionDivider>
       <Field label="Text">
         <textarea value={layout.dedication || ''} onChange={(e) => update({ dedication: e.target.value })} placeholder={'for Storm Tattersall,\nwith every word.'} rows={3} style={{ fontFamily: 'var(--font-heading)', fontStyle: 'italic', fontSize: '0.9rem', resize: 'vertical' }} />
@@ -1285,32 +1299,10 @@ function InteriorPreview({ novel, cover, layout, chapters, font, sig, activeEdit
   const textAlign    = layout.textAlign    || 'left'
   const firstIndent  = layout.firstIndent  || '0'
 
-  const wordsPerPage = Math.round(280 * (11.5 / bodySize))
-  const chaptersToShow = chapters.slice(0, 3)
+  const sharedPreview = buildBookPreview(novel, chapters, layout)
   const pages: Array<{ type: string; chapterTitle?: string; blocks?: PageBlock[]; pageNum?: number }> = []
-
-  // Title page
-  pages.push({ type: 'title' })
-
-  // Dedication page if set
-  if (layout.dedication && layout.dedicationPos !== 'none') {
-    pages.push({ type: 'dedication' })
-  }
-
-  // Chapter pages — preserve HTML blocks
-  let pageNum = 1
-  for (const ch of chaptersToShow) {
-    const blocks = parseBlocks(ch.content || '')
-    const chPages = paginateBlocks(blocks, wordsPerPage)
-    const maxShow = Math.min(chPages.length || 1, 3)
-    for (let i = 0; i < maxShow; i++) {
-      pages.push({ type: i === 0 ? 'chapter-open' : 'body', chapterTitle: ch.title || 'Chapter One', blocks: chPages[i] || [], pageNum: pageNum++ })
-    }
-  }
-
-  if (pages.length === 1) {
-    pages.push({ type: 'chapter-open', chapterTitle: 'Chapter One', blocks: [{ tag: 'p', html: '<p>The ink is still drying — add chapters to see the interior.</p>', words: 10 }], pageNum: 1 })
-  }
+  sharedPreview.pages.forEach((page) => pages.push({ type: page.type, chapterTitle: page.chapterTitle, blocks: page.html ? parseBlocks(page.html) : [], pageNum: page.pageNum }))
+  if (pages.length === 0) pages.push({ type: 'chapter-open', chapterTitle: 'Chapter One', blocks: [{ tag: 'p', html: '<p>The ink is still drying — add chapters to see the interior.</p>', words: 10 }], pageNum: 1 })
 
   const getHeaderText = (page) => {
     if (headerStyle === 'none' || page.type === 'title' || page.type === 'dedication') return ''

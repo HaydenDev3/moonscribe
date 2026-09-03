@@ -214,6 +214,7 @@ export default function Editor({
   const skipAnnotationTimer = useRef(null)
 
   const toolbarTimerRef = useRef(null)
+  const toolbarRef = useRef<HTMLDivElement | null>(null)
   const currentFindRef = useRef<{ node: globalThis.Text; start: number; length: number } | null>(null)
 
   useEffect(() => {
@@ -729,9 +730,6 @@ export default function Editor({
   //
   const recalcPages = useCallback(() => {
     const prose = ref.current as HTMLElement | null
-    const shouldRestoreCursor = document.activeElement === prose
-    const cursorOffset = shouldRestoreCursor ? getCursorOffset() : null
-
     const ps = pageSize === 'continuous'
       ? null
       : editorPageGeometry(pageSize, pageLayout?.pageMargin)
@@ -740,7 +738,9 @@ export default function Editor({
       prose?.querySelectorAll('[data-auto-page-break="true"]')
         .forEach((node) => node.remove())
       setPageCount(1)
-      if (cursorOffset !== null) requestAnimationFrame(() => setCursorOffset(cursorOffset))
+      // Removing generated page markers normally preserves the live Range.
+      // Do not restore a stale character offset after the writer has typed:
+      // that can move the caret back into the previous line/page.
       return
     }
 
@@ -954,12 +954,15 @@ export default function Editor({
     // backups, and sync see the same paginated document the writer sees.
     const paginatedHtml = getPersistentHtml(prose)
     onReportRef.current?.(paginatedHtml, countWords(paginatedHtml))
-    if (cursorOffset !== null) requestAnimationFrame(() => setCursorOffset(cursorOffset))
+    // Page markers are inserted before the measured block and the browser
+    // keeps the active Range anchored to the text node. Restoring the old
+    // character offset here is unsafe during uninterrupted typing because
+    // the document may have changed since the measurement started.
     // Inserting/removing sibling page markers preserves the browser's live
     // Range. Never restore a character offset on a later frame: the writer may
     // have typed again by then, and rewinding to that stale offset makes fresh
     // text appear to delete itself.
-  }, [getCursorOffset, getPersistentHtml, pageSize, pageLayout?.pageMargin, setCursorOffset])
+  }, [getPersistentHtml, pageSize, pageLayout?.pageMargin])
 
   recalcRef.current = recalcPages
 
@@ -2844,6 +2847,7 @@ export default function Editor({
       {/* ─────────────────────────────────────────────────────────────────── */}
 
       <div
+        ref={toolbarRef}
         className={`editor-toolbar ${
           toolbarIdle
             ? 'is-idle'
@@ -2855,6 +2859,15 @@ export default function Editor({
         onMouseMove={
           resetToolbarActivity
         }
+        onScroll={(event) => {
+          const rail = event.currentTarget
+          if (rail.scrollWidth <= rail.clientWidth + 2) return
+          if (rail.scrollLeft >= rail.scrollWidth - rail.clientWidth - 2) {
+            rail.scrollLeft = 0
+          } else if (rail.scrollLeft <= 0) {
+            rail.scrollLeft = rail.scrollWidth - rail.clientWidth
+          }
+        }}
       >
         {/* ── Row 1 ─────────────────────────────────────────────────────── */}
         <div className="tb-row">
@@ -3818,6 +3831,15 @@ export default function Editor({
                   setEntityTip(
                     null,
                   )
+                }}
+                onTouchStart={(e) => {
+                  const target = e.target instanceof Element ? e.target : null
+                  const nameSpan = target?.closest('.hl-name') as HTMLElement | null
+                  if (!nameSpan) return
+                  const char = charactersRef.current.find((c) => c.id === nameSpan.dataset.charId)
+                  if (!char) return
+                  const rect = nameSpan.getBoundingClientRect()
+                  setCharTip({ char, x: Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2)), y: Math.max(150, rect.top) })
                 }}
                 onMouseOut={(e) => {
                   const target = e.target instanceof Element ? e.target : null

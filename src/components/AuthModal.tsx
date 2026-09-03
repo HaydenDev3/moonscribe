@@ -4,6 +4,10 @@ import { apiBaseUrl, isDesktopRuntime } from '../api/config'
 import Icon from './Icon'
 import { exportBackup } from '../db/backup'
 import { downloadBlob } from '../utils/download'
+import PolicyConsent from './PolicyConsent'
+import { REQUIRED_SIGNUP_POLICIES } from '../data/policies'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
 
 const APP_LOGO = '/moonscribelogo.png'
 
@@ -358,7 +362,7 @@ function AuthInput({
   ...props
 }) {
   return (
-    <label className="block space-y-1.5">
+    <Label className="block space-y-1.5">
       <span className="
         text-[8px] font-semibold uppercase
         tracking-[0.15em]
@@ -382,7 +386,7 @@ function AuthInput({
           <Icon icon={icon} />
         </span>
 
-        <input
+        <Input
           {...props}
           className="
             min-w-0 flex-1
@@ -393,7 +397,7 @@ function AuthInput({
           "
         />
       </div>
-    </label>
+    </Label>
   )
 }
 
@@ -437,6 +441,7 @@ export default function AuthModal({
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [policyConsent, setPolicyConsent] = useState({})
 
   const [magicEmail, setMagicEmail] = useState('')
   const [sentMagicEmail, setSentMagicEmail] = useState('')
@@ -670,12 +675,20 @@ export default function AuthModal({
     setBusy(true)
     setBusyProvider('password')
 
+    if (mode === 'register' && REQUIRED_SIGNUP_POLICIES.some((policy) => !policyConsent[policy.key])) {
+      toast?.('Please accept the Privacy, Terms, and Acceptable Use policies to create an account.')
+      setBusy(false)
+      setBusyProvider(null)
+      return
+    }
+
     try {
       const result = await connectSync({
         url: apiBaseUrl(),
         mode,
         username,
         password,
+        policy_acceptances: mode === 'register' ? REQUIRED_SIGNUP_POLICIES.map((policy) => ({ policyKey: policy.key, version: policy.version })) : [],
       })
 
       if (result.requires2fa) {
@@ -1790,6 +1803,8 @@ export default function AuthModal({
               minLength={10}
             />
           </div>
+
+          {mode === 'register' && <PolicyConsent value={policyConsent} onChange={setPolicyConsent} />}
 
           <button
             type="submit"

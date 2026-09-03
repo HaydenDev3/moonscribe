@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { useApp } from '../context/AppContext'
-import { playStartupSound, unlockAudio } from '../utils/sounds'
 
 const todayKey = () => `moonscribe:startup-digest:${new Date().toISOString().slice(0, 10)}`
 
@@ -14,8 +13,9 @@ export default function StartupDigest() {
     if (settings.startupSound !== false) import('../utils/sounds').then(({ playStartupSound }) => playStartupSound({ masterEnabled: settings.soundEnabled, channelEnabled: settings.startupSound, masterVolume: settings.soundVolume, channelVolume: settings.startupSoundVolume }))
   }, [settings])
   if (!open) return null
-  const playDigestSound = () => {
+  const playDigestSound = async () => {
     if (settings.startupSound === false) return
+    const { playStartupSound, unlockAudio } = await import('../utils/sounds')
     unlockAudio()
     playStartupSound({ masterEnabled: settings.soundEnabled, channelEnabled: settings.startupSound, masterVolume: settings.soundVolume, channelVolume: settings.startupSoundVolume })
   }

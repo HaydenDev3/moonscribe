@@ -63,6 +63,10 @@ export default function ProsePreview({
         className={className}
         onMouseOver={onOver}
         onMouseOut={onOut}
+        onTouchStart={(event) => {
+          const el = (event.target as HTMLElement | null)?.closest?.('.hl-name, .hl-term')
+          if (el) openFor(el)
+        }}
         dangerouslySetInnerHTML={{ __html: annotated }}
       />
 
@@ -72,6 +76,7 @@ export default function ProsePreview({
           style={cardStyle(hover)}
           onMouseEnter={() => clearTimeout(closeTimer.current)}
           onMouseLeave={scheduleClose}
+          onTouchStart={(event) => event.stopPropagation()}
         >
           {character && (
             <>

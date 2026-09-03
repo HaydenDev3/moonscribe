@@ -1,17 +1,15 @@
-import Modal from './Modal'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from './ui/alert-dialog'
+import { Button } from './ui/button'
 
 export default function ConfirmDialog({ open, onClose, onConfirm, title, children, confirmLabel = 'Delete' }) {
-  return (
-    <Modal open={open} onClose={onClose} title={title} width={420}>
-      <p style={{ color: 'var(--grey)', margin: 0 }}>{children}</p>
+  return <AlertDialog open={open} onOpenChange={(next) => { if (!next) onClose() }}>
+    <AlertDialogContent>
+      <AlertDialogTitle>{title}</AlertDialogTitle>
+      <AlertDialogDescription>{children}</AlertDialogDescription>
       <div className="modal-foot">
-        <button className="button button-ghost" onClick={onClose}>
-          Keep it
-        </button>
-        <button className="button button-rose" onClick={onConfirm}>
-          {confirmLabel}
-        </button>
+        <AlertDialogCancel asChild><Button type="button" variant="ghost">Keep it</Button></AlertDialogCancel>
+        <AlertDialogAction asChild><Button type="button" variant="destructive" onClick={onConfirm}>{confirmLabel}</Button></AlertDialogAction>
       </div>
-    </Modal>
-  )
+    </AlertDialogContent>
+  </AlertDialog>
 }

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/HaydenDev3/moonscribe"><img alt="Version 1.1.2" src="https://img.shields.io/badge/version-1.1.2-8b7cf6?style=for-the-badge&logo=semver&logoColor=white" /></a>
+  <a href="https://github.com/HaydenDev3/moonscribe"><img alt="Version 1.1.3" src="https://img.shields.io/badge/version-1.1.3-8b7cf6?style=for-the-badge&logo=semver&logoColor=white" /></a>
   <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=white" />
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
   <img alt="PWA installable" src="https://img.shields.io/badge/PWA-installable-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white" />
@@ -116,16 +116,18 @@ npm audit --omit=dev --audit-level=moderate
 
 ### Current release review
 
-Recommended release: **1.1.2 — Account Centre Polish**.
+Recommended release: **1.1.3 — Print Proofing and Studio Refinements**.
 
 The latest Account Centre update includes circular profile imagery, live account/security status presentation, spaced danger actions with lightweight hover feedback, and improved profile banner treatment. The shared browser-test fixture race has also been resolved by running the UI test files serially.
 
-Release checks currently pass:
+Automated release checks currently pass:
 
 - TypeScript
 - ESLint
 - Production build
-- Full test suite: 40 files, 234 tests
+- Full test suite: 41 files, 237 tests
+
+Before launch, configure the production Tauri updater signing key and obtain independent legal review of the product-grounded policy drafts. Neither should be bypassed with a placeholder or treated as completed by this codebase.
 
 Headless tests may print expected warnings for Three.js WebGL context creation and Node localStorage because they run without a GPU or browser storage implementation. The npm security audit remains inconclusive when the registry audit endpoint is unavailable; rerun it in a networked release environment before publishing.
 

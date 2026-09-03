@@ -3,6 +3,7 @@ import type { ReactElement } from 'react'
 import { useApp } from '../context/AppContext'
 import { accountProfile, getConfig, listSessions, revokeSession, setConfig } from '../sync/engine'
 import Icon from './Icon'
+import { Button } from './ui/button'
 
 type Account = { id: string; username: string; email: string | null; provider: 'discord' | 'google' | 'email'; discordUsername?: string | null; discordAvatar?: string | null; emailVerified: boolean; twoFactorEnabled: boolean; createdAt: number; role?: string; roles?: string[]; linkedProviders?: { discord?: boolean; google?: boolean; password?: boolean } }
 type Session = { id: string; deviceId?: string | null; current: boolean; deviceName: string; createdAt: number; lastSeenAt: number }
@@ -11,7 +12,7 @@ type Notice = { id: string; title: string; body: string; category?: string; type
 const nav = [['overview', 'Overview', 'fa-solid fa-house'], ['profile', 'Profile', 'fa-solid fa-user'], ['email', 'Email & password', 'fa-solid fa-envelope'], ['connections', 'Connections', 'fa-solid fa-link'], ['sessions', 'Sessions', 'fa-solid fa-laptop'], ['security', 'Security activity', 'fa-solid fa-shield-halved']]
 
 function Row({ title, detail, action, onClick, icon = 'fa-solid fa-chevron-right', tone = '', disabled = false }: { title: string; detail: string; action?: string; onClick?: () => void; icon?: string; tone?: string; disabled?: boolean }) {
-  return <div className="account-row"><span className={`account-row-icon ${tone}`}><Icon icon={icon} /></span><span className="account-row-copy"><strong>{title}</strong><small>{detail}</small></span>{action && <button type="button" className="account-row-action" onClick={onClick} disabled={disabled}>{action} <Icon icon="fa-solid fa-arrow-right" /></button>}</div>
+  return <div className="account-row"><span className={`account-row-icon ${tone}`}><Icon icon={icon} /></span><span className="account-row-copy"><strong>{title}</strong><small>{detail}</small></span>{action && <Button type="button" variant="ghost" size="sm" className="account-row-action" onClick={onClick} disabled={disabled}>{action} <Icon icon="fa-solid fa-arrow-right" /></Button>}</div>
 }
 
 const dateTime = (value?: number | null) => value ? new Date(value).toLocaleString() : 'Unknown'

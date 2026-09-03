@@ -6,6 +6,9 @@ import { useApp } from '../context/AppContext'
 import { detectPlatform, platformDownload, platformLabel } from '../utils/platform'
 import InstallPrompt from '../components/InstallPrompt'
 import UserPill from '../components/UserPill'
+import LandingAtmosphere from '../components/LandingAtmosphere'
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '../components/ui/sheet'
+import { Button } from '../components/ui/button'
 
 const FEATURES = [
   ['fa-solid fa-file-lines', 'A real manuscript studio', 'Paginated writing, formatting, comments, replay and print-ready exports in one focused workspace.'],
@@ -33,6 +36,7 @@ export default function Landing() {
   ))
   const [previewMode, setPreviewMode] = useState<'write' | 'plan' | 'design'>('write')
   const [constellationFocus, setConstellationFocus] = useState('mira')
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   useEffect(() => {
     setPlatform(detectPlatform(navigator.userAgent, navigator.platform, navigator.maxTouchPoints))
@@ -51,10 +55,12 @@ export default function Landing() {
   const signedIn = Boolean(syncUsername)
 
   return <main className="landing">
+    <LandingAtmosphere />
     <InstallPrompt />
     <nav className="landing-nav">
       <Link className="landing-brand" to="/"><img src="/moonscribelogo.png" alt="MoonScribe logo" className="landing-brand-logo" /><span className="landing-brand-copy">MoonScribe<span>✦</span></span></Link>
-      <div className="landing-nav-links"><a href="#studio">Studio</a><a href="#features">Features</a><a href="#brand">Our brand</a><Link to="/privacy">Privacy</Link>{signedIn ? <UserPill onConnectClick={() => navigate('/dashboard')} /> : <button className="landing-nav-login" onClick={signIn}>Sign in</button>}{!signedIn && (cloudOnly || lockedDownload ? <button className={`button button-primary ${lockedDownload ? 'beta-locked-button' : ''}`} onClick={signIn}><Icon icon={lockedDownload ? 'fa-solid fa-lock' : 'fa-solid fa-cloud'} /> {lockedDownload ? 'Desktop beta access' : 'Open Cloud'}</button> : <a className="button button-primary" href={downloadUrl} download>{downloadLabel}</a>)}</div>
+      <div className="landing-nav-links"><a href="#studio">Studio</a><a href="#features">Features</a><a href="#brand">Our brand</a><Link to="/privacy">Privacy</Link>{signedIn ? <UserPill onConnectClick={() => navigate('/dashboard')} /> : <button className="landing-nav-login" onClick={signIn}>Sign in</button>}{!signedIn && (cloudOnly || lockedDownload ? <Button variant="default" className={lockedDownload ? 'beta-locked-button' : ''} onClick={signIn}><Icon icon={lockedDownload ? 'fa-solid fa-lock' : 'fa-solid fa-cloud'} /> {lockedDownload ? 'Desktop beta access' : 'Open Cloud'}</Button> : <a className="button button-primary" href={downloadUrl} download>{downloadLabel}</a>)}</div>
+      <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}><SheetTrigger asChild><Button variant="ghost" size="icon" className="landing-mobile-menu" aria-label="Open menu"><Icon icon="fa-solid fa-bars" /></Button></SheetTrigger><SheetContent side="right"><SheetTitle>MoonScribe</SheetTitle><nav className="landing-mobile-nav" aria-label="Mobile navigation"><a href="#studio" onClick={() => setMobileMenuOpen(false)}>Studio</a><a href="#features" onClick={() => setMobileMenuOpen(false)}>Features</a><a href="#brand" onClick={() => setMobileMenuOpen(false)}>Our brand</a><Link to="/privacy" onClick={() => setMobileMenuOpen(false)}>Privacy</Link><Link to="/terms" onClick={() => setMobileMenuOpen(false)}>Terms</Link><Button onClick={() => { setMobileMenuOpen(false); signIn() }}>{signedIn ? 'Open dashboard' : 'Start writing'}</Button></nav></SheetContent></Sheet>
     </nav>
     <section className="landing-hero">
       <div className="landing-hero-grid" aria-hidden="true" />

@@ -6,6 +6,8 @@ import * as syncEngine from '../sync/engine'
 import Select from '../components/Select'
 import { useContextMenu } from '../components/ContextMenu'
 import { markdownToAnnouncementHtml, sanitizeAnnouncementHtml } from '../utils/announcementMarkup'
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '../components/ui/sheet'
+import { Button } from '../components/ui/button'
 import '../styles/admin.css'
 import '../styles/admin-audit.css'
 import '../styles/admin-flags.css'
@@ -66,6 +68,7 @@ export default function AdminDashboard() {
   const [mailSubject, setMailSubject] = useState('')
   const [mailBody, setMailBody] = useState('')
   const [selectedMail, setSelectedMail] = useState<AdminMail | null>(null)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   useEffect(() => {
     if (!isAdmin) return
@@ -299,6 +302,7 @@ export default function AdminDashboard() {
       </aside>
       <section className="admin-main">
         <header className="admin-topbar">
+          <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetTrigger asChild><Button className="admin-mobile-menu" variant="outline" size="icon" aria-label="Open admin navigation"><i className="fa-solid fa-bars" /></Button></SheetTrigger><SheetContent side="left"><SheetTitle>MoonScribe Admin</SheetTitle><nav className="admin-mobile-nav">{nav.map(([label,,icon]) => <Button key={label} variant={section === label ? 'secondary' : 'ghost'} className="justify-start" onClick={() => { setSection(label); setMobileNavOpen(false) }}><i className={icon} />{label}</Button>)}</nav></SheetContent></Sheet>
           <div>
             <span className="admin-kicker">MoonScribe control room</span>
             <h1>{section}</h1>

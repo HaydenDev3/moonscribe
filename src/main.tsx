@@ -28,6 +28,7 @@ import { ContextMenuProvider } from './components/ContextMenu'
 import App from './App'
 import { registerDesktopAuthLinks } from './api/desktopAuth'
 import { registerDesktopFileOpen } from './platform/fileOpen'
+import { TooltipProvider } from './components/ui/tooltip'
 
 const legacyDesignerFontOptions = [
   { key: 'cormorant', label: 'Cormorant italic' },
@@ -49,9 +50,11 @@ registerDesktopFileOpen((paths) => {
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
     <AppProvider>
-      <ContextMenuProvider>
-        <App />
-      </ContextMenuProvider>
+      <TooltipProvider delayDuration={250}>
+        <ContextMenuProvider>
+          <App />
+        </ContextMenuProvider>
+      </TooltipProvider>
     </AppProvider>
   </React.StrictMode>
 )

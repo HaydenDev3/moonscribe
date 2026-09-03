@@ -110,12 +110,15 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
   .settings-overlay { padding: 0; align-items: stretch; }
   .settings-shell { width: 100%; height: 100dvh; min-height: 0; border: 0; border-radius: 0; display: grid; grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .settings-rail { width: 100%; height: auto; max-height: 42dvh; display: block; overflow-y: auto; padding: max(12px, env(safe-area-inset-top)) 16px 10px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .settings-rail { max-height: 122px; overflow-x: auto; overflow-y: hidden; white-space: nowrap; }
   .settings-profile { padding: 2px 0 10px; }
   .settings-account-centre-button { width: 100%; min-height: 46px; display: flex; align-items: center; gap: 10px; margin: 0 0 10px; padding: 0 12px; border: 1px solid color-mix(in srgb, var(--accent) 52%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--charcoal); text-align: left; }
   .settings-account-centre-button > :last-child { margin-left: auto; color: var(--accent); font-size: .72rem; }
   .settings-search { margin: 0 0 8px; }
-  .settings-rail-group { display: block; }
-  .settings-rail-item { display: flex; min-height: 44px; }
+  .settings-rail-group { display: inline-flex; vertical-align: top; gap: 4px; margin-right: 12px; }
+  .settings-rail-group-label { display: none; }
+  .settings-rail-item { display: inline-flex; min-height: 44px; width: auto; padding: 8px 10px; white-space: nowrap; }
+  .settings-rail-item .settings-rail-chevron { display: none; }
   .settings-content { padding: 60px 16px calc(28px + env(safe-area-inset-bottom)); overflow-y: auto; }
   .settings-close { position: fixed; z-index: 3; top: max(10px, env(safe-area-inset-top)); right: 12px; min-width: 44px; min-height: 44px; }
   .settings-panel { max-width: none; }
@@ -123,6 +126,8 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
   .settings-row > :last-child { flex: none; }
   .settings-detail-grid { grid-template-columns: 1fr 1fr; }
   .theme-choice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .accent-swatches { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; padding: 6px 4px; }
+  .accent-swatch { flex: 0 0 24px !important; }
   .actions-row { flex-wrap: wrap; }
   .actions-row .button { flex: 1 1 140px; }
   .editor-shell { width: 100%; }
@@ -133,12 +138,209 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
   .editor-content, .editor-body { padding-inline: 16px; }
 }
 
+/* Compact mobile book studio. The writing toolbar owns the bottom edge on
+   editor pages; Designer gets its own tool rail, so the generic workspace
+   navigation only duplicates controls and steals valuable preview height. */
+@media (max-width: 700px) {
+  .mobile-workspace-nav { display: none !important; }
+  .workspace:has(.cover-studio) .workspace-topbar {
+    min-height: 52px !important;
+    padding: max(4px, env(safe-area-inset-top)) 8px 4px !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+  }
+  .workspace:has(.cover-studio) .workspace-topbar .mobile-menu-btn {
+    flex: 0 0 38px;
+    width: 38px;
+    min-width: 38px;
+    min-height: 38px;
+    padding: 0;
+  }
+  .workspace:has(.cover-studio) .workspace-topbar .crumbs { flex: 1 1 auto; }
+
+  .workspace:has(.designer-embedded-shell) .workspace-topbar,
+  .workspace:has(.cover-studio) .workspace-topbar {
+    min-height: 48px;
+    height: auto;
+    padding: max(5px, env(safe-area-inset-top)) 10px 5px;
+    gap: 5px;
+  }
+
+  .workspace:has(.designer-embedded-shell) .workspace-topbar .crumbs,
+  .workspace:has(.cover-studio) .workspace-topbar .crumbs {
+    font-size: .72rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workspace:has(.designer-embedded-shell) .workspace-topbar .topbar-actions,
+  .workspace:has(.cover-studio) .workspace-topbar .topbar-actions {
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .workspace:has(.designer-embedded-shell) .workspace-topbar .button,
+  .workspace:has(.cover-studio) .workspace-topbar .button {
+    min-width: 36px;
+    min-height: 36px;
+    height: 36px;
+    padding-inline: 8px;
+  }
+
+  .workspace:has(.designer-embedded-shell) .cover-studio,
+  .workspace:has(.cover-studio) .cover-studio {
+    min-height: 0;
+    height: calc(100dvh - 48px);
+    padding-top: 112px;
+  }
+
+  .workspace:has(.designer-embedded-shell) .designer-workflow-bar,
+  .workspace:has(.cover-studio) .designer-workflow-bar {
+    height: 108px;
+    min-height: 108px;
+    padding: 8px 10px 6px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto 42px;
+    gap: 5px 8px;
+    overflow: hidden;
+  }
+
+  .workspace:has(.designer-embedded-shell) .designer-workflow-brand,
+  .workspace:has(.cover-studio) .designer-workflow-brand { min-width: 0; }
+  .workspace:has(.designer-embedded-shell) .designer-workflow-brand strong,
+  .workspace:has(.cover-studio) .designer-workflow-brand strong { font-size: .82rem; }
+  .workspace:has(.designer-embedded-shell) .designer-workflow-steps,
+  .workspace:has(.cover-studio) .designer-workflow-steps {
+    grid-column: 1 / -1;
+    min-width: 0;
+    width: 100%;
+    display: flex;
+    overflow-x: auto;
+    gap: 4px;
+    scrollbar-width: none;
+  }
+  .designer-workflow-steps::-webkit-scrollbar { display: none; }
+  .workspace:has(.designer-embedded-shell) .designer-workflow-step,
+  .workspace:has(.cover-studio) .designer-workflow-step {
+    flex: 1 0 82px;
+    min-width: 82px;
+    min-height: 38px;
+    padding: 4px 6px;
+    gap: 5px;
+  }
+  .workspace:has(.designer-embedded-shell) .designer-workflow-step small,
+  .workspace:has(.cover-studio) .designer-workflow-step small,
+  .workspace:has(.designer-embedded-shell) .designer-save-state,
+  .workspace:has(.cover-studio) .designer-save-state { display: none; }
+
+  .workspace:has(.designer-embedded-shell) .ds-stage-bar,
+  .workspace:has(.cover-studio) .ds-stage-bar {
+    min-height: 52px;
+    height: 52px;
+    padding: 6px 8px;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .ds-stage-bar::-webkit-scrollbar { display: none; }
+  .workspace:has(.designer-embedded-shell) .ds-stage-tabs,
+  .workspace:has(.cover-studio) .ds-stage-tabs,
+  .workspace:has(.designer-embedded-shell) .ds-stage-actions,
+  .workspace:has(.cover-studio) .ds-stage-actions { flex: 0 0 auto; }
+  .workspace:has(.designer-embedded-shell) .ds-stage-tab,
+  .workspace:has(.cover-studio) .ds-stage-tab,
+  .workspace:has(.designer-embedded-shell) .ds-action-btn,
+  .workspace:has(.cover-studio) .ds-action-btn { min-height: 36px; white-space: nowrap; }
+  .workspace:has(.designer-embedded-shell) .designer-stage-settings,
+  .workspace:has(.cover-studio) .designer-stage-settings { display: none; }
+
+  .workspace:has(.designer-embedded-shell) .ds-canvas,
+  .workspace:has(.cover-studio) .ds-canvas {
+    min-height: 0;
+    height: calc(100% - 52px);
+    padding: 8px 14px 76px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .workspace:has(.designer-embedded-shell) .cover-renderer-shell,
+  .workspace:has(.cover-studio) .cover-renderer-shell { width: 100%; height: 100%; min-height: 0; display: grid; place-items: center; }
+  .workspace:has(.designer-embedded-shell) .ds-canvas .cover-mockup-3d,
+  .workspace:has(.cover-studio) .ds-canvas .cover-mockup-3d {
+    width: min(78vw, 310px) !important;
+    height: min(58dvh, 430px) !important;
+    min-height: 0 !important;
+    margin: 0 auto;
+  }
+
+  .workspace:has(.designer-embedded-shell) .ds-icons,
+  .workspace:has(.cover-studio) .ds-icons {
+    left: 10px;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    width: auto;
+    height: 58px;
+    min-height: 58px;
+    padding: 5px 7px;
+    border-radius: 15px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-direction: row;
+    scrollbar-width: thin;
+  }
+  .workspace:has(.designer-embedded-shell) .ds-icon-group,
+  .workspace:has(.cover-studio) .ds-icon-group { flex: 0 0 auto; flex-direction: row; }
+  .workspace:has(.designer-embedded-shell) .ds-icon-btn,
+  .workspace:has(.cover-studio) .ds-icon-btn { width: 54px; height: 46px; min-width: 54px; border-radius: 10px; }
+  .workspace:has(.designer-embedded-shell) .ds-icon-btn span,
+  .workspace:has(.cover-studio) .ds-icon-btn span { font-size: .44rem; }
+}
+
 .family-tree-page{display:grid;gap:20px}.family-tree-header{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;padding-bottom:18px;border-bottom:1px solid var(--border)}.family-tree-header h2{margin:6px 0;color:var(--charcoal);font:600 clamp(2rem,4vw,3rem) var(--font-heading)}.family-tree-header p{margin:0;color:var(--grey)}.family-tree-canvas{display:grid;gap:16px}.family-tree-group{padding:18px;border:1px solid var(--border);border-radius:18px;background:color-mix(in srgb,var(--surface) 90%,transparent);box-shadow:var(--shadow-sm)}.family-tree-group h3{margin:0 0 14px;color:var(--charcoal);font:600 1.15rem var(--font-heading)}.family-tree-nodes{display:flex;flex-wrap:wrap;gap:12px}.family-tree-node{display:grid;grid-template-columns:42px 1fr;align-items:center;column-gap:10px;min-width:190px;padding:10px;border:1px solid var(--border);border-radius:14px;background:var(--surface-elev);color:var(--charcoal);text-align:left;cursor:pointer;transition:transform .2s,border-color .2s,box-shadow .2s}.family-tree-node:hover,.family-tree-node.active{transform:translateY(-2px);border-color:var(--accent);box-shadow:0 10px 25px rgba(0,0,0,.12)}.family-tree-avatar{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;color:#fff;font:700 .75rem var(--font-ui)}.family-tree-node strong,.family-tree-node small{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.family-tree-node small{color:var(--grey);font-size:.66rem}.family-tree-detail{padding:20px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border));border-radius:18px;background:linear-gradient(145deg,color-mix(in srgb,var(--accent) 7%,var(--surface)),var(--surface));box-shadow:var(--shadow-sm)}.family-tree-detail-head{display:flex;align-items:center;gap:12px}.family-tree-detail h3{margin:0;color:var(--charcoal);font:600 1.35rem var(--font-heading)}.family-tree-detail-head p{margin:3px 0 0;color:var(--grey);font-size:.75rem}.family-tree-bio{color:var(--grey);line-height:1.6}.family-tree-detail h4{margin:20px 0 9px;color:var(--grey);font:700 .68rem var(--font-ui);letter-spacing:.12em;text-transform:uppercase}.family-tree-link{display:grid;gap:3px;width:100%;padding:10px 0;border:0;border-top:1px solid var(--border);background:transparent;color:var(--charcoal);text-align:left;cursor:pointer}.family-tree-link span{color:var(--grey);font-size:.72rem}.family-tree-empty{padding:48px;border:1px dashed var(--border);border-radius:18px;color:var(--grey);text-align:center}@media(max-width:600px){.family-tree-header{align-items:flex-start;flex-direction:column}.family-tree-header .button{width:100%}.family-tree-group,.family-tree-detail{padding:15px}.family-tree-node{min-width:100%;}.family-tree-nodes{display:grid}}
 
 /* Phone writing room: keep the manuscript primary and turn utility chrome into
    compact, scrollable rails instead of allowing it to squeeze the page. */
 @media (max-width: 480px) {
   .workspace-topbar .crumbs { font-size: .7rem; }
+  /* Mobile document room: Word-like command hierarchy with MoonScribe paper. */
+  .workspace:has(.editor-wrap) { background: color-mix(in srgb, var(--bg) 82%, var(--surface-elev)); }
+  .workspace:has(.editor-wrap) .workspace-topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; min-height: 58px; padding: max(8px, env(safe-area-inset-top)) 10px 8px; background: color-mix(in srgb, var(--surface-elev) 96%, var(--accent)); border-bottom: 1px solid var(--border); box-shadow: 0 5px 18px color-mix(in srgb, var(--text) 18%, transparent); }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child { flex: 1; min-width: 0; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child { flex: 0 0 auto; gap: 3px; }
+  .workspace:has(.editor-wrap) .workspace-topbar .crumbs { color: var(--charcoal); font: 600 .84rem var(--font-ui); text-align: center; }
+  .workspace:has(.editor-wrap) .workspace-topbar .crumbs a { color: var(--accent-deep); }
+  .workspace:has(.editor-wrap) .workspace-topbar .button { min-width: 38px; min-height: 38px; border-color: var(--border); color: var(--charcoal); background: color-mix(in srgb, var(--surface) 72%, transparent); }
+  .workspace:has(.editor-wrap) .workspace-topbar .button span:not(.sr-only) { display: none; }
+  .workspace:has(.editor-wrap) .chapter-tabbar { background: #ecebef; border-bottom: 1px solid #c7c3ca; }
+  .workspace:has(.editor-wrap) .chapter-work-tab.active { color: #372d40; background: #fff; box-shadow: 0 2px 8px rgba(40,30,45,.1); }
+  .workspace:has(.editor-wrap) .chapter-split-toggle { display: none; }
+  .workspace:has(.editor-wrap) .scene-meta { display: flex; align-items: center; gap: 8px; max-height: 48px; margin: 6px 10px 0; padding: 6px 8px; overflow-x: auto; overflow-y: hidden; border: 1px solid var(--border); border-radius: 10px; background: color-mix(in srgb, var(--surface) 88%, transparent); }
+  .workspace:has(.editor-wrap) .scene-meta-header { flex: 0 0 auto; margin: 0; }
+  .workspace:has(.editor-wrap) .scene-meta-label { font-size: .58rem; white-space: nowrap; }
+  .workspace:has(.editor-wrap) .scene-meta-field { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; min-width: 100px; margin: 0; }
+  .workspace:has(.editor-wrap) .scene-meta-field > span { font-size: .56rem; }
+  .workspace:has(.editor-wrap) .scene-meta-field input, .workspace:has(.editor-wrap) .scene-meta-field select { min-height: 30px; width: 100px; padding: 4px 7px; font-size: .7rem; }
+  .workspace:has(.editor-wrap) .mobile-workspace-nav { display: none; }
+  .workspace:has(.editor-wrap) .editor-toolbar { display: flex !important; position: fixed; left: 0; right: 0; bottom: 0; z-index: 200; max-height: 58px; min-height: 52px; padding: 5px 7px max(5px, env(safe-area-inset-bottom)); overflow: hidden; opacity: 1 !important; transform: none !important; filter: none !important; background: color-mix(in srgb, var(--surface-elev) 96%, transparent); border: 0; border-top: 1px solid var(--border); box-shadow: 0 -6px 18px color-mix(in srgb, var(--text) 14%, transparent); backdrop-filter: blur(18px); }
+  .workspace:has(.editor-wrap) .editor-toolbar { flex-direction: row; align-items: center; overflow-x: auto; }
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row { display: contents; }
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-btn { min-width: 38px; min-height: 38px; color: var(--charcoal); border-radius: 8px; }
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-btn:hover, .workspace:has(.editor-wrap) .editor-toolbar .tb-btn.active { color: var(--accent-deep); background: var(--accent-soft); }
+  .workspace:has(.editor-wrap) .editor-wrap-outer { background: color-mix(in srgb, var(--bg) 82%, var(--surface-elev)); }
+  .workspace:has(.editor-wrap) .editor-wrap { padding: 18px 10px 92px; }
+  .workspace:has(.editor-wrap) .editor-desk { padding: 0; }
+  .workspace:has(.editor-wrap) .editor-canvas, .workspace:has(.editor-wrap) .editor-canvas-paged { width: 100% !important; max-width: 100%; min-height: calc(100dvh - 190px); margin: 0 auto; padding: 28px 24px 80px; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 18%, transparent); }
+  .workspace:has(.editor-wrap) .editor-head { padding: 0 0 18px; }
+  .workspace:has(.editor-wrap) .chapter-edit-title { color: var(--charcoal); font: 600 1.45rem/1.15 var(--font-heading); }
+  .workspace:has(.editor-wrap) .editor-content, .workspace:has(.editor-wrap) .editor-body { padding-inline: 0; font-size: 1.02rem; line-height: 1.82; color: var(--charcoal); }
+  .workspace:has(.editor-wrap) .editor-footer { display: none; }
   .workspace-topbar .topbar-actions .button { min-width: 40px; padding-inline: 9px; }
   .workspace-topbar .topbar-actions .button span:not(.sr-only) { display: none; }
   .chapter-tabbar { gap: 4px; padding: 5px 8px; }
@@ -191,6 +393,102 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
   .editor-content, .editor-body { line-height: 1.72; }
 }
 
+/* Final mobile editor header layout: two intentional rows, never a wrapped
+   desktop flex row floating over the chapter tab or paper. */
+@media (max-width: 700px) {
+  .workspace:has(.editor-wrap) .workspace-topbar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto auto !important;
+    align-items: center;
+    gap: 3px !important;
+    padding: max(4px, env(safe-area-inset-top)) 8px 4px !important;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child {
+    display: flex !important;
+    min-width: 0;
+    width: 100%;
+    flex-wrap: nowrap !important;
+    align-items: center;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .mobile-menu-btn {
+    flex: 0 0 38px;
+    width: 38px;
+    min-width: 38px;
+    padding: 0;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .crumbs {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child {
+    display: flex !important;
+    width: 100%;
+    min-width: 0;
+    flex-wrap: nowrap !important;
+    justify-content: flex-start;
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child::-webkit-scrollbar { display: none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > * { flex: 0 0 auto; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .button { min-height: 34px; height: 34px; padding-inline: 9px; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .collab-presence-wrap { max-width: 38px; overflow: hidden; }
+  .workspace:has(.editor-wrap) .chapter-tabbar { position: relative; z-index: 3; }
+}
+
+/* Mobile writing rail: every editor control lives in one reachable,
+   touch-scrollable command bar. Keep the rows in document order while making
+   the rail wide enough to expose controls beyond the viewport. */
+@media (max-width: 700px) {
+  .workspace:has(.editor-wrap) .editor-toolbar {
+    display: block !important;
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    z-index: 120 !important;
+    width: 100vw !important;
+    max-width: none !important;
+    min-height: 56px !important;
+    max-height: 68px !important;
+    padding: 6px 0 calc(6px + env(safe-area-inset-bottom)) !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    scrollbar-width: thin;
+    box-sizing: border-box;
+  }
+
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row {
+    display: contents !important;
+    flex-wrap: nowrap !important;
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .workspace:has(.editor-wrap) .editor-toolbar > * {
+    white-space: nowrap;
+  }
+
+  .workspace:has(.editor-wrap) .editor-toolbar::after {
+    content: '';
+    display: inline-block;
+    width: 28px;
+    height: 1px;
+  }
+
+  .workspace:has(.editor-wrap) .editor-wrap {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
 @media (max-width: 700px) {
   .workspace-topbar { padding: 8px 10px; }
   .workspace-topbar .crumbs { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -213,6 +511,35 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
   .ds-stage.is-page .ds-canvas { padding: 12px 18px; }
   .ds-stage.is-page .ds-canvas .book-mini { max-width: min(42vw, 420px); max-height: calc(100dvh - 150px); }
   .ds-canvas .cover-mockup-3d { width: min(54vw, 520px); height: min(72dvh, 620px); }
+}
+
+/* Final phone overrides: these intentionally come after the broader 700px
+   rules so the writing toolbar remains the bottom command bar. */
+@media (max-width: 700px) {
+  .workspace > .sidebar.open { transform: translateX(0) !important; visibility: visible; pointer-events: auto; }
+  .workspace > .sidebar:not(.open) { transform: translateX(-105%); visibility: hidden; pointer-events: none; }
+  .workspace:has(.editor-wrap) .scene-meta { display: none !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar { min-height: 48px; height: auto; padding: max(4px, env(safe-area-inset-top)) 8px 4px; gap: 4px; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row { min-width: 0; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child { flex: 1 1 auto; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child { flex: 0 0 auto; overflow: hidden; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row { flex-wrap: nowrap; align-items: center; }
+  .workspace:has(.editor-wrap) .workspace-topbar .crumbs { font-size: .72rem; text-align: left; }
+  .workspace:has(.editor-wrap) .workspace-topbar .button { min-height: 36px; height: 36px; min-width: 36px; padding: 0 8px; }
+  .workspace:has(.editor-wrap) .chapter-tabbar { min-height: 46px; padding: 4px 7px; }
+  .workspace:has(.editor-wrap) .chapter-work-tab { min-height: 38px; }
+  .workspace:has(.editor-wrap) .editor-toolbar { display: flex !important; position: fixed !important; top: auto !important; bottom: 0 !important; left: 0; right: 0; z-index: 2000; width: 100%; max-height: 58px; min-height: 52px; overflow-x: auto !important; overflow-y: hidden; }
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row { display: contents !important; }
+  .workspace:has(.editor-wrap) .editor-wrap { padding-bottom: 96px; }
+  .workspace:has(.editor-wrap) .editor-canvas, .workspace:has(.editor-wrap) .editor-canvas-paged { min-height: calc(100dvh - 150px); }
+  .workspace:has(.editor-wrap) .chapter-tabbar { background: color-mix(in srgb, var(--surface-elev) 92%, transparent); border-color: var(--border); }
+  .workspace:has(.editor-wrap) .chapter-work-tab { background: color-mix(in srgb, var(--surface) 78%, transparent); color: var(--grey); border-color: var(--border); }
+  .workspace:has(.editor-wrap) .chapter-work-tab.active { background: var(--surface); color: var(--charcoal); border-color: var(--accent); }
+  .workspace:has(.editor-wrap) .editor-toolbar { justify-content: center; scroll-padding-inline: 50%; }
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row { flex: 0 0 auto; }
+  .workspace:has(.editor-wrap) .editor-toolbar .cselect-field { min-height: 38px; background: color-mix(in srgb, var(--surface) 90%, transparent); color: var(--charcoal); border-color: var(--border); }
+  .workspace:has(.editor-wrap) .sidebar { inset: 0 auto 0 0; width: min(88vw, 340px); max-width: 340px; padding-bottom: env(safe-area-inset-bottom); border-right: 1px solid var(--border); border-radius: 0 16px 16px 0; }
+  .workspace:has(.editor-wrap) .mobile-sidebar-backdrop { background: color-mix(in srgb, var(--text) 52%, transparent); backdrop-filter: blur(2px); }
 }
 
 /* iPad and other touch tablets: keep the full studio available while giving
@@ -428,3 +755,37 @@ html, body, #root { min-width: 0; max-width: 100%; overflow-x: hidden; }
 .ds-template-glyph { color: var(--gold, #c79a42); font-size: 26px; text-align: center; }
 .ds-template-card small { color: var(--muted, #aaa); line-height: 1.3; }
 .ds-template-card em { color: var(--gold, #c79a42); font-size: .75rem; font-style: normal; margin-top: auto; }
+
+/* Last mobile Designer guard: keep the compact composition after all legacy
+   responsive rules above have been evaluated. */
+@media (max-width: 700px) {
+  .mobile-workspace-nav { display: none !important; }
+  .workspace:has(.cover-studio) .cover-studio { height: calc(100dvh - 48px) !important; min-height: 0 !important; padding-top: 112px !important; }
+  .workspace:has(.cover-studio) .designer-workflow-bar { height: 108px !important; min-height: 108px !important; padding: 8px 10px 6px !important; overflow: hidden !important; }
+  .workspace:has(.cover-studio) .designer-workflow-steps { display: flex !important; width: 100% !important; overflow-x: auto !important; gap: 4px; }
+  .workspace:has(.cover-studio) .designer-workflow-step { flex: 1 0 82px !important; min-width: 82px !important; padding: 4px 6px !important; }
+  .workspace:has(.cover-studio) .designer-workflow-step small,
+  .workspace:has(.cover-studio) .designer-save-state { display: none !important; }
+  .workspace:has(.cover-studio) .ds-stage-bar { min-height: 52px !important; height: 52px !important; padding: 6px 8px !important; flex-wrap: nowrap !important; overflow-x: auto !important; }
+  .workspace:has(.cover-studio) .designer-stage-settings { display: none !important; }
+  .workspace:has(.cover-studio) .ds-canvas { height: calc(100% - 52px) !important; min-height: 0 !important; padding: 8px 14px 76px !important; display: flex !important; align-items: center !important; justify-content: center !important; overflow: hidden !important; }
+  .workspace:has(.cover-studio) .cover-renderer-shell { min-height: 0 !important; height: 100% !important; display: grid !important; place-items: center !important; }
+  .workspace:has(.cover-studio) .ds-canvas .cover-mockup-3d { width: min(78vw, 310px) !important; height: min(58dvh, 430px) !important; min-height: 0 !important; margin: 0 auto !important; }
+  .workspace:has(.cover-studio) .ds-icons { left: 10px !important; right: 10px !important; bottom: calc(10px + env(safe-area-inset-bottom)) !important; width: auto !important; height: 58px !important; min-height: 58px !important; flex-direction: row !important; overflow-x: auto !important; overflow-y: hidden !important; }
+  .workspace:has(.cover-studio) .ds-icon-group { flex: 0 0 auto !important; flex-direction: row !important; align-items: center !important; padding-top: 0 !important; padding-bottom: 0 !important; border-top: 0 !important; }
+  .workspace:has(.cover-studio) .ds-icon-group + .ds-icon-group { border-left: 1px solid var(--border-soft) !important; padding-left: 7px !important; margin-left: 3px; }
+  .workspace:has(.cover-studio) .ds-icon-btn { width: 54px !important; min-width: 54px !important; height: 46px !important; border-radius: 10px !important; }
+}
+
+@media (max-width: 700px) {
+  .workspace:has(.editor-wrap) .workspace-topbar { display:grid !important; grid-template-columns:minmax(0,1fr) !important; grid-template-rows:auto auto !important; gap:3px !important; padding: max(4px,env(safe-area-inset-top)) 8px 4px !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child { display:flex !important; width:100%; flex-wrap:nowrap !important; align-items:center; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .mobile-menu-btn { flex:0 0 38px; width:38px; min-width:38px; padding:0; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .crumbs { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:left; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child { display:flex !important; width:100%; flex-wrap:nowrap !important; justify-content:flex-start; overflow-x:auto !important; overflow-y:hidden; scrollbar-width:none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child::-webkit-scrollbar { display:none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > * { flex:0 0 auto; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .button { min-height:34px; height:34px; padding-inline:9px; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .collab-presence-wrap { max-width:38px; overflow:hidden; }
+  .workspace:has(.editor-wrap) .chapter-tabbar { position:relative; z-index:3; }
+}

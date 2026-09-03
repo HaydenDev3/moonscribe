@@ -26,6 +26,10 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2}'],
+        // WOFF2 is the browser-preferred format and is already included above.
+        // Omitting legacy WOFF files keeps the precache manifest smaller while
+        // retaining offline app code, images, and modern typography.
+        globIgnores: ['**/*.woff'],
         navigateFallbackDenylist: [/^\/api\//, /^\/auth\//]
       }
     })

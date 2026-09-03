@@ -32,6 +32,7 @@ const DIST = join(ROOT, 'dist')
 const PORT = Number(process.env.PORT || 3001)
 const notificationSockets = new Map()
 const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET || ''
+const CURRENT_POLICIES = { privacy: '1.0', terms: '1.0', 'acceptable-use': '1.0' }
 
 function base64Url(value) {
   return Buffer.from(value).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
@@ -322,6 +323,16 @@ function setupSchema(db) {
       role          TEXT NOT NULL DEFAULT 'user',
       roles         TEXT NOT NULL DEFAULT 'user'
     );
+    CREATE TABLE IF NOT EXISTS policy_acceptances (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id TEXT NOT NULL,
+      policy_key TEXT NOT NULL,
+      policy_version TEXT NOT NULL,
+      accepted_at INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      user_agent TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_policy_acceptances_user ON policy_acceptances(user_id, policy_key);
     CREATE TABLE IF NOT EXISTS admin_audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       actor_user_id TEXT NOT NULL,
@@ -1202,6 +1213,11 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     }
 
     // ---- accounts (rate-limited) ----
+    if (path === '/api/auth/policies' && req.method === 'GET') {
+      json(res, 200, { policies: CURRENT_POLICIES })
+      return
+    }
+
     if (path === '/api/auth/register' && req.method === 'POST') {
       const retryAfter = limiter.limited(clientAddress(req), Date.now())
       if (retryAfter) {
@@ -1209,7 +1225,15 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         return
       }
       readBody(req)
-        .then(async ({ username, password, email }) => {
+        .then(async ({ username, password, email, policy_acceptances: acceptances }) => {
+          const provided = Array.isArray(acceptances) ? acceptances : []
+          const missing = Object.keys(CURRENT_POLICIES).filter((key) => !provided.some((entry) => entry?.policyKey === key && entry?.version === CURRENT_POLICIES[key]))
+          if (missing.length) {
+            const error = new Error('Please accept the current MoonScribe policies before creating an account.')
+            error.code = 'POLICY_CONSENT_REQUIRED'
+            error.policies = CURRENT_POLICIES
+            throw error
+          }
           const identity = String(username || '').trim().toLowerCase()
           const normalizedEmail = String(email || '').trim().toLowerCase()
           const resolvedEmail = normalizedEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) ? normalizedEmail : (identity.includes('@') ? identity : null)
@@ -1228,6 +1252,9 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           database.prepare('INSERT INTO users (id, username, password_hash, email, created_at, role, roles, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
             userId, name, hashPassword(password), resolvedEmail, Date.now(), userCount === 0 ? 'admin' : 'user', userCount === 0 ? 'admin' : 'user', resolvedEmail ? 0 : 1
           )
+          const recordAcceptance = database.prepare('INSERT INTO policy_acceptances (user_id, policy_key, policy_version, accepted_at, source, user_agent) VALUES (?, ?, ?, ?, ?, ?)')
+          const acceptedAt = Date.now()
+          for (const key of Object.keys(CURRENT_POLICIES)) recordAcceptance.run(userId, key, CURRENT_POLICIES[key], acceptedAt, 'native-signup', String(req.headers['user-agent'] || '').slice(0, 512) || null)
           if (userCount === 0) claimLegacyRecords(database, userId)
           if (resolvedEmail) {
             const { code, expiresAt } = issueEmailCode(database, userId, 'email_verification')
@@ -1237,7 +1264,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           const { token } = issueToken(database, userId, device(req))
           json(res, 200, { token, accountId: userId, username: name, emailVerified: resolvedEmail ? false : true })
         })
-        .catch((err) => json(res, 400, { error: err.message }))
+        .catch((err) => json(res, 400, { error: err.message, ...(err.code ? { code: err.code, policies: err.policies } : {}) }))
       return
     }
 

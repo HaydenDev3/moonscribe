@@ -19,6 +19,8 @@ import SyncStatus from '../components/SyncStatus'
 import UserPill from '../components/UserPill'
 import { useContextMenu } from '../components/ContextMenu'
 import Icon from '../components/Icon'
+import { Button } from '../components/ui/button'
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '../components/ui/sheet'
 import { timeAgo } from '../utils/dates'
 import { formatWords } from '../utils/words'
 import { searchAll } from '../db/search'
@@ -336,6 +338,7 @@ export default function Dashboard() {
       return false
     }
   })
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const libraryRef = useRef<HTMLDivElement | null>(null)
   const [dashboardView, setDashboardView] = useState<'home' | 'library' | 'media' | 'journal' | 'insights'>('home')
   const currentStory = novels.find((novel) => novel.title === dashboardData.recent[0]?.novelTitle)
@@ -693,7 +696,20 @@ export default function Dashboard() {
       <main className={`dashboard-main ${sidebarCollapsed ? 'dashboard-sidebar-collapsed' : ''}`}>
       <div className={`dashboard dashboard-layout-${settings.appLayout || 'studio'}`}>
         <div className="topbar">
-          <button className="dashboard-command-launcher" onClick={openSearch}><Icon icon="fa-solid fa-magnifying-glass" /> Search MoonScribe <kbd>Ctrl K</kbd></button>
+          <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+            <SheetTrigger asChild><Button className="dashboard-mobile-menu" variant="outline" size="icon" aria-label="Open dashboard navigation"><Icon icon="fa-solid fa-bars" /></Button></SheetTrigger>
+            <SheetContent side="left" className="dashboard-mobile-sheet">
+              <SheetTitle>MoonScribe studio</SheetTitle>
+              <nav className="dashboard-mobile-nav" aria-label="Dashboard navigation">
+                {[
+                  ['home', 'Home', 'fa-solid fa-house'], ['library', 'Library', 'fa-solid fa-book-open'], ['media', 'Media', 'fa-solid fa-images'], ['journal', 'Journal', 'fa-solid fa-book'], ['insights', 'Insights', 'fa-solid fa-chart-line']
+                ].map(([key, label, icon]) => <Button key={key} variant={dashboardView === key ? 'secondary' : 'ghost'} className="justify-start" onClick={() => { setDashboardView(key as typeof dashboardView); setMobileNavOpen(false) }}><Icon icon={icon} />{label}</Button>)}
+                <Button variant="ghost" className="justify-start" onClick={() => { setNewOpen(true); setMobileNavOpen(false) }}><Icon icon="fa-solid fa-plus" />New story</Button>
+                <Button variant="ghost" className="justify-start" onClick={() => { openSettings(); setMobileNavOpen(false) }}><Icon icon="fa-solid fa-gear" />Settings</Button>
+              </nav>
+            </SheetContent>
+          </Sheet>
+          <Button variant="outline" className="dashboard-command-launcher" onClick={openSearch}><Icon icon="fa-solid fa-magnifying-glass" /> Search MoonScribe <kbd>Ctrl K</kbd></Button>
           <div className="actions-row">
             <button
               className={`button button-quiet dashboard-customize ${customizingDashboard ? 'active' : ''}`}
@@ -942,7 +958,7 @@ function HeroCard({ novel, chapter, counts, todayWords, streak, onOpen, onOpenCh
           {formatWords(todayWords)} / {formatWords(novel.goalWords || 500)} today · {counts?.chapters || 0} chapters · {streak || 0}-day streak
         </div>
         <div className="hero-actions">
-          <button className="button button-primary hero-cta" onClick={(event) => { event.stopPropagation(); onOpen() }}>Continue writing</button>
+          <Button className="button button-primary hero-cta" onClick={(event) => { event.stopPropagation(); onOpen() }}>Continue writing</Button>
           <button className="button button-quiet hero-secondary-action" onClick={(event) => { event.stopPropagation(); onOpenChapter() }}>Open chapter</button>
           <button className="button button-quiet hero-secondary-action" onClick={(event) => { event.stopPropagation(); onStartFocus() }}>Start focus</button>
         </div>

@@ -1,0 +1,3 @@
+import * as ToastPrimitive from '@radix-ui/react-toast'
+import type { ComponentPropsWithoutRef } from 'react'
+export const ToastProvider=ToastPrimitive.Provider; export const ToastViewport=({className='',...props}:ComponentPropsWithoutRef<typeof ToastPrimitive.Viewport>)=><ToastPrimitive.Viewport className={`fixed bottom-4 right-4 z-[100] grid w-[min(360px,calc(100vw-2rem))] gap-2 outline-none ${className}`} {...props}/>; export const Toast=ToastPrimitive.Root; export const ToastTitle=ToastPrimitive.Title; export const ToastDescription=ToastPrimitive.Description; export const ToastClose=ToastPrimitive.Close

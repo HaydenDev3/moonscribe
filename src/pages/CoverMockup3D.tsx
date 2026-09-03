@@ -164,7 +164,12 @@ export default function CoverMockup3D(props) {
         window: ['#fff7e7', '#b9d7ff', '#dce9ff', 4.2, 1.5, 1.45, .24],
         forest: ['#b7d89e', '#4d7891', '#58715d', 2.4, 1.55, 1.05, .38],
         night: ['#8ca8ff', '#c28cff', '#303c68', 1.7, 1.6, .72, .52],
-      }[environment] || null
+        atelier: ['#ffe0ad', '#8b6a52', '#a9825e', 3.4, 1.05, 1.1, .3],
+        greenhouse: ['#d7f3dc', '#6c9d8c', '#71937e', 3.2, 1.2, 1.15, .25],
+        observatory: ['#a9d8ff', '#667fc4', '#52668f', 2.2, 1.8, .85, .42],
+        parlour: ['#ffd0b3', '#9d6072', '#623b48', 2.6, 1.25, .95, .48],
+        cabin: ['#ffd18d', '#8b6a50', '#76543c', 3.1, .9, 1.0, .4],
+      }[environment] || ['#fff0dc', '#9fb5ff', '#90a0c5', 3.1, 1.8, 1.35, .32]
       key.color.set(lighting[0]); rim.color.set(lighting[1]); ambient.color.set(lighting[2])
       key.intensity = lighting[3]; rim.intensity = lighting[4]; ambient.intensity = lighting[5]; floor.material.opacity = lighting[6]
     }

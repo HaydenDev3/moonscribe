@@ -140,6 +140,17 @@ export default function Novel() {
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [splitOpen, setSplitOpen] = useState(false)
+  const [isMobileViewport, setIsMobileViewport] = useState(false)
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 700px)')
+    const sync = () => setIsMobileViewport(media.matches)
+    sync()
+    media.addEventListener?.('change', sync)
+    return () => media.removeEventListener?.('change', sync)
+  }, [])
+  useEffect(() => {
+    if (isMobileViewport && splitOpen) setSplitOpen(false)
+  }, [isMobileViewport, splitOpen])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [annotations, setAnnotations] = useState([])
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
@@ -1283,7 +1294,7 @@ export default function Novel() {
       >
         <div className="workspace-topbar">
             <div className="actions-row">
-              <button className="button button-quiet mobile-menu-btn" onClick={() => setSidebarOpen(true)} title="Chapters" aria-label="Open chapters">
+              <button type="button" className="button button-quiet mobile-menu-btn" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setSidebarOpen(true) }} title="Chapters" aria-label="Open chapters">
                 <Icon icon="fa-solid fa-bars" />
               </button>
             <span className="crumbs">
@@ -1492,7 +1503,7 @@ export default function Novel() {
             </div>
 
             <div className={`editor-host ${splitOpen && workspacePanes.length ? 'editor-host-split' : ''}`}>
-              <div className={`split-view ${splitOpen && workspacePanes.length ? 'active' : ''}`} style={splitOpen && workspacePanes.length ? ({ ['--pane-count' as any]: 1 + workspacePanes.length } as CSSProperties) : undefined}>
+              <div className={`split-view ${!isMobileViewport && splitOpen && workspacePanes.length ? 'active' : ''}`} style={!isMobileViewport && splitOpen && workspacePanes.length ? ({ ['--pane-count' as any]: 1 + workspacePanes.length } as CSSProperties) : undefined}>
                 <div
                   className="split-editor split-editor-primary"
                   onWheel={(e) => {
@@ -1574,7 +1585,7 @@ export default function Novel() {
                   />
                 </div>
 
-                {splitOpen && workspacePanes.map((paneChapter, paneIndex) => (
+                {!isMobileViewport && splitOpen && workspacePanes.map((paneChapter, paneIndex) => (
                   <SecondarySplitEditor
                     key={`${paneChapter.id}-${restoreTick}`}
                     chapter={paneChapter}
@@ -1713,23 +1724,6 @@ export default function Novel() {
         setHistoryOpen(false)
         toast('Brought back a previous version.')
       }} />
-      <nav className="mobile-workspace-nav" aria-label="Mobile workspace navigation">
-        <button type="button" className={activeSection === 'write' ? 'active' : ''} onClick={() => navigate(`/novel/${id}`)}>
-          <Icon icon="fa-solid fa-pen-nib" /><span>Write</span>
-        </button>
-        <button type="button" onClick={() => navigate('/dashboard')}>
-          <Icon icon="fa-solid fa-books" /><span>Library</span>
-        </button>
-        <button type="button" className="mobile-workspace-nav-primary" onClick={() => { navigate(`/novel/${id}`); setFocusMode(true) }}>
-          <Icon icon="fa-solid fa-feather-pointed" /><span>Focus</span>
-        </button>
-        <button type="button" className={activeSection === 'writing-journal' ? 'active' : ''} onClick={() => navigate(`/novel/${id}/writing-journal`)}>
-          <Icon icon="fa-solid fa-book-open" /><span>Journal</span>
-        </button>
-        <button type="button" onClick={() => setSidebarOpen(true)}>
-          <Icon icon="fa-solid fa-ellipsis" /><span>More</span>
-        </button>
-      </nav>
     </div>
   )
 }

@@ -658,14 +658,14 @@ export function sync() {
 }
 
 // ---- connect / disconnect ----
-export async function connect({ url, mode = 'login', username, password, replaceLocal = false }) {
+export async function connect({ url, mode = 'login', username, password, replaceLocal = false, policy_acceptances = [] }) {
   setStatus('connecting')
   try {
     const base = url.replace(/\/+$/, '')
     const res = await fetch(`${base}/api/auth/${mode}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await deviceHeaders()) },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password, ...(mode === 'register' ? { policy_acceptances } : {}) })
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(data.error || 'Could not connect — is the server running?')

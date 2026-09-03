@@ -1,0 +1,5 @@
+import { Command as CommandPrimitive } from 'cmdk'
+import type { ComponentPropsWithoutRef } from 'react'
+import { cn } from '../../lib/utils'
+export const Command=CommandPrimitive
+export function CommandInput({className,...props}:ComponentPropsWithoutRef<typeof CommandPrimitive.Input>){return <CommandPrimitive.Input className={cn('h-11 w-full border-b border-white/10 bg-transparent px-3 text-sm text-white outline-none placeholder:text-zinc-600',className)} {...props}/>} export function CommandList({className,...props}:ComponentPropsWithoutRef<typeof CommandPrimitive.List>){return <CommandPrimitive.List className={cn('max-h-72 overflow-auto p-1',className)} {...props}/>} export const CommandEmpty=CommandPrimitive.Empty; export const CommandGroup=CommandPrimitive.Group; export function CommandItem({className,...props}:ComponentPropsWithoutRef<typeof CommandPrimitive.Item>){return <CommandPrimitive.Item className={cn('flex cursor-pointer items-center rounded-lg px-3 py-2 text-xs text-zinc-300 aria-selected:bg-white/[.08] aria-selected:text-white',className)} {...props}/>} 

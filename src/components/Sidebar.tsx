@@ -13,6 +13,7 @@ import ProfileAvatar from './ProfileAvatar'
 import Modal from './Modal'
 import { getWorkspacePreferences, updateWorkspacePreferences, resetWorkspacePreferences } from '../db/workspacePreferences'
 import { WORKSPACE_REGISTRY } from '../workspaces/registry'
+import { updateNovel } from '../db/novels'
 
 function readDragPayload(event) {
   const typed = event.dataTransfer.getData('application/x-moonscribe-item')
@@ -112,12 +113,18 @@ export default function Sidebar({
   const [folderSettings, setFolderSettings] = useState(null)
   const [folderSettingsTab, setFolderSettingsTab] = useState('overview')
   const [query, setQuery] = useState('')
+  const [chapterSort, setChapterSort] = useState<'order' | 'number' | 'alpha'>(() => novel?.layout?.chapterSort || 'order')
   const [showAddMenu, setShowAddMenu] = useState(false)
   const [draggingId, setDraggingId] = useState(null)
   const [dropTarget, setDropTarget] = useState(null)
   const [workspacePrefs, setWorkspacePrefs] = useState(null)
   const [workspaceManagerOpen, setWorkspaceManagerOpen] = useState(false)
   const addBtnRef = useRef(null)
+
+  useEffect(() => {
+    const saved = novel?.layout?.chapterSort
+    if (saved === 'order' || saved === 'number' || saved === 'alpha') setChapterSort(saved)
+  }, [novel?.id, novel?.layout?.chapterSort])
 
   useEffect(() => { if (novel?.id) getWorkspacePreferences(novel.id).then(setWorkspacePrefs) }, [novel?.id])
   const toggleWorkspace = async (key) => {
@@ -146,12 +153,24 @@ export default function Sidebar({
     return text.includes(query.trim().toLowerCase())
   })
 
-  const { numbers, tree } = useMemo(
-    () => ({ numbers: computeNumbers(chapters), tree: buildTree(visibleChapters) }),
-    [chapters, visibleChapters]
-  )
+  const numbers = useMemo(() => computeNumbers(chapters), [chapters])
+  const sortedVisibleChapters = useMemo(() => {
+    const next = [...visibleChapters]
+    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+    next.sort((a, b) => {
+      if (chapterSort === 'alpha') return collator.compare(a.title || titleFor(a, numbers), b.title || titleFor(b, numbers))
+      if (chapterSort === 'number') {
+        const an = numbers.get(a.id)?.number
+        const bn = numbers.get(b.id)?.number
+        return collator.compare(String(an ?? ''), String(bn ?? ''))
+      }
+      return (a.order || 0) - (b.order || 0)
+    })
+    return next.map((chapter, index) => ({ ...chapter, order: index + 1 }))
+  }, [visibleChapters, chapterSort, numbers])
+  const tree = useMemo(() => buildTree(sortedVisibleChapters), [sortedVisibleChapters])
 
-  const flat = visibleChapters
+  const flat = sortedVisibleChapters
   const canEdit = !novel?.sharedRole || novel.sharedRole === 'editor'
   const collaboratorMap = useMemo(() => {
     const byChapter = new Map()
@@ -466,6 +485,19 @@ export default function Sidebar({
               >
                 <Icon icon="fa-solid fa-table-list" />
               </button>
+              <button
+                type="button"
+                className="sidebar-icon-btn sidebar-sort-button"
+                title={`Sort: ${chapterSort === 'order' ? 'Manuscript order' : chapterSort === 'number' ? 'Chapter number' : 'A–Z by title'}. Click for next sort.`}
+                aria-label={`Sort chapters by ${chapterSort === 'order' ? 'manuscript order' : chapterSort === 'number' ? 'chapter number' : 'title'}`}
+                onClick={() => {
+                  const value = chapterSort === 'order' ? 'number' : chapterSort === 'number' ? 'alpha' : 'order'
+                  setChapterSort(value)
+                  void updateNovel(novel.id, { layout: { ...(novel.layout || {}), chapterSort: value } })
+                }}
+              >
+                <Icon icon={chapterSort === 'alpha' ? 'fa-solid fa-arrow-down-a-z' : chapterSort === 'number' ? 'fa-solid fa-arrow-down-1-9' : 'fa-solid fa-arrow-down-wide-short'} />
+              </button>
               <div className="binder-add-wrap">
                 <button
                   ref={addBtnRef}
@@ -515,7 +547,6 @@ export default function Sidebar({
                   </button>
                 )}
               </div>
-
               {/* Chapters and folders are separate trees. A folder is a filing
                   container, never an outline chapter or Act. */}
               {!!folders.length && <div className="binder-folders-section binder-folders-primary">
@@ -585,12 +616,13 @@ export default function Sidebar({
                 (() => {
                   const isDesigner = n.to === 'design'
                   const designerLive = isDesigner && collaboratorMap.designerCount > 0
+                  const chapterLive = !!currentId && (collaboratorMap.byChapter.get(currentId) || []).length > 0
                   return (
                     <NavLink
                       key={n.label}
                       to={itemPath(novel.id, n)}
                       end={n.end}
-                      className={({ isActive }) => `nav-item${isActive ? ' active' : ''}${designerLive ? ' has-live-presence' : ''}`}
+                      className={({ isActive }) => `nav-item${isActive ? ' active' : ''}${designerLive || chapterLive ? ' has-live-presence' : ''}`}
                       onClick={onClose}
                       onContextMenu={(e) => {
                         e.preventDefault()
@@ -606,8 +638,8 @@ export default function Sidebar({
                     >
                       <Icon icon={n.icon} />
                       <span className="nav-item-label">{n.label}</span>
-                      {designerLive && (
-                        <span className="nav-item-live-indicator" aria-hidden="true" title="Collaborator active in Designer" />
+                      {(designerLive || chapterLive) && (
+                        <span className="nav-item-live-indicator" aria-hidden="true" title={designerLive ? 'Collaborator active in Designer' : 'Collaborator active in this chapter'} />
                       )}
                     </NavLink>
                   )

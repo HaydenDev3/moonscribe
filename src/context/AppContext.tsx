@@ -769,8 +769,8 @@ export function AppProvider({ children }) {
     }
   }, [toast])
 
-  const connectSync = useCallback(async ({ url, mode, username, password, replaceLocal = false }) => {
-    const res = await syncEngine.connect({ url, mode, username, password, replaceLocal })
+  const connectSync = useCallback(async ({ url, mode, username, password, replaceLocal = false, policy_acceptances = [] }) => {
+    const res = await syncEngine.connect({ url, mode, username, password, replaceLocal, policy_acceptances })
     const cfg = await syncEngine.getConfig()
     setSync({ server: cfg.server, username: cfg.username, status: res.ok ? 'synced' : 'error', discordAvatar: null, provider: 'email' })
     return res
