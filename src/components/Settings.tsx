@@ -153,6 +153,9 @@ export default function Settings() {
                 <div><div className="settings-row-title">Version 1.1.3</div><div className="settings-row-sub">September 2026 — Print proofing and premium studio refinements</div><div className="settings-row-detail">Improved print proof navigation and hierarchy, optional chapter titles and ornaments, entity highlights in print, additional room environments and device previews, responsive mobile workspace cleanup, and faster production builds.</div></div>
               </div>
               <div className="settings-row" style={{ marginTop: 'var(--space-5)' }}>
+                <div><div className="settings-row-title">Version 1.1.2</div><div className="settings-row-sub">Released 31 August 2026 — Account Centre Polish</div><div className="settings-row-detail">Circular profile imagery, live account and security status, clearer account actions, improved profile banners, and a more reliable shared browser-test fixture.</div></div>
+              </div>
+              <div className="settings-row" style={{ marginTop: 'var(--space-5)' }}>
                 <div><div className="settings-row-title">Version 1.1.1</div><div className="settings-row-sub">Released 28 August 2026 — Quality-of-life update</div></div>
               </div>
               <div className="settings-row">
