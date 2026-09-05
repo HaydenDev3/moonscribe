@@ -27,3 +27,13 @@
 @keyframes digest-float { 50% { transform: translateY(-4px) rotate(-4deg); } }
 @keyframes digest-glow { 50% { transform: translate(-18px, 14px) scale(1.12); opacity: .7; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; scroll-behavior: auto !important; } }
+/* The editor's phone preview is a narrow container inside a desktop viewport.
+   These rules keep the shared public renderer genuinely mobile in that frame. */
+.author-site-compact { overflow-x: hidden; }
+.author-site-compact #books > div > div { display: flex !important; overflow-x: auto; }
+.author-site-compact #books article { width: 82% !important; max-width: 300px !important; }
+.author-site-compact #about > div { display: block !important; }
+.author-site-compact #about > div > * { margin-bottom: 1.5rem; }
+.author-site-compact #about ul { border-left: 0 !important; border-top: 1px solid var(--line); padding: 1.25rem 0 0; }
+.author-site-compact h1 { font-size: 3.5rem !important; }
+.author-site-compact section > div { padding-left: 1.25rem; padding-right: 1.25rem; }

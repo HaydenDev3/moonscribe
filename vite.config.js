@@ -14,8 +14,10 @@ export default defineConfig({
         name: 'MoonScribe',
         short_name: 'MoonScribe',
         description: 'A quiet, private place to write — made for two.',
-        theme_color: '#7BA3C9',
-        background_color: '#F9F6F1',
+        // Match the reference-led mobile shell during launch/install. The
+        // in-app theme system still controls the surface after hydration.
+        theme_color: '#0B0B0F',
+        background_color: '#0B0B0F',
         display: 'standalone',
         start_url: '/',
         icons: [

@@ -91,7 +91,7 @@ export default function UserPill({ onConnectClick }) {
         <span className="user-pill-avatar">
           {isDiscord
             ? <ProfileAvatar src={syncDiscordAvatar} name={syncUsername} className="user-pill-img" />
-            : <span className="user-pill-initials">{initials}</span>
+            : <span className="user-pill-initials" aria-hidden="true"><Icon icon="fa-solid fa-user" /></span>
           }
           <span className="user-pill-dot" style={{ background: statusColor }} aria-label={`Sync status: ${syncStatus || 'unknown'}`} />
         </span>
@@ -106,7 +106,7 @@ export default function UserPill({ onConnectClick }) {
             <div className="user-pill-header-avatar">
               {isDiscord
                 ? <ProfileAvatar src={syncDiscordAvatar} name={syncUsername} className="user-pill-header-img" />
-                : <span className="user-pill-header-initials">{initials}</span>
+                : <span className="user-pill-header-initials" aria-hidden="true"><Icon icon="fa-solid fa-user" /></span>
               }
             </div>
             <div>

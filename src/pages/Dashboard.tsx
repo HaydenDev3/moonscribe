@@ -16,6 +16,7 @@ import Modal from '../components/Modal'
 import ConfirmDialog from '../components/ConfirmDialog'
 import AuthModal from '../components/AuthModal'
 import SyncStatus from '../components/SyncStatus'
+import NotificationBell from '../components/NotificationBell'
 import UserPill from '../components/UserPill'
 import { useContextMenu } from '../components/ContextMenu'
 import Icon from '../components/Icon'
@@ -25,7 +26,7 @@ import { timeAgo } from '../utils/dates'
 import { formatWords } from '../utils/words'
 import { searchAll } from '../db/search'
 import { acceptShareInvite } from '../sync/engine'
-import DashboardHome from '../dashboard/DashboardHome'
+import DashboardHome, { MobileDashboardHeader } from '../dashboard/DashboardHome'
 import ProfileAvatar from '../components/ProfileAvatar'
 import GlobalMedia from '../dashboard/GlobalMedia'
 import AdSlot from '../components/AdSlot'
@@ -340,7 +341,10 @@ export default function Dashboard() {
   })
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const libraryRef = useRef<HTMLDivElement | null>(null)
-  const [dashboardView, setDashboardView] = useState<'home' | 'library' | 'media' | 'journal' | 'insights'>('home')
+  const [dashboardView, setDashboardView] = useState<'home' | 'library' | 'media' | 'journal' | 'insights'>(() => {
+    const view = new URLSearchParams(window.location.search).get('view')
+    return view === 'library' || view === 'media' || view === 'journal' || view === 'insights' ? view : 'home'
+  })
   const currentStory = novels.find((novel) => novel.title === dashboardData.recent[0]?.novelTitle)
   const currentStoryCover = useBlobUrl(currentStory?.cover)
   const dashboardWidgetsKey = `dashboardWidgets:${syncUsername || 'local'}`
@@ -677,6 +681,7 @@ export default function Dashboard() {
         onMedia={() => setDashboardView('media')}
         onJournal={() => setDashboardView('journal')}
         onInsights={() => setDashboardView('insights')}
+        onWebsite={() => navigate('/author-website')}
         onSearch={openSearch}
         onNew={() => setNewOpen(true)}
         onOpenChapter={(chapter) => navigate(`/novel/${chapter.novelId}`, { state: { chapterId: chapter.id } })}
@@ -698,13 +703,13 @@ export default function Dashboard() {
         <div className="topbar">
           <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
             <SheetTrigger asChild><Button className="dashboard-mobile-menu" variant="outline" size="icon" aria-label="Open dashboard navigation"><Icon icon="fa-solid fa-bars" /></Button></SheetTrigger>
-            <SheetContent side="left" className="dashboard-mobile-sheet">
+            <SheetContent side="left" className="dashboard-mobile-sheet animate-in slide-in-from-left duration-300 ease-out">
               <SheetTitle>MoonScribe studio</SheetTitle>
               <nav className="dashboard-mobile-nav" aria-label="Dashboard navigation">
                 {[
                   ['home', 'Home', 'fa-solid fa-house'], ['library', 'Library', 'fa-solid fa-book-open'], ['media', 'Media', 'fa-solid fa-images'], ['journal', 'Journal', 'fa-solid fa-book'], ['insights', 'Insights', 'fa-solid fa-chart-line']
                 ].map(([key, label, icon]) => <Button key={key} variant={dashboardView === key ? 'secondary' : 'ghost'} className="justify-start" onClick={() => { setDashboardView(key as typeof dashboardView); setMobileNavOpen(false) }}><Icon icon={icon} />{label}</Button>)}
-                <Button variant="ghost" className="justify-start" onClick={() => { setNewOpen(true); setMobileNavOpen(false) }}><Icon icon="fa-solid fa-plus" />New story</Button>
+                <Button variant="ghost" className="justify-start" onClick={() => { navigate('/author-website'); setMobileNavOpen(false) }}><Icon icon="fa-solid fa-globe" />Author website</Button><Button variant="ghost" className="justify-start" onClick={() => { setNewOpen(true); setMobileNavOpen(false) }}><Icon icon="fa-solid fa-plus" />New story</Button>
                 <Button variant="ghost" className="justify-start" onClick={() => { openSettings(); setMobileNavOpen(false) }}><Icon icon="fa-solid fa-gear" />Settings</Button>
               </nav>
             </SheetContent>
@@ -719,6 +724,7 @@ export default function Dashboard() {
               <Icon icon="fa-solid fa-sliders" /> {customizingDashboard ? 'Done' : 'Customize'}
             </button>
             <SyncStatus onClick={() => void syncNow()} />
+            <NotificationBell />
             <UserPill onConnectClick={() => setConnectOpen(true)} />
           </div>
         </div>
@@ -728,12 +734,16 @@ export default function Dashboard() {
           novels={novels}
           username={syncUsername}
           syncStatus={syncStatus}
+          syncAvatar={syncDiscordAvatar}
           onCreate={() => setNewOpen(true)}
           onLibrary={() => setDashboardView('library')}
           onSearch={openSearch}
+          onMenu={() => setMobileNavOpen(true)}
+          onAccount={openSettings}
         />}
 
         {dashboardView === 'library' && <section className="dashboard-library" ref={libraryRef}>
+          <MobileDashboardHeader username={syncUsername} syncStatus={syncStatus} syncAvatar={syncDiscordAvatar} onMenu={() => setMobileNavOpen(true)} onAccount={openSettings} />
         {novels.length === 0 ? (
           <section className="dashboard-empty-view">
             <span className="dashboard-section-label">Library</span>
@@ -908,12 +918,19 @@ export default function Dashboard() {
         </section>
         }
         {dashboardView === 'media' && <GlobalMedia novels={novels} onOpenNovel={(novelId) => navigate(`/novel/${novelId}/media`)} />}
-        {dashboardView === 'journal' && <DashboardJournal novel={resumeNovel} analytics={analytics} onOpen={() => resumeNovel && navigate(`/novel/${resumeNovel.id}/writing-journal`)} />}
+        {dashboardView === 'journal' && <><MobileDashboardHeader username={syncUsername} syncStatus={syncStatus} syncAvatar={syncDiscordAvatar} onMenu={() => setMobileNavOpen(true)} onAccount={openSettings} /><DashboardJournal novel={resumeNovel} analytics={analytics} onOpen={() => resumeNovel && navigate(`/novel/${resumeNovel.id}/writing-journal`)} /></>}
         {dashboardView === 'insights' && <DashboardInsights analytics={analytics} data={dashboardData} onOpen={() => resumeNovel && navigate(`/novel/${resumeNovel.id}/analytics`)} />}
         </div>
         <AdSlot placement="dashboard-secondary" />
       </div>
       </main>
+
+      <MobileDashboardNav
+        view={dashboardView}
+        onNavigate={setDashboardView}
+        onNew={() => setNewOpen(true)}
+        onSettings={openSettings}
+      />
 
       <NewNovelModal open={newOpen} onClose={() => setNewOpen(false)} onCreate={handleCreate} />
       <RenameModal novel={editNovel} onClose={() => setEditNovel(null)} onSave={handleRename} />
@@ -929,6 +946,22 @@ export default function Dashboard() {
       <AuthModal open={connectOpen} onClose={() => setConnectOpen(false)} />
     </div>
   )
+}
+
+type MobileDashboardView = 'home' | 'library' | 'media' | 'journal' | 'insights'
+function MobileDashboardNav({ view, onNavigate, onNew, onSettings }: { view: MobileDashboardView; onNavigate: (view: MobileDashboardView) => void; onNew: () => void; onSettings: () => void }) {
+  const items = [
+    ['home', 'Home', 'fa-solid fa-house'],
+    ['library', 'Library', 'fa-solid fa-book-open'],
+    ['journal', 'Journal', 'fa-solid fa-feather-pointed'],
+    ['insights', 'Insights', 'fa-solid fa-chart-line'],
+  ] as const
+  return <nav className="mobile-dashboard-nav flex items-end justify-around gap-1 border-t border-white/10 bg-[#0b0b0f]/95 px-2 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl" aria-label="Mobile dashboard navigation">
+    {items.slice(0, 2).map(([key, label, icon]) => <button key={key} aria-current={view === key ? 'page' : undefined} className={`grid min-h-11 min-w-11 place-items-center gap-1 rounded-lg px-2 py-1 text-[.62rem] transition-colors focus-visible:outline-2 focus-visible:outline-[#c79b53] ${view === key ? 'active text-[#c79b53]' : 'text-[#858188] hover:text-[#c79b53]'}`} onClick={() => onNavigate(key)}><Icon icon={icon} /><span>{label}</span></button>)}
+    <button className="mobile-dashboard-create grid h-12 w-12 min-w-12 place-items-center rounded-full border-2 border-[#c79b53] bg-[#141218] text-[#c79b53] shadow-[0_5px_20px_rgba(0,0,0,.45)] focus-visible:outline-2 focus-visible:outline-[#f1d28a]" onClick={onNew} aria-label="Create new"><Icon icon="fa-solid fa-plus" /></button>
+    {items.slice(2, 3).map(([key, label, icon]) => <button key={key} aria-current={view === key ? 'page' : undefined} className={`grid min-h-11 min-w-11 place-items-center gap-1 rounded-lg px-2 py-1 text-[.62rem] transition-colors focus-visible:outline-2 focus-visible:outline-[#c79b53] ${view === key ? 'active text-[#c79b53]' : 'text-[#858188] hover:text-[#c79b53]'}`} onClick={() => onNavigate(key)}><Icon icon={icon} /><span>{label}</span></button>)}
+    <button className="grid min-h-11 min-w-11 place-items-center gap-1 rounded-lg px-2 py-1 text-[.62rem] text-[#858188] transition-colors hover:text-[#c79b53] focus-visible:outline-2 focus-visible:outline-[#c79b53]" onClick={onSettings}><Icon icon="fa-solid fa-ellipsis" /><span>More</span></button>
+  </nav>
 }
 
 function DashboardSkeleton() {
@@ -967,7 +1000,7 @@ function HeroCard({ novel, chapter, counts, todayWords, streak, onOpen, onOpenCh
   )
 }
 
-function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLibrary, onMedia, onJournal, onInsights, onSearch, onNew, onOpenChapter, onSettings, onSignOut, onAdmin, syncUsername, syncStatus, syncAvatar, syncProvider, onSync, resumeChapter, recent, currentStoryCover, showCurrentStory = true }) {
+function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLibrary, onMedia, onJournal, onInsights, onWebsite, onSearch, onNew, onOpenChapter, onSettings, onSignOut, onAdmin, syncUsername, syncStatus, syncAvatar, syncProvider, onSync, resumeChapter, recent, currentStoryCover, showCurrentStory = true }) {
   const { openContextMenu } = useContextMenu()
   const openProfileMenu = (event) => {
     event.preventDefault()
@@ -999,6 +1032,7 @@ function DashboardSidebar({ collapsed, onToggle, view, onHome, onContinue, onLib
         {item('media', 'Media Library', 'fa-regular fa-images', onMedia)}
         {item('journal', 'Writing journal', 'fa-solid fa-feather-pointed', onJournal)}
         {item('insights', 'Insights', 'fa-solid fa-chart-line', onInsights)}
+        {item('website', 'Author website', 'fa-solid fa-globe', onWebsite)}
         <button className="dashboard-sidebar-item" onClick={onSearch} title={collapsed ? 'Search MoonScribe' : undefined}><Icon icon="fa-solid fa-magnifying-glass" /><span className="dashboard-sidebar-label">Search</span></button>
       </nav>
       {showCurrentStory && (
@@ -1049,11 +1083,26 @@ function RecentTouched({ chapters, onOpenChapter }) {
 }
 
 function DashboardJournal({ novel, analytics, onOpen }) {
-  return <section className="dashboard-empty-view">
-    <span className="dashboard-section-label">Writing journal</span>
-    <h1>Your writing, remembered.</h1>
-    <p>{analytics.streak ? `${analytics.streak} days in your current rhythm.` : 'Start a writing session and MoonScribe will keep the rhythm here.'}</p>
-    {novel && <button className="button button-primary" onClick={onOpen}>Open {novel.title}'s journal</button>}
+  return <section className="dashboard-empty-view dashboard-journal-home">
+    <div className="dashboard-journal-hero">
+      <span className="dashboard-section-label">Writing journal</span>
+      <div className="dashboard-journal-title-row">
+        <div>
+          <h1>Your writing, remembered.</h1>
+          <p>{analytics.streak ? `${analytics.streak} days in your current rhythm.` : 'Start a writing session and MoonScribe will keep the rhythm here.'}</p>
+        </div>
+        <span className="dashboard-journal-mark" aria-hidden="true"><Icon icon="fa-solid fa-feather-pointed" /></span>
+      </div>
+    </div>
+    <div className="dashboard-journal-stats" aria-label="Writing rhythm">
+      <div><strong>{analytics.streak || 0}</strong><span>day rhythm</span></div>
+      <div><strong>{analytics.monthlyWords || 0}</strong><span>words this month</span></div>
+    </div>
+    <div className="dashboard-journal-prompt">
+      <Icon icon="fa-solid fa-sparkles" />
+      <div><strong>A quiet place for the pages between pages.</strong><span>Keep a thought, a turning point, or a note for your future self.</span></div>
+    </div>
+    {novel && <button className="button button-primary dashboard-journal-cta" onClick={onOpen}><span>Open {novel.title}'s journal</span><Icon icon="fa-solid fa-arrow-right" /></button>}
   </section>
 }
 
@@ -1203,7 +1252,7 @@ function NewNovelModal({ open, onClose, onCreate }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Begin a novel" width={520}>
+    <Modal open={open} onClose={onClose} title="Begin a novel" width={520} className="new-novel-modal">
       <div className="field">
         <label>Title</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="A title, or none yet…" autoFocus onKeyDown={(e) => e.key === 'Enter' && submit()} />

@@ -18,6 +18,7 @@ const GROUPS = [
   { key: 'relationships', label: 'Relationships', icon: 'fa-regular fa-heart' },
   { key: 'novels', label: 'Novels', icon: 'fa-solid fa-book' }
   ,{ key: 'media', label: 'Media', icon: 'fa-regular fa-images' }
+  ,{ key: 'website', label: 'Author Website', icon: 'fa-solid fa-globe' }
   ,{ key: 'settings', label: 'Settings', icon: 'fa-solid fa-sliders' }
 ]
 const SETTING_RESULTS = [
@@ -73,6 +74,7 @@ export default function CommandPalette() {
       }
       const res = await searchAll(query)
       res.settings = SETTING_RESULTS.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(query.trim().toLowerCase()))
+      res.website = 'author website'.includes(query.trim().toLowerCase()) ? [{ id: 'author-website', title: 'Author Website', subtitle: 'Design and publish your public author profile' }] : []
       if (cancelled) return
       setResults(res)
       const arr = []
@@ -109,6 +111,7 @@ export default function CommandPalette() {
         navigate(`/novel/${r.novelId}/media`)
         return
       }
+      if (group === 'website') { navigate('/author-website'); return }
       navigate(`/novel/${r.novelId}/${SECTION_FOR[group]}`)
     },
     [navigate, openSettings]

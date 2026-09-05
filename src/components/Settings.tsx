@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { useApp } from '../context/AppContext'
 import { exportBackup, importBackup, wipeEverything } from '../db/backup'
@@ -49,6 +50,7 @@ const CATEGORIES = [
 ]
 
 export default function Settings() {
+  const navigate = useNavigate()
   const app = useApp()
   const { settings, updateSettings, refreshNovels, toast, settingsOpen, openSettings, closeSettings,
     appLock, enableAppLock, updateAppLock, disableAppLock, lockNow,
@@ -86,7 +88,7 @@ export default function Settings() {
 
   return createPortal(
     <div className="settings-overlay" onMouseDown={(e) => e.target === e.currentTarget && closeSettings()}>
-      <div className="settings-shell" role="dialog" aria-modal="true" aria-label="Settings">
+      <div className={`settings-shell mobile-settings-${cat === 'overview' ? 'overview' : 'detail'}`} role="dialog" aria-modal="true" aria-label="Settings">
         <nav className="settings-rail">
           <div className="settings-profile"><span className="settings-profile-mark"><Icon icon="fa-solid fa-moon" /></span><span><strong>MoonScribe</strong><small>Make the studio yours</small></span></div>
           <label className="settings-search"><Icon icon="fa-solid fa-magnifying-glass" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
@@ -102,9 +104,10 @@ export default function Settings() {
           </div>
         </nav>
 
-        <div className="settings-content">
-          <div className="settings-content-chrome"><span className="settings-content-kicker">MoonScribe studio</span><span className="settings-content-title">Preferences</span></div>
-          <button className="settings-close" onClick={closeSettings} aria-label="Close settings">
+        <div className="settings-content min-w-0 max-md:bg-[#090a0d] max-md:px-4 max-md:pb-[calc(6rem+env(safe-area-inset-bottom))]">
+          <div className="settings-content-chrome max-md:mb-5 max-md:border-0 max-md:pb-0"><span className="settings-content-kicker">MoonScribe studio</span><span className="settings-content-title">Preferences</span></div>
+          {cat !== 'overview' && <button className="settings-mobile-back mb-4 inline-flex min-h-11 items-center gap-2 rounded-lg px-2 text-sm text-[#c79b53] transition-transform duration-200 hover:-translate-x-1 hover:bg-white/10 active:scale-95 focus-visible:outline-2 focus-visible:outline-[#c79b53]" onClick={() => setCat('overview')} aria-label="Back to settings"><Icon icon="fa-solid fa-arrow-left" /> Settings</button>}
+          <button className="settings-close grid min-h-11 min-w-11 place-items-center rounded-full text-[#c79b53] hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#c79b53]" onClick={closeSettings} aria-label="Close settings">
             <Icon icon="fa-solid fa-xmark" />
           </button>
 
@@ -150,7 +153,10 @@ export default function Settings() {
               </div>
               <div className="settings-section-card about-feature-card"><div className="settings-section-head"><span className="settings-section-icon"><Icon icon="fa-solid fa-feather-pointed" /></span><div><strong>Everything your story needs</strong><small>Draft chapters, remember your world, review together, and carry the book through publication.</small></div></div><div className="about-feature-list"><span><Icon icon="fa-solid fa-cloud-arrow-down" /> Offline by default</span><span><Icon icon="fa-solid fa-shield-halved" /> Your manuscript stays yours</span><span><Icon icon="fa-solid fa-book-open" /> Built for the whole book</span></div></div>
               <div className="settings-row" style={{ marginTop: 'var(--space-5)' }}>
-                <div><div className="settings-row-title">Version 1.1.3</div><div className="settings-row-sub">September 2026 — Print proofing and premium studio refinements</div><div className="settings-row-detail">Improved print proof navigation and hierarchy, optional chapter titles and ornaments, entity highlights in print, additional room environments and device previews, responsive mobile workspace cleanup, and faster production builds.</div></div>
+                <div><div className="settings-row-title">Version 1.1.4</div><div className="settings-row-sub">5 September 2026 — Author websites and responsive studio polish</div><div className="settings-row-detail">Free author profile websites with themes, selected books, public About pages, draft and publish controls, static export, improved mobile dashboard navigation, and contextual editor scroll-rail previews.</div></div>
+              </div>
+              <div className="settings-row" style={{ marginTop: 'var(--space-5)' }}>
+                <div><div className="settings-row-title">Version 1.1.3</div><div className="settings-row-sub">Released September 2026 — Print proofing and premium studio refinements</div><div className="settings-row-detail">Improved print proof navigation and hierarchy, optional chapter titles and ornaments, entity highlights in print, additional room environments and device previews, responsive mobile workspace cleanup, and faster production builds.</div></div>
               </div>
               <div className="settings-row" style={{ marginTop: 'var(--space-5)' }}>
                 <div><div className="settings-row-title">Version 1.1.2</div><div className="settings-row-sub">Released 31 August 2026 — Account Centre Polish</div><div className="settings-row-detail">Circular profile imagery, live account and security status, clearer account actions, improved profile banners, and a more reliable shared browser-test fixture.</div></div>
@@ -167,6 +173,13 @@ export default function Settings() {
             </section>
           )}
         </div>
+        <nav className="settings-mobile-nav flex items-end justify-around gap-1 border-t border-white/10 bg-[#0b0b0f]/95 px-2 py-2 pb-[calc(.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl" aria-label="Mobile settings navigation">
+          <button className="grid min-h-11 min-w-11 place-items-center gap-1 text-[.62rem] text-[#858188] focus-visible:outline-2 focus-visible:outline-[#c79b53]" type="button" onClick={() => { closeSettings(); navigate('/dashboard') }}><Icon icon="fa-solid fa-house" /><span>Home</span></button>
+          <button className="grid min-h-11 min-w-11 place-items-center gap-1 text-[.62rem] text-[#858188] focus-visible:outline-2 focus-visible:outline-[#c79b53]" type="button" onClick={() => { closeSettings(); navigate('/dashboard?view=library') }}><Icon icon="fa-solid fa-book-open" /><span>Library</span></button>
+          <button className="grid h-12 w-12 min-w-12 place-items-center rounded-full border-2 border-[#c79b53] bg-[#141218] text-[#c79b53] focus-visible:outline-2 focus-visible:outline-[#f1d28a]" type="button" onClick={closeSettings} aria-label="Close settings"><Icon icon="fa-solid fa-plus" /></button>
+          <button className="grid min-h-11 min-w-11 place-items-center gap-1 text-[#858188] focus-visible:outline-2 focus-visible:outline-[#c79b53]" type="button" onClick={() => { closeSettings(); navigate('/dashboard?view=journal') }}><Icon icon="fa-solid fa-feather-pointed" /><span>Journal</span></button>
+          <button aria-current="page" className="grid min-h-11 min-w-11 place-items-center gap-1 text-[#c79b53] focus-visible:outline-2 focus-visible:outline-[#c79b53]" type="button" onClick={closeSettings}><Icon icon="fa-solid fa-ellipsis" /><span>More</span></button>
+        </nav>
       </div>
 
     </div>,
@@ -203,16 +216,26 @@ function SettingsSearchResults({ query, settings, updateSettings, onOpenCategory
 }
 
 function SettingsOverview({ onOpenCategory }) {
+  const { syncUsername, syncDiscordAvatar, openAccountCentre } = useApp()
   const shortcuts = [
     ['appearance', 'Appearance', 'Theme, typography and atmosphere', 'fa-solid fa-palette'],
     ['editor', 'Editor', 'Typography, writing comfort and focus', 'fa-solid fa-pen-nib'],
+    ['sounds', 'Sounds & feedback', 'Ambient sound and interaction feedback', 'fa-solid fa-volume-high'],
+    ['notifications', 'Notifications', 'Reminders, comments and collaboration', 'fa-regular fa-bell'],
     ['dashboard', 'Dashboard', 'Home, library and sidebar preferences', 'fa-solid fa-house'],
+    ['privacy', 'Data & sync', 'Import, export and local storage', 'fa-solid fa-database'],
+    ['backups', 'Backups', 'Protect and restore your writing', 'fa-solid fa-box-archive'],
+    ['lock', 'Account & security', 'Lock, sessions and privacy controls', 'fa-solid fa-lock'],
+    ['accessibility', 'Accessibility', 'Contrast, motion and keyboard comfort', 'fa-solid fa-universal-access'],
   ]
   return (
     <section className="settings-panel">
-      <div className="settings-panel-kicker">General</div>
-      <h2>Settings, made for your way of writing.</h2>
-      <p className="muted">Account preferences follow your MoonScribe identity. Device-specific controls stay local to this browser.</p>
+      <div className="settings-panel-kicker">Your studio</div>
+      <h2>Settings</h2>
+      <button className="settings-mobile-profile-card flex min-h-16 w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[.025] p-3 text-left text-[#eee8df]" type="button" onClick={() => openAccountCentre?.()}>
+        <span className="settings-mobile-profile-avatar grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-full border border-[#c79b53] bg-[#1b1a22] text-[#c79b53]">{syncDiscordAvatar ? <img className="h-full w-full object-cover" src={syncDiscordAvatar} alt="" /> : <Icon icon="fa-solid fa-moon" />}</span>
+        <span className="min-w-0 flex-1"><strong className="block truncate text-sm">{syncUsername || 'Local writer'}</strong><small className="mt-1 block text-xs text-[#858188]">Free plan</small></span><Icon icon="fa-solid fa-chevron-right" className="text-[#858188]" />
+      </button>
       <div className="settings-overview-grid">
         {shortcuts.map(([key, title, description, icon]) => (
           <button key={key} className="settings-overview-card" onClick={() => onOpenCategory(key)}>
@@ -364,7 +387,7 @@ function SoundsFeedback({ settings, updateSettings }) {
 
 function SoundLevel({ label, value, onChange }) {
   const current = Number(value) || 0
-  return <div className="settings-row"><div><div className="settings-row-title">{label}</div></div><label className="settings-volume-control"><input className="settings-volume" type="range" min="0" max="100" value={current} onChange={(event) => onChange(Number(event.target.value))} aria-label={label} /><span>{current}%</span></label></div>
+  return <div className="settings-row settings-volume-row flex-wrap gap-3"><div className="min-w-0 flex-1"><div className="settings-row-title">{label}</div></div><label className="settings-volume-control flex min-w-0 flex-[1_1_240px] items-center gap-3"><input className="settings-volume w-full min-w-0 accent-[#c79b53]" style={{ '--volume-progress': `${current}%` } as React.CSSProperties} type="range" min="0" max="100" value={current} onChange={(event) => onChange(Number(event.target.value))} aria-label={label} /><span className="w-12 shrink-0 text-right text-sm text-[#c79b53]">{current}%</span></label></div>
 }
 
 function NotificationPreferences({ settings, updateSettings }) {
@@ -417,7 +440,7 @@ function DashboardPreferences({ settings, updateSettings }) {
         <div className="settings-section-card"><div className="settings-subheading">Home</div><div className="settings-row"><div><div className="settings-row-title">Hero style</div><div className="settings-row-sub">Size of your continue-writing card.</div></div><Select ariaLabel="Hero style" width={140} value={settings.dashboardHeroStyle || 'large'} onChange={(value) => updateSettings({ dashboardHeroStyle: value })} options={[{ value: 'large', label: 'Large' }, { value: 'compact', label: 'Compact' }]} /></div><div className="settings-row"><div><div className="settings-row-title">Show greeting</div></div><Toggle checked={settings.dashboardShowGreeting !== false} onChange={(value) => updateSettings({ dashboardShowGreeting: value })} /></div><div className="settings-row"><div><div className="settings-row-title">Show writing streak</div></div><Toggle checked={settings.dashboardShowStreak !== false} onChange={(value) => updateSettings({ dashboardShowStreak: value })} /></div><div className="settings-row"><div><div className="settings-row-title">Show recent chapters</div></div><Toggle checked={settings.dashboardShowRecent !== false} onChange={(value) => updateSettings({ dashboardShowRecent: value })} /></div></div>
         <div className="settings-section-card"><div className="settings-subheading">Sidebar</div><div className="settings-row"><div><div className="settings-row-title">Default state</div><div className="settings-row-sub">New dashboard sessions begin expanded.</div></div><Select ariaLabel="Sidebar default state" width={140} value={settings.dashboardSidebarDefault || 'expanded'} onChange={(value) => updateSettings({ dashboardSidebarDefault: value })} options={[{ value: 'expanded', label: 'Expanded' }, { value: 'collapsed', label: 'Collapsed' }]} /></div><div className="settings-row"><div><div className="settings-row-title">Show current story</div></div><Toggle checked={settings.dashboardShowCurrentStory !== false} onChange={(value) => updateSettings({ dashboardShowCurrentStory: value })} /></div><div className="settings-row"><div><div className="settings-row-title">Show tool labels</div></div><Toggle checked={settings.dashboardShowToolLabels !== false} onChange={(value) => updateSettings({ dashboardShowToolLabels: value })} /></div><div className="settings-row"><div><div className="settings-row-title">Animate collapse</div></div><Toggle checked={settings.dashboardAnimateCollapse !== false} onChange={(value) => updateSettings({ dashboardAnimateCollapse: value })} /></div></div>
       </div>
-      <SidebarVisibility settings={settings} updateSettings={updateSettings} />
+      <div className="dashboard-sidebar-preferences max-md:hidden"><SidebarVisibility settings={settings} updateSettings={updateSettings} /></div>
     </section>
   )
 }
@@ -766,8 +789,9 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
         {!customFonts?.length && <span className="muted small">No custom fonts installed yet.</span>}
       </div>
 
-      <div className="settings-subheading">Interface layout</div>
-      <p className="settings-row-sub">Choose a familiar workspace arrangement. The preview shows the sidebar, toolbar and writing canvas placement.</p>
+      <div className="settings-desktop-only-layout">
+        <div className="settings-subheading">Interface layout</div>
+        <p className="settings-row-sub">Choose a familiar workspace arrangement. The preview shows the sidebar, toolbar and writing canvas placement.</p>
       <div className="layout-choice-grid">
         {[
           ['studio', 'Writer studio', 'Classic left binder', 'left'],
@@ -781,6 +805,7 @@ function Appearance({ settings, updateSettings, customFonts, systemFonts, instal
             {(settings.appLayout || 'studio') === value && <Icon icon="fa-solid fa-check" />}
           </button>
         ))}
+      </div>
       </div>
 
       <div className="settings-row"><div><div className="settings-row-title">Interface scale</div><div className="settings-row-sub">Resize navigation, dialogs, buttons and labels throughout MoonScribe.</div></div><Select ariaLabel="Interface scale" width={150} value={String(settings.interfaceScale || 100)} onChange={(v) => updateSettings({ interfaceScale: Number(v) })} options={[{ value: '90', label: '90%', hint: 'compact' }, { value: '100', label: '100%', hint: 'default' }, { value: '110', label: '110%', hint: 'large' }, { value: '120', label: '120%', hint: 'largest' }]} /></div>
@@ -1013,13 +1038,13 @@ function LockSecurity({ appLock, enableAppLock, updateAppLock, disableAppLock, l
   const clean = (v) => (kind === 'pin' ? v.replace(/\D/g, '').slice(0, 6) : v)
 
   return (
-    <section className="settings-panel">
+    <section className="settings-panel security-settings-panel">
       <div className="settings-panel-kicker">Privacy &amp; access control</div>
       <h2>Lock &amp; security</h2>
-      <div className="security-overview">
-        <span className={`security-score ${appLock?.enabled ? 'protected' : ''}`}><Icon icon={appLock?.enabled ? 'fa-solid fa-shield-check' : 'fa-solid fa-shield'} /></span>
-        <div><strong>{appLock?.enabled ? 'Device protection is active' : 'Add a private access barrier'}</strong><small>{appLock?.enabled ? 'MoonScribe requires your secret after locking.' : 'Your local database is private to this browser, but currently opens without a challenge.'}</small></div>
-        <span className={`settings-status-pill ${appLock?.enabled ? 'safe' : 'warn'}`}>{appLock?.enabled ? 'Protected' : 'Review'}</span>
+      <div className="security-overview flex items-center gap-3 rounded-2xl border border-[#c79b53]/30 bg-[#17151b] p-4 shadow-[0_12px_28px_rgba(0,0,0,.2)]">
+        <span className={`security-score grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-[#2a2117] text-xl text-[#c79b53] ${appLock?.enabled ? 'protected' : ''}`}><Icon icon={appLock?.enabled ? 'fa-solid fa-shield-check' : 'fa-solid fa-shield'} /></span>
+        <div className="min-w-0 flex-1"><strong className="block text-base text-[#eee8df]">{appLock?.enabled ? 'Device protection is active' : 'Add a private access barrier'}</strong><small className="mt-1 block text-sm leading-relaxed text-[#aaa3a0]">{appLock?.enabled ? 'MoonScribe requires your secret after locking.' : 'Your local database is private to this browser, but currently opens without a challenge.'}</small></div>
+        <span className={`settings-status-pill shrink-0 ${appLock?.enabled ? 'safe' : 'warn'}`}>{appLock?.enabled ? 'Protected' : 'Review'}</span>
       </div>
       {appLock?.enabled ? (
         <>
@@ -1039,9 +1064,9 @@ function LockSecurity({ appLock, enableAppLock, updateAppLock, disableAppLock, l
       ) : (
         <>
           <p className="muted small">Ask for a PIN or passphrase before the library opens — a quiet barrier against casual access. It never leaves this device.</p>
-          <div className="pill-toggle" style={{ marginBottom: 'var(--space-3)' }}>
-            <button className={`pill ${kind === 'passphrase' ? 'active' : ''}`} onClick={() => setKind('passphrase')}>Passphrase</button>
-            <button className={`pill ${kind === 'pin' ? 'active' : ''}`} onClick={() => setKind('pin')}>PIN</button>
+          <div className="pill-toggle mb-3 flex gap-2">
+            <button className={`pill min-h-11 rounded-full px-4 transition-colors ${kind === 'passphrase' ? 'active bg-[#2a2117] text-[#eee8df]' : ''}`} onClick={() => setKind('passphrase')}>Passphrase</button>
+            <button className={`pill min-h-11 rounded-full px-4 transition-colors ${kind === 'pin' ? 'active bg-[#2a2117] text-[#eee8df]' : ''}`} onClick={() => setKind('pin')}>PIN</button>
           </div>
           <div className="field"><input className="text-field" type="password" inputMode={kind === 'pin' ? 'numeric' : 'text'} value={pass} onChange={(e) => setPass(clean(e.target.value))} placeholder={kind === 'pin' ? 'Choose a 4–6 digit PIN' : 'Choose a passphrase'} /></div>
           <div className="field"><input className="text-field" type="password" inputMode={kind === 'pin' ? 'numeric' : 'text'} value={confirm} onChange={(e) => setConfirm(clean(e.target.value))} placeholder="Enter it again to confirm" /></div>
@@ -1049,7 +1074,7 @@ function LockSecurity({ appLock, enableAppLock, updateAppLock, disableAppLock, l
             <div><div className="settings-row-title">Auto-lock after idle</div></div>
             <Select ariaLabel="Auto-lock" width={150} value={String(minutes)} onChange={(v) => setMinutes(Number(v))} options={IDLE_OPTIONS} />
           </div>
-          <button className="button button-primary" onClick={turnOn} disabled={!pass || !confirm}>Turn on app lock</button>
+          <button className="button button-primary min-h-11 w-full" onClick={turnOn} disabled={!pass || !confirm}>Turn on app lock</button>
         </>
       )}
       <p className="muted small" style={{ marginTop: 'var(--space-4)' }}>
@@ -1186,29 +1211,29 @@ function PrivacyData({ toast, refreshNovels, fileRef }) {
   }
 
   return (
-    <section className="settings-panel">
-      <h2>Privacy &amp; data</h2>
-      <ul className="privacy-list">
+    <section className="settings-panel privacy-data-panel">
+      <h2 className="text-3xl leading-tight text-[#eee8df]">Privacy &amp; data</h2>
+      <ul className="privacy-list grid gap-3 rounded-2xl border border-white/10 bg-white/[.025] p-4 text-sm leading-relaxed text-[#d7cec2]">
         <li><span className="privacy-dot ok" /> Your writing is never used to train AI — not now, not ever.</li>
         <li><span className="privacy-dot ok" /> Your data stays on your device by default.</li>
         <li><span className="privacy-dot ok" /> Backups can be encrypted with AES-256 (PBKDF2). The passphrase never leaves this device.</li>
       </ul>
 
-      <div className="settings-row-title" style={{ marginTop: 'var(--space-4)' }}>Backups</div>
-      <div className="actions-row" style={{ flexWrap: 'wrap' }}>
-        <button className="button button-ghost" onClick={backup}>Download backup</button>
-        <button className="button button-ghost" onClick={encryptedBackup}>Encrypted backup…</button>
-        <button className="button button-ghost" onClick={() => fileRef.current?.click()}>Restore backup</button>
+      <div className="settings-row-title mt-6 text-xs font-bold uppercase tracking-[.14em] text-[#c79b53]">Backups</div>
+      <div className="actions-row grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <button className="button button-ghost min-h-11" onClick={backup}>Download backup</button>
+        <button className="button button-ghost min-h-11" onClick={encryptedBackup}>Encrypted backup…</button>
+        <button className="button button-ghost min-h-11 sm:col-span-2" onClick={() => fileRef.current?.click()}>Restore backup</button>
         <input ref={fileRef} type="file" accept="application/json" style={{ display: 'none' }} onChange={restore} />
       </div>
 
-      <div className="settings-row-title" style={{ marginTop: 'var(--space-5)' }}>Database recovery</div>
+      <div className="settings-row-title mt-6 text-xs font-bold uppercase tracking-[.14em] text-[#c79b53]">Database recovery</div>
       <p className="muted small" style={{ margin: '4px 0 10px' }}>Check the state of your local database and clear optional caches.</p>
-      <div className="actions-row" style={{ flexWrap: 'wrap', marginBottom: 'var(--space-3)' }}>
-        <button className="button button-ghost" onClick={loadDbStats} disabled={loadingStats}>
+      <div className="actions-row grid grid-cols-1 gap-2 sm:grid-cols-2" style={{ marginBottom: 'var(--space-3)' }}>
+        <button className="button button-ghost min-h-11" onClick={loadDbStats} disabled={loadingStats}>
           {loadingStats ? 'Checking…' : 'Check database health'}
         </button>
-        <button className="button button-ghost" onClick={clearSnapshots}>Clear replay snapshots</button>
+        <button className="button button-ghost min-h-11" onClick={clearSnapshots}>Clear replay snapshots</button>
       </div>
       {dbStats && (
         <div className="db-stats">

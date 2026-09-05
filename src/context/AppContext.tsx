@@ -9,6 +9,7 @@ import * as syncEngine from '../sync/engine'
 import { apiBaseUrl, authReturnUrl, isDesktopRuntime } from '../api/config'
 import { callbackSearch, openExternalUrl } from '../api/desktopAuth'
 import { clearOAuthCallback, readOAuthCallback } from '../auth/oauthCallback'
+import { markPerformance } from '../utils/performance'
 import {
   detectSystemFonts,
   installCustomFontFromFile,
@@ -191,6 +192,7 @@ export function AppProvider({ children }) {
 
   // Load persisted state once.
   useEffect(() => {
+    markPerformance('app-shell-start')
     refreshNovels()
     getMeta('onboardingDone', false).then(setOnboardingDone)
     getMeta('guestMode', false).then(setGuestMode)
@@ -222,6 +224,7 @@ export function AppProvider({ children }) {
         }
       }
     })()
+    markPerformance('app-state-load-start')
     ;(async () => {
       let cfg = await syncEngine.getConfig()
       let parsedProfile = null
@@ -740,6 +743,7 @@ export function AppProvider({ children }) {
           })
         }).catch(() => {})
       }
+      markPerformance('account-ready')
       if (status === 'syncing' || status === 'connecting') {
         indicatorTimer = setTimeout(applyStatus, 400)
       } else {

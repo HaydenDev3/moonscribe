@@ -348,6 +348,7 @@ export default function Sidebar({
                 <span
                   key={person.id}
                   className={`binder-live-avatar ${person.activity === 'writing' ? 'is-writing' : 'is-viewing'}`}
+                  data-tooltip={`${person.username} · ${person.activity === 'writing' ? 'Writing now' : 'Viewing'} · ${person.tabName || 'This chapter'}`}
                   style={{ ['--presence-color' as any]: person.activity === 'writing' ? 'var(--accent)' : 'var(--panel-ink)' } as CSSProperties}
                   title={`${person.username} · ${person.activity === 'writing' ? 'writing' : 'viewing'}`}
                 >
@@ -616,13 +617,12 @@ export default function Sidebar({
                 (() => {
                   const isDesigner = n.to === 'design'
                   const designerLive = isDesigner && collaboratorMap.designerCount > 0
-                  const chapterLive = !!currentId && (collaboratorMap.byChapter.get(currentId) || []).length > 0
                   return (
                     <NavLink
                       key={n.label}
                       to={itemPath(novel.id, n)}
                       end={n.end}
-                      className={({ isActive }) => `nav-item${isActive ? ' active' : ''}${designerLive || chapterLive ? ' has-live-presence' : ''}`}
+                      className={({ isActive }) => `nav-item${isActive ? ' active' : ''}${designerLive ? ' has-live-presence' : ''}`}
                       onClick={onClose}
                       onContextMenu={(e) => {
                         e.preventDefault()
@@ -638,7 +638,7 @@ export default function Sidebar({
                     >
                       <Icon icon={n.icon} />
                       <span className="nav-item-label">{n.label}</span>
-                      {(designerLive || chapterLive) && (
+                      {designerLive && (
                         <span className="nav-item-live-indicator" aria-hidden="true" title={designerLive ? 'Collaborator active in Designer' : 'Collaborator active in this chapter'} />
                       )}
                     </NavLink>

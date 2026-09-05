@@ -48,8 +48,8 @@ export default function ShareWritingModal({ open, onClose, novelId, novelTitle, 
       await sync()
       const result = await createShareInvite(novelId, role, Number(accessDuration) || null)
       setInvite(result)
-      await navigator.clipboard?.writeText(`${window.location.origin}/dashboard?share=${result.code}`)
-      toast?.('Invitation copied.')
+      try { await navigator.clipboard?.writeText(`${window.location.origin}/dashboard?share=${result.code}`); toast?.('Invitation copied.') }
+      catch { toast?.('Invitation created. Copy the link below.') }
     } catch (error) { toast?.(error.message) } finally { setBusy(false) }
   }
 
@@ -67,10 +67,10 @@ export default function ShareWritingModal({ open, onClose, novelId, novelTitle, 
   }
 
   const people = details ? [details.owner, ...(details.members || [])].filter(Boolean) : []
-  const copyInviteLink = () => {
+  const copyInviteLink = async () => {
     if (!invite?.code) return
-    navigator.clipboard?.writeText(`${window.location.origin}/dashboard?share=${invite.code}`)
-    toast?.('Invitation link copied.')
+    try { await navigator.clipboard?.writeText(`${window.location.origin}/dashboard?share=${invite.code}`); toast?.('Invitation link copied.') }
+    catch { toast?.('Copy is unavailable here. Select the invitation code instead.') }
   }
   const shareMenu = (event) => {
     openContextMenu(event, [

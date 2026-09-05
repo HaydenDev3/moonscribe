@@ -9,6 +9,7 @@ import { todayKey, addTodayWords } from '../db/stats'
 import { hasDesktopCredentialVault, readDesktopCredential, writeDesktopCredential } from '../security/credentials'
 import { apiBaseUrl, websocketOrigin } from '../api/config'
 import { trashRecord } from '../db/trash'
+import { requestJson } from '../api/request'
 
 let statusListeners = []
 // Sync requests can arrive together (initial app sync, focus, invite accept).
@@ -521,21 +522,11 @@ export async function push() {
   const pending = await collectPending()
   if (!pending.length) return 0
   setStatus('syncing')
-  const res = await fetch(`${apiBase(cfg)}/api/sync/push`, {
+  const data = await requestJson(`${apiBase(cfg)}/api/sync/push`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
     body: JSON.stringify({ records: pending })
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    if (res.status === 401) {
-      await clearAuth()
-      setStatus('offline')
-      throw new Error('connection lost — reconnect')
-    }
-    throw new Error(data.error || `push failed (${res.status})`)
-  }
-  const data = await res.json()
+  }, { idempotencyKey: `sync-push:${cfg.accountId || 'guest'}:${pending.map((p) => `${p.store}:${p.id}:${p.updatedAt}`).join('|')}` })
   const acceptedKeys = Array.isArray(data.accepted) ? new Set(data.accepted) : null
   const acknowledged = acceptedKeys
     ? pending.filter((p) => acceptedKeys.has(`${p.store}:${p.id}`))
@@ -551,18 +542,9 @@ export async function pull() {
   if (!cfg.token) return 0
   setStatus('syncing')
   const since = cfg.state?.lastPull || 0
-  const res = await fetch(`${apiBase(cfg)}/api/sync/pull?since=${since}`, {
+  const data = await requestJson(`${apiBase(cfg)}/api/sync/pull?since=${since}`, {
     headers: { Authorization: `Bearer ${cfg.token}` }
   })
-  if (!res.ok) {
-    if (res.status === 401) {
-      await clearAuth()
-      setStatus('offline')
-      throw new Error('connection lost — reconnect')
-    }
-    throw new Error(`pull failed (${res.status})`)
-  }
-  const data = await res.json()
   await applyIncoming(data.records || [])
   await setConfig({ state: { ...cfg.state, lastPull: data.serverTime || since } })
   return (data.records || []).length

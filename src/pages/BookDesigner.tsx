@@ -261,7 +261,7 @@ export default function BookDesigner({
   const { id: paramId } = useParams()
   const navigate = useNavigate()
   const id = novelId || paramId
-  const { toast, customFonts, systemFonts } = useApp() as any
+  const { toast, customFonts, systemFonts, openSettings } = useApp() as any
   const { openContextMenu } = useContextMenu()
 
   const [novel, setNovel] = useState<any>(null)
@@ -640,6 +640,11 @@ export default function BookDesigner({
       <div className={`cover-studio ds-layout ${coverFocused ? 'cover-studio-focus' : ''}`}>
         <input ref={surfaceFileRef} type="file" accept="image/*" hidden onChange={async (event) => { const file = event.target.files?.[0]; event.target.value = ''; if (file) await applySurfaceImage(file, pendingSurfaceRef.current) }} />
 
+        <header className="designer-mobile-header flex items-center justify-between gap-3 border-b border-white/10 bg-[#0b0b0f]/95 px-4 py-3 backdrop-blur-xl">
+          <div className="min-w-0"><span className="block text-[.58rem] font-bold uppercase tracking-[.16em] text-[#c79b53]">Book studio</span><strong className="block truncate font-[var(--font-heading)] text-lg text-[#eee8df]">{novel?.title || 'Book designer'}</strong></div>
+          <span className="shrink-0 text-xs text-[#aaa3a0]">{saveState === 'syncing' ? 'Saving…' : saveState === 'error' ? 'Save failed' : 'Saved'}</span>
+        </header>
+
         <div className="designer-workflow-bar" aria-label="Designer workflow">
           <div className="designer-workflow-brand"><span className="designer-kicker">BOOK STUDIO</span><strong>Design your edition</strong></div>
           <nav className="designer-workflow-steps">
@@ -676,9 +681,9 @@ export default function BookDesigner({
 
         {/* ── Sliding panel ────────────────────────────────────────────── */}
         <div className={`ds-panel ${panelOpen ? 'open' : ''}`}>
-          <div className="ds-panel-head studio-rail-head">
+          <div className="ds-panel-head studio-rail-head flex min-h-12 items-center justify-between gap-3 border-b border-white/10 px-3 max-md:sticky max-md:top-0 max-md:z-10 max-md:bg-[#15131a]/95 max-md:backdrop-blur-xl">
             <strong className="ds-panel-title">{SECTIONS.find((s) => s.key === section)?.label}</strong>
-            <button className="ds-panel-close" onClick={() => setPanelOpen(false)} aria-label="Close panel">
+            <button className="ds-panel-close grid min-h-11 min-w-11 place-items-center rounded-lg text-[#c79b53] hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-[#c79b53]" onClick={() => setPanelOpen(false)} aria-label="Close panel">
               <Icon icon="fa-solid fa-xmark" />
             </button>
           </div>
@@ -720,10 +725,10 @@ export default function BookDesigner({
           }}
         >
           {/* Top bar */}
-          <div className="ds-stage-bar studio-bar">
+          <div className="ds-stage-bar studio-bar flex min-w-0 items-center gap-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:overflow-x-auto max-md:bg-[#0b0b0f]/95 max-md:px-2 max-md:py-2 max-md:backdrop-blur-xl">
             <div className="ds-stage-tabs studio-seg designer-stage-main">
-              <TabsList className="designer-stage-tabs-list">{PREVIEW_MODES.map((mode) => (
-                <TabsTrigger key={mode.key} className={`ds-stage-tab ${previewMode === mode.key ? 'active' : ''}`} onClick={() => {
+              <TabsList className="designer-stage-tabs-list flex min-w-max gap-1">{PREVIEW_MODES.map((mode) => (
+                <TabsTrigger key={mode.key} className={`ds-stage-tab min-h-11 shrink-0 rounded-lg px-3 text-xs focus-visible:outline-2 focus-visible:outline-[#c79b53] ${previewMode === mode.key ? 'active' : ''}`} onClick={() => {
                   setPreviewMode(mode.key)
                   if (mode.key === 'cover' || mode.key === 'flat-wrap') { setStageView('cover'); setCoverFocused(false) }
                   if (mode.key === 'interior') { setStageView('page'); window.location.hash = `#/novel/${id}/design/print`; navigate(`/novel/${id}/design/print`) }
@@ -734,8 +739,8 @@ export default function BookDesigner({
               ))}</TabsList>
             </div>
 
-            <div className="ds-stage-actions designer-stage-tools">
-              <button type="button" className="ds-action-btn designer-more-button" aria-label="More designer options" title="More options" onClick={(event) => openContextMenu(event, [
+            <div className="ds-stage-actions designer-stage-tools flex shrink-0 gap-1 max-md:ml-auto">
+              <button type="button" className="ds-action-btn designer-more-button grid min-h-11 min-w-11 place-items-center rounded-lg focus-visible:outline-2 focus-visible:outline-[#c79b53]" aria-label="More designer options" title="More options" onClick={(event) => openContextMenu(event, [
                 { label: showGuides ? 'Hide guides' : 'Show guides', icon: 'fa-solid fa-ruler-combined', onClick: () => setShowGuides((value) => !value) },
                 { label: 'Undo', icon: 'fa-solid fa-rotate-left', disabled: !canUndo, onClick: undo },
                 { label: 'Redo', icon: 'fa-solid fa-rotate-right', disabled: !canRedo, onClick: redo },

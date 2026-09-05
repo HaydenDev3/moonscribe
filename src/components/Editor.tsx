@@ -14,12 +14,13 @@ import { listMoodboard } from '../db/moodboard'
 import { editorPageGeometry, PAGE_MARGIN_PRESETS, PAGE_PRESETS } from '../utils/pageSize'
 
 type TypographyStyle = { fontFamily?: string; color?: string; [key: string]: unknown }
-type TypographyConfig = { bodyStyle?: TypographyStyle; chapterTitleStyle?: TypographyStyle; [key: string]: unknown }
+type TypographyConfig = {
+  bodyStyle?: TypographyStyle
+  chapterTitleStyle?: TypographyStyle
+  [key: string]: unknown
+}
 
-const FONT_SIZES = [
-  '9', '10', '11', '12', '13', '14',
-  '16', '18', '20', '24', '28', '36',
-]
+const FONT_SIZES = ['9', '10', '11', '12', '13', '14', '16', '18', '20', '24', '28', '36']
 
 const LINE_SPACINGS = [
   { value: '1.0', label: 'Single', wpp: 500 },
@@ -53,12 +54,15 @@ const PAGE_MARGINS = PAGE_MARGIN_PRESETS.map((preset) => ({
   label: preset.label,
 }))
 
-const migratePageSize = (value) => ({
-  None: 'continuous',
-  A4: 'a4',
-  A5: 'a5',
-  Letter: 'letter',
-}[value] || (typeof value === 'string' ? value : 'trade-paperback') || 'continuous')
+const migratePageSize = (value) =>
+  ({
+    None: 'continuous',
+    A4: 'a4',
+    A5: 'a5',
+    Letter: 'letter',
+  })[value] ||
+  (typeof value === 'string' ? value : 'trade-paperback') ||
+  'continuous'
 
 const HIGHLIGHT_COLORS = [
   '#fff7a8',
@@ -80,18 +84,22 @@ const PRESENCE_COLORS = ['#7db6f4', '#d99b75', '#9ecb9d', '#c39adf', '#e2bb72', 
 const MAX_EMBEDDED_IMAGE_BYTES = 5 * 1024 * 1024
 
 function presenceColor(seed) {
-  const value = String(seed || '').split('').reduce((total, char) => total + char.charCodeAt(0), 0)
+  const value = String(seed || '')
+    .split('')
+    .reduce((total, char) => total + char.charCodeAt(0), 0)
   return PRESENCE_COLORS[value % PRESENCE_COLORS.length]
 }
 
 function initials(name) {
-  return String(name || '?')
-    .trim()
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase() || '?'
+  return (
+    String(name || '?')
+      .trim()
+      .split(/\s+/)
+      .map((part) => part[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || '?'
+  )
 }
 
 export default function Editor({
@@ -131,29 +139,43 @@ export default function Editor({
   const titleRef = useRef(null)
   const onReportRef = useRef(onReport)
   const { customFonts, systemFonts, toast } = useApp()
-  const editorFontOptions = useMemo(() => buildEditorFontOptions({ systemFonts, customFonts }), [systemFonts, customFonts])
+  const editorFontOptions = useMemo(
+    () => buildEditorFontOptions({ systemFonts, customFonts }),
+    [systemFonts, customFonts]
+  )
   const [libraryImages, setLibraryImages] = useState<any[]>([])
   const [mediaOpen, setMediaOpen] = useState(false)
   const [pageTemplatesOpen, setPageTemplatesOpen] = useState(false)
   useEffect(() => {
     if (!novelId) return
-    listMoodboard(novelId).then((tiles) => setLibraryImages(tiles.filter((tile) => tile.kind === 'image' && tile.image))).catch(() => {})
+    listMoodboard(novelId)
+      .then((tiles) =>
+        setLibraryImages(tiles.filter((tile) => tile.kind === 'image' && tile.image))
+      )
+      .catch(() => {})
   }, [novelId])
 
   const liveCollaborators = useMemo(() => {
-    const textLength = Math.max(1, (ref.current?.innerText || String(initialHtml || '').replace(/<[^>]+>/g, '')).length)
+    const textLength = Math.max(
+      1,
+      (ref.current?.innerText || String(initialHtml || '').replace(/<[^>]+>/g, '')).length
+    )
     const estimatedLines = Math.max(1, Math.ceil(textLength / 72))
     return collaborators
       .filter((person) => person?.chapterId === chapterId && person.status !== 'offline')
       .map((person, index) => {
         const rawOffset = Number(person.cursorOffset)
-        const fallback = Math.min(0.94, Math.max(0.06, ((Number(person.lineNumber) || index + 1) - 1) / 42))
+        const fallback = Math.min(
+          0.94,
+          Math.max(0.06, ((Number(person.lineNumber) || index + 1) - 1) / 42)
+        )
         // Cursor offsets are character positions, not rendered vertical
         // positions. Use the reported logical line so markers stay aligned
         // when font, width, or zoom changes between collaborators.
-        const topRatio = Number.isFinite(Number(person.lineNumber)) && Number(person.lineNumber) > 0
-          ? Math.min(0.96, Math.max(0.035, (Number(person.lineNumber) - 1) / estimatedLines))
-          : fallback
+        const topRatio =
+          Number.isFinite(Number(person.lineNumber)) && Number(person.lineNumber) > 0
+            ? Math.min(0.96, Math.max(0.035, (Number(person.lineNumber) - 1) / estimatedLines))
+            : fallback
         return {
           ...person,
           topRatio,
@@ -169,8 +191,10 @@ export default function Editor({
 
   // ── Toolbar state ────────────────────────────────────────────────────────
   const [colorPop, setColorPop] = useState(null)
-  const defaultBodyFont = typography?.bodyStyle?.fontFamily || editorFontOptions[0]?.value || "'Literata', Georgia, serif"
-  const defaultTitleFont = typography?.chapterTitleStyle?.fontFamily || "'Cormorant Garamond', Georgia, serif"
+  const defaultBodyFont =
+    typography?.bodyStyle?.fontFamily || editorFontOptions[0]?.value || "'Literata', Georgia, serif"
+  const defaultTitleFont =
+    typography?.chapterTitleStyle?.fontFamily || "'Cormorant Garamond', Georgia, serif"
   const [fontFamily, setFontFamily] = useState(defaultBodyFont)
   const [titleFontFamily, setTitleFontFamily] = useState(defaultTitleFont)
   const [typographyTarget, setTypographyTarget] = useState<'body' | 'title'>('body')
@@ -193,6 +217,9 @@ export default function Editor({
   const [linkDraft, setLinkDraft] = useState('')
   const [linkPopover, setLinkPopover] = useState(null)
   const [findOpen, setFindOpen] = useState(false)
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false)
+  const [mobileStyleOpen, setMobileStyleOpen] = useState(false)
+  const [mobileToolsOpen, setMobileToolsOpen] = useState(false)
   const [findQuery, setFindQuery] = useState('')
   const [replaceQuery, setReplaceQuery] = useState('')
   const [findMatches, setFindMatches] = useState(0)
@@ -215,7 +242,9 @@ export default function Editor({
 
   const toolbarTimerRef = useRef(null)
   const toolbarRef = useRef<HTMLDivElement | null>(null)
-  const currentFindRef = useRef<{ node: globalThis.Text; start: number; length: number } | null>(null)
+  const currentFindRef = useRef<{ node: globalThis.Text; start: number; length: number } | null>(
+    null
+  )
 
   useEffect(() => {
     const openFromPalette = () => setFindOpen(true)
@@ -223,55 +252,67 @@ export default function Editor({
     return () => window.removeEventListener('moonscribe:find-replace-open', openFromPalette)
   }, [])
 
-  const findInChapter = useCallback((query: string) => {
-    const root = ref.current
-    const needle = query.trim()
-    if (!root || !needle) {
-      setFindMatches(0)
-      return
-    }
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
-    const nodes: globalThis.Text[] = []
-    let node
-    while ((node = walker.nextNode())) nodes.push(node as globalThis.Text)
-    const matches: Array<{ node: globalThis.Text; start: number }> = []
-    for (const textNode of nodes) {
-      const value = findCaseSensitive ? textNode.data : textNode.data.toLocaleLowerCase()
-      const target = findCaseSensitive ? needle : needle.toLocaleLowerCase()
-      let from = 0
-      while (from < value.length) {
-        const start = value.indexOf(target, from)
-        if (start < 0) break
-        if (findWholeWord && (/[\p{L}\p{N}_]/u.test(value[start - 1] || '') || /[\p{L}\p{N}_]/u.test(value[start + needle.length] || ''))) {
-          from = start + needle.length
-          continue
-        }
-        matches.push({ node: textNode, start })
-        from = start + needle.length
+  const findInChapter = useCallback(
+    (query: string) => {
+      const root = ref.current
+      const needle = query.trim()
+      if (!root || !needle) {
+        setFindMatches(0)
+        return
       }
-    }
-    setFindMatches(matches.length)
-    const selection = window.getSelection()
-    const currentNode = selection?.anchorNode
-    const currentOffset = selection?.anchorOffset || 0
-    const next = matches.find((match) => match.node === currentNode && match.start > currentOffset) || matches[0]
-    if (next && selection) {
-      const range = document.createRange()
-      range.setStart(next.node, next.start)
-      range.setEnd(next.node, next.start + needle.length)
-      selection.removeAllRanges()
-      selection.addRange(range)
-      currentFindRef.current = { node: next.node, start: next.start, length: needle.length }
-      next.node.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    }
-  }, [findCaseSensitive, findWholeWord])
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+      const nodes: globalThis.Text[] = []
+      let node
+      while ((node = walker.nextNode())) nodes.push(node as globalThis.Text)
+      const matches: Array<{ node: globalThis.Text; start: number }> = []
+      for (const textNode of nodes) {
+        const value = findCaseSensitive ? textNode.data : textNode.data.toLocaleLowerCase()
+        const target = findCaseSensitive ? needle : needle.toLocaleLowerCase()
+        let from = 0
+        while (from < value.length) {
+          const start = value.indexOf(target, from)
+          if (start < 0) break
+          if (
+            findWholeWord &&
+            (/[\p{L}\p{N}_]/u.test(value[start - 1] || '') ||
+              /[\p{L}\p{N}_]/u.test(value[start + needle.length] || ''))
+          ) {
+            from = start + needle.length
+            continue
+          }
+          matches.push({ node: textNode, start })
+          from = start + needle.length
+        }
+      }
+      setFindMatches(matches.length)
+      const selection = window.getSelection()
+      const currentNode = selection?.anchorNode
+      const currentOffset = selection?.anchorOffset || 0
+      const next =
+        matches.find((match) => match.node === currentNode && match.start > currentOffset) ||
+        matches[0]
+      if (next && selection) {
+        const range = document.createRange()
+        range.setStart(next.node, next.start)
+        range.setEnd(next.node, next.start + needle.length)
+        selection.removeAllRanges()
+        selection.addRange(range)
+        currentFindRef.current = { node: next.node, start: next.start, length: needle.length }
+        next.node.parentElement?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }
+    },
+    [findCaseSensitive, findWholeWord]
+  )
 
   const replaceCurrentMatch = useCallback(() => {
     const match = currentFindRef.current
     if (!match || !findQuery.trim()) return
     const value = match.node.data
     const actual = value.slice(match.start, match.start + match.length)
-    if ((findCaseSensitive ? actual : actual.toLocaleLowerCase()) !== (findCaseSensitive ? findQuery.trim() : findQuery.trim().toLocaleLowerCase())) {
+    if (
+      (findCaseSensitive ? actual : actual.toLocaleLowerCase()) !==
+      (findCaseSensitive ? findQuery.trim() : findQuery.trim().toLocaleLowerCase())
+    ) {
       findInChapter(findQuery)
       return
     }
@@ -279,8 +320,8 @@ export default function Editor({
     currentFindRef.current = null
     report()
     findInChapter(findQuery)
-  // report is declared later in this component and is intentionally omitted.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // report is declared later in this component and is intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [findCaseSensitive, findInChapter, findQuery, replaceQuery])
 
   const replaceAllMatches = useCallback(() => {
@@ -293,11 +334,17 @@ export default function Editor({
     while ((node = walker.nextNode())) nodes.push(node as globalThis.Text)
     const boundary = findWholeWord ? '\\b' : ''
     const flags = findCaseSensitive ? 'g' : 'gi'
-    const pattern = new RegExp(`${boundary}${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${boundary}`, flags)
+    const pattern = new RegExp(
+      `${boundary}${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}${boundary}`,
+      flags
+    )
     let replaced = 0
     for (const textNode of nodes) {
       const before = textNode.data
-      const next = before.replace(pattern, () => { replaced += 1; return replaceQuery })
+      const next = before.replace(pattern, () => {
+        replaced += 1
+        return replaceQuery
+      })
       if (next !== before) textNode.data = next
     }
     if (replaced) {
@@ -306,8 +353,8 @@ export default function Editor({
       toast(`${replaced} ${replaced === 1 ? 'match' : 'matches'} replaced.`)
       findInChapter(findQuery)
     }
-  // report is declared later in this component and is intentionally omitted.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // report is declared later in this component and is intentionally omitted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [findCaseSensitive, findInChapter, findQuery, findWholeWord, replaceQuery, toast])
 
   useEffect(() => {
@@ -371,10 +418,7 @@ export default function Editor({
     const el = ref.current
     if (!el) return
 
-    const walker = document.createTreeWalker(
-      el,
-      NodeFilter.SHOW_TEXT,
-    )
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
 
     let remaining = offset
 
@@ -440,8 +484,9 @@ export default function Editor({
 
   const annotateCommentAnchors = useCallback((html) => {
     if (!html) return html
-    const pending = (annotationsRef.current || [])
-      .filter((item) => !item?.resolved && item?.quote?.trim())
+    const pending = (annotationsRef.current || []).filter(
+      (item) => !item?.resolved && item?.quote?.trim()
+    )
 
     if (!pending.length) return html
 
@@ -550,7 +595,11 @@ export default function Editor({
       const expected = (character?.name || entity?.name || '').trim()
       const actual = mark.textContent || ''
       const containsStructure = !!mark.querySelector('p,div,br,h1,h2,h3,h4,blockquote,ul,ol,li')
-      if (!expected || actual.localeCompare(expected, undefined, { sensitivity: 'accent' }) !== 0 || containsStructure) {
+      if (
+        !expected ||
+        actual.localeCompare(expected, undefined, { sensitivity: 'accent' }) !== 0 ||
+        containsStructure
+      ) {
         mark.replaceWith(...mark.childNodes)
         repaired = true
       }
@@ -569,7 +618,11 @@ export default function Editor({
     const before = textNode.textContent.slice(0, range.startOffset)
     const mentions = [
       ...charactersRef.current.map((item) => ({ item, kind: 'character', name: item.name })),
-      ...entitiesRef.current.map((item) => ({ item, kind: item.kind || 'entity', name: item.name })),
+      ...entitiesRef.current.map((item) => ({
+        item,
+        kind: item.kind || 'entity',
+        name: item.name,
+      })),
     ]
       .filter(({ name }) => name?.trim())
       .sort((a, b) => b.name.trim().length - a.name.trim().length)
@@ -619,7 +672,7 @@ export default function Editor({
     return () => window.clearTimeout(timer)
   }, [characters, terms, entities, scheduleReAnnotate])
 
-// ── Initial content ───────────────────────────────────────────────────────
+  // ── Initial content ───────────────────────────────────────────────────────
   useEffect(() => {
     const el = ref.current
 
@@ -675,11 +728,7 @@ export default function Editor({
       const paraRect = para.getBoundingClientRect()
 
       const target =
-        wrap.scrollTop +
-        paraRect.top -
-        wrapRect.top -
-        wrapRect.height / 2 +
-        paraRect.height / 2
+        wrap.scrollTop + paraRect.top - wrapRect.top - wrapRect.height / 2 + paraRect.height / 2
 
       wrap.scrollTo({
         top: target,
@@ -690,9 +739,7 @@ export default function Editor({
 
   useEffect(() => {
     if (!typewriterMode) {
-      ref.current
-        ?.querySelectorAll('.tw-active')
-        .forEach((n) => n.classList.remove('tw-active'))
+      ref.current?.querySelectorAll('.tw-active').forEach((n) => n.classList.remove('tw-active'))
 
       return
     }
@@ -730,13 +777,11 @@ export default function Editor({
   //
   const recalcPages = useCallback(() => {
     const prose = ref.current as HTMLElement | null
-    const ps = pageSize === 'continuous'
-      ? null
-      : editorPageGeometry(pageSize, pageLayout?.pageMargin)
+    const ps =
+      pageSize === 'continuous' ? null : editorPageGeometry(pageSize, pageLayout?.pageMargin)
 
     if (!prose || !ps?.bodyHeightPx) {
-      prose?.querySelectorAll('[data-auto-page-break="true"]')
-        .forEach((node) => node.remove())
+      prose?.querySelectorAll('[data-auto-page-break="true"]').forEach((node) => node.remove())
       setPageCount(1)
       // Removing generated page markers normally preserves the live Range.
       // Do not restore a stale character offset after the writer has typed:
@@ -747,9 +792,7 @@ export default function Editor({
     // Start from the manuscript only, then insert fresh in-flow gaps. Unlike
     // the former absolute overlays, these gaps reserve real space so text can
     // never be drawn underneath a page boundary.
-    prose
-      .querySelectorAll('[data-auto-page-break="true"]')
-      .forEach((node) => node.remove())
+    prose.querySelectorAll('[data-auto-page-break="true"]').forEach((node) => node.remove())
 
     const proseRect = prose.getBoundingClientRect()
 
@@ -762,10 +805,17 @@ export default function Editor({
     // one chapter-sized block and makes pagination impossible. Paginate the
     // actual leaf writing blocks instead, while still including explicit
     // page/scene breaks wherever they are nested.
-    const blockSelector = 'p,h1,h2,h3,h4,blockquote,pre,ul,ol,figure,.scene-break,.pg-break,[data-page-break="true"]'
+    const blockSelector =
+      'p,h1,h2,h3,h4,blockquote,pre,ul,ol,figure,.scene-break,.pg-break,[data-page-break="true"]'
     const children = Array.from(prose.querySelectorAll(blockSelector)) as Element[]
     const leafChildren = children.filter((node) => {
       if (node.matches('.pg-auto-break,[data-auto-page-break="true"]')) return false
+
+      // A blockquote is one manuscript block even when imported HTML wraps
+      // its text in a paragraph.  Never paginate one of those descendants:
+      // doing so puts the automatic page divider through the quote itself.
+      if (!node.matches('blockquote') && node.closest('blockquote')) return false
+
       return !node.querySelector(blockSelector)
     })
 
@@ -821,7 +871,7 @@ export default function Editor({
       marker.setAttribute('aria-hidden', 'true')
       marker.style.setProperty(
         '--pg-fill-before',
-        `${Math.max(0, Math.round(pageBottom - breakTop))}px`,
+        `${Math.max(0, Math.round(pageBottom - breakTop))}px`
       )
       marker.dataset.previousPage = String(previousPage)
       marker.dataset.nextPage = String(page)
@@ -842,12 +892,13 @@ export default function Editor({
         const breakTop = getTop(child)
         const pageBottom = pageTop + ps.heightPx - ps.marginBottomPx
 
-        child.setAttribute('style', `${child.getAttribute('style') ?? ''}; --pg-fill-before: ${Math.max(0, Math.round(pageBottom - breakTop))}px;`)
+        child.setAttribute(
+          'style',
+          `${child.getAttribute('style') ?? ''}; --pg-fill-before: ${Math.max(0, Math.round(pageBottom - breakTop))}px;`
+        )
 
         currentPage += 1
-        pageTop = next
-          ? getTop(next) - ps.marginTopPx
-          : getBottom(child) - ps.marginTopPx
+        pageTop = next ? getTop(next) - ps.marginTopPx : getBottom(child) - ps.marginTopPx
 
         continue
       }
@@ -862,13 +913,7 @@ export default function Editor({
           if (top > pageTop + ps.marginTopPx + 4) {
             currentPage += 1
 
-            addAutoBreak(
-              child,
-              currentPage - 1,
-              currentPage,
-              pageBottom,
-              top,
-            )
+            addAutoBreak(child, currentPage - 1, currentPage, pageBottom, top)
 
             const nextTop = getTop(child)
 
@@ -896,26 +941,13 @@ export default function Editor({
         // the wrong node and is especially visible on compact A5 pages.
         const next = leafChildren[i + 1]
 
-        if (
-          next &&
-          !isManualBreak(next) &&
-          !isSceneBreak(next)
-        ) {
+        if (next && !isManualBreak(next) && !isSceneBreak(next)) {
           const nextBottom = getBottom(next)
 
-          if (
-            nextBottom > pageBottom + tolerance &&
-            top > pageTop + ps.marginTopPx + 4
-          ) {
+          if (nextBottom > pageBottom + tolerance && top > pageTop + ps.marginTopPx + 4) {
             currentPage += 1
 
-            addAutoBreak(
-              child,
-              currentPage - 1,
-              currentPage,
-              pageBottom,
-              top,
-            )
+            addAutoBreak(child, currentPage - 1, currentPage, pageBottom, top)
 
             const nextTop = getTop(child)
 
@@ -934,13 +966,7 @@ export default function Editor({
         if (top > pageTop + ps.marginTopPx + 4) {
           currentPage += 1
 
-          addAutoBreak(
-            child,
-            currentPage - 1,
-            currentPage,
-            pageBottom,
-            top,
-          )
+          addAutoBreak(child, currentPage - 1, currentPage, pageBottom, top)
 
           const nextTop = getTop(child)
 
@@ -981,13 +1007,7 @@ export default function Editor({
     }, 150)
 
     return () => clearTimeout(timer)
-  }, [
-    pageSize,
-    lineSpacing,
-    fontSize,
-    fontFamily,
-    recalcPages,
-  ])
+  }, [pageSize, lineSpacing, fontSize, fontFamily, recalcPages])
 
   // Recalculate when browser/window size changes.
   useEffect(() => {
@@ -1004,14 +1024,17 @@ export default function Editor({
     const onImageLoad = () => recalcRef.current?.()
     const images = Array.from(prose?.querySelectorAll<HTMLImageElement>('img') || [])
     images.forEach((image) => image.addEventListener('load', onImageLoad))
-    const observer = typeof MutationObserver !== 'undefined' && prose
-      ? new MutationObserver(() => {
-          prose.querySelectorAll<HTMLImageElement>('img:not([data-page-listener])').forEach((image) => {
-            image.setAttribute('data-page-listener', 'true')
-            image.addEventListener('load', onImageLoad)
+    const observer =
+      typeof MutationObserver !== 'undefined' && prose
+        ? new MutationObserver(() => {
+            prose
+              .querySelectorAll<HTMLImageElement>('img:not([data-page-listener])')
+              .forEach((image) => {
+                image.setAttribute('data-page-listener', 'true')
+                image.addEventListener('load', onImageLoad)
+              })
           })
-        })
-      : null
+        : null
     observer?.observe(prose, { childList: true, subtree: true })
 
     return () => {
@@ -1029,10 +1052,7 @@ export default function Editor({
 
     const clean = getPersistentHtml(el)
 
-    onReportRef.current?.(
-      clean,
-      countWords(clean),
-    )
+    onReportRef.current?.(clean, countWords(clean))
 
     scheduleReAnnotate()
     requestAnimationFrame(annotateTypedMention)
@@ -1050,12 +1070,7 @@ export default function Editor({
         }, 450)
       }
     }
-  }, [
-    getPersistentHtml,
-    annotateTypedMention,
-    pageSize,
-    scheduleReAnnotate,
-  ])
+  }, [getPersistentHtml, annotateTypedMention, pageSize, scheduleReAnnotate])
 
   const ensureCaretInTextBlock = useCallback((event) => {
     if (event?.inputType === 'insertParagraph' || event?.inputType === 'insertLineBreak') {
@@ -1082,197 +1097,190 @@ export default function Editor({
   }, [])
 
   // ── Basic command helper ──────────────────────────────────────────────────
-  const exec = useCallback((cmd, val = null) => {
-    const el = ref.current
+  const exec = useCallback(
+    (cmd, val = null) => {
+      const el = ref.current
 
-    if (!el) return
+      if (!el) return
 
-    el.focus()
+      el.focus()
 
-    if (savedRange.current) {
-      const sel = window.getSelection()
-      sel.removeAllRanges()
-      sel.addRange(savedRange.current)
-    }
+      if (savedRange.current) {
+        const sel = window.getSelection()
+        sel.removeAllRanges()
+        sel.addRange(savedRange.current)
+      }
 
-    document.execCommand(
-      cmd,
-      false,
-      val,
-    )
+      document.execCommand(cmd, false, val)
 
-    report()
-  }, [report])
+      report()
+    },
+    [report]
+  )
 
   // ── Undo / redo ──────────────────────────────────────────────────────────
-  const execUndoRedo = useCallback((type) => {
-    const el = ref.current
+  const execUndoRedo = useCallback(
+    (type) => {
+      const el = ref.current
 
-    if (!el) return
+      if (!el) return
 
-    el.focus()
+      el.focus()
 
-    document.execCommand(
-      type,
-      false,
-      null,
-    )
+      document.execCommand(type, false, null)
 
-    const clean = getPersistentHtml(el)
+      const clean = getPersistentHtml(el)
 
-    onReportRef.current?.(
-      clean,
-      countWords(clean),
-    )
+      onReportRef.current?.(clean, countWords(clean))
 
-    requestAnimationFrame(() => {
-      recalcRef.current?.()
-    })
-  }, [getPersistentHtml])
+      requestAnimationFrame(() => {
+        recalcRef.current?.()
+      })
+    },
+    [getPersistentHtml]
+  )
 
   // ── Block formatting ──────────────────────────────────────────────────────
-  const formatBlock = useCallback((tag) => {
-    const el = ref.current
+  const formatBlock = useCallback(
+    (tag) => {
+      const el = ref.current
 
-    if (!el) return
+      if (!el) return
 
-    el.focus()
+      el.focus()
 
-    try {
-      document.execCommand(
-        'formatBlock',
-        false,
-        tag,
-      )
-    } catch {
-      document.execCommand(
-        'formatBlock',
-        false,
-        `<${tag}>`,
-      )
-    }
+      try {
+        document.execCommand('formatBlock', false, tag)
+      } catch {
+        document.execCommand('formatBlock', false, `<${tag}>`)
+      }
 
-    report()
-  }, [report])
+      report()
+    },
+    [report]
+  )
 
-  const toggleHeading = useCallback((tag) => {
-    const el = ref.current
+  const toggleHeading = useCallback(
+    (tag) => {
+      const el = ref.current
 
-    if (!el) return
+      if (!el) return
 
-    const sel = window.getSelection()
-    const node = sel?.anchorNode
+      const sel = window.getSelection()
+      const node = sel?.anchorNode
 
-    const block =
-      node instanceof Element
-        ? node.closest('h1,h2,h3,h4,p')
-        : node?.nodeType === Node.TEXT_NODE
-          ? node.parentElement?.closest('h1,h2,h3,h4,p')
-          : null
+      const block =
+        node instanceof Element
+          ? node.closest('h1,h2,h3,h4,p')
+          : node?.nodeType === Node.TEXT_NODE
+            ? node.parentElement?.closest('h1,h2,h3,h4,p')
+            : null
 
-    if (
-      block &&
-      block.tagName.toLowerCase() === tag
-    ) {
-      formatBlock('p')
-    } else {
-      formatBlock(tag)
-    }
-  }, [formatBlock])
+      if (block && block.tagName.toLowerCase() === tag) {
+        formatBlock('p')
+      } else {
+        formatBlock(tag)
+      }
+    },
+    [formatBlock]
+  )
 
   // ── Inline style ─────────────────────────────────────────────────────────
-  const applyStyle = useCallback((prop, value) => {
-    const el = ref.current
+  const applyStyle = useCallback(
+    (prop, value) => {
+      const el = ref.current
 
-    if (!el) return
+      if (!el) return
 
-    el.focus()
+      el.focus()
 
-    if (savedRange.current) {
+      if (savedRange.current) {
+        const sel = window.getSelection()
+
+        sel.removeAllRanges()
+        sel.addRange(savedRange.current)
+      }
+
       const sel = window.getSelection()
 
-      sel.removeAllRanges()
-      sel.addRange(savedRange.current)
-    }
+      if (!sel || !sel.rangeCount) return
 
-    const sel = window.getSelection()
+      const range = sel.getRangeAt(0)
 
-    if (!sel || !sel.rangeCount) return
-
-    const range = sel.getRangeAt(0)
-
-    // A toolbar selection can outlive a chapter switch or an editor rerender.
-    // Never apply formatting to a detached/stale range, which otherwise makes
-    // a pale yellow highlight appear on unrelated prose later.
-    if (!el.contains(range.commonAncestorContainer)) {
-      savedRange.current = null
-      sel.removeAllRanges()
-      return
-    }
-
-    if (range.collapsed) {
-      // Word/Docs-style behaviour: choosing a font with only a caret should
-      // affect the next characters typed, not silently do nothing. Browser
-      // editing engines still honour execCommand for pending inline typing
-      // state, while our span wrapper remains the cleaner path for selections.
-      try {
-        document.execCommand('styleWithCSS', false, 'true')
-        if (prop === 'fontFamily') {
-          document.execCommand('fontName', false, String(value))
-        } else if (prop === 'fontSize') {
-          const marker = document.createElement('span')
-          marker.style[prop] = value
-          marker.appendChild(document.createTextNode('\u200b'))
-          range.insertNode(marker)
-          const next = document.createRange()
-          next.setStart(marker.firstChild, 1)
-          next.collapse(true)
-          sel.removeAllRanges()
-          sel.addRange(next)
-          savedRange.current = next.cloneRange()
-          report()
-        }
-      } catch {
-        // If the browser rejects the pending style command, leave the caret
-        // untouched rather than corrupting the manuscript.
+      // A toolbar selection can outlive a chapter switch or an editor rerender.
+      // Never apply formatting to a detached/stale range, which otherwise makes
+      // a pale yellow highlight appear on unrelated prose later.
+      if (!el.contains(range.commonAncestorContainer)) {
+        savedRange.current = null
+        sel.removeAllRanges()
+        return
       }
-      return
-    }
 
-    // Browser range wrapping can create invalid markup when a whole paragraph
-    // is selected (for example Ctrl/Cmd+A in the manuscript). Let the editing
-    // engine apply highlights across block boundaries instead of wrapping <p>
-    // elements in a span.
-    if (prop === 'backgroundColor') {
-      document.execCommand('backColor', false, String(value))
-      savedRange.current = range.cloneRange()
+      if (range.collapsed) {
+        // Word/Docs-style behaviour: choosing a font with only a caret should
+        // affect the next characters typed, not silently do nothing. Browser
+        // editing engines still honour execCommand for pending inline typing
+        // state, while our span wrapper remains the cleaner path for selections.
+        try {
+          document.execCommand('styleWithCSS', false, 'true')
+          if (prop === 'fontFamily') {
+            document.execCommand('fontName', false, String(value))
+          } else if (prop === 'fontSize') {
+            const marker = document.createElement('span')
+            marker.style[prop] = value
+            marker.appendChild(document.createTextNode('\u200b'))
+            range.insertNode(marker)
+            const next = document.createRange()
+            next.setStart(marker.firstChild, 1)
+            next.collapse(true)
+            sel.removeAllRanges()
+            sel.addRange(next)
+            savedRange.current = next.cloneRange()
+            report()
+          }
+        } catch {
+          // If the browser rejects the pending style command, leave the caret
+          // untouched rather than corrupting the manuscript.
+        }
+        return
+      }
+
+      // Browser range wrapping can create invalid markup when a whole paragraph
+      // is selected (for example Ctrl/Cmd+A in the manuscript). Let the editing
+      // engine apply highlights across block boundaries instead of wrapping <p>
+      // elements in a span.
+      if (prop === 'backgroundColor') {
+        document.execCommand('backColor', false, String(value))
+        savedRange.current = range.cloneRange()
+        report()
+        return
+      }
+
+      const span = document.createElement('span')
+
+      span.style[prop] = value
+
+      try {
+        range.surroundContents(span)
+      } catch {
+        const frag = range.extractContents()
+
+        span.appendChild(frag)
+        range.insertNode(span)
+      }
+
+      sel.removeAllRanges()
+
+      const r2 = document.createRange()
+
+      r2.selectNodeContents(span)
+
+      sel.addRange(r2)
+
       report()
-      return
-    }
-
-    const span = document.createElement('span')
-
-    span.style[prop] = value
-
-    try {
-      range.surroundContents(span)
-    } catch {
-      const frag = range.extractContents()
-
-      span.appendChild(frag)
-      range.insertNode(span)
-    }
-
-    sel.removeAllRanges()
-
-    const r2 = document.createRange()
-
-    r2.selectNodeContents(span)
-
-    sel.addRange(r2)
-
-    report()
-  }, [report])
+    },
+    [report]
+  )
 
   const clearHighlight = useCallback(() => {
     const editor = ref.current
@@ -1293,10 +1301,7 @@ export default function Editor({
     if (!selection.rangeCount) return
 
     const range = selection.getRangeAt(0)
-    const elementFor = (node) =>
-      node?.nodeType === Node.ELEMENT_NODE
-        ? node
-        : node?.parentElement
+    const elementFor = (node) => (node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement)
     const hasHighlight = (element) =>
       element instanceof HTMLElement &&
       Boolean(element.style.backgroundColor || element.style.background)
@@ -1394,34 +1399,46 @@ export default function Editor({
     report()
   }, [report])
 
-  const applyMarkdownShortcut = useCallback((e) => {
-    if (e.key !== ' ' || e.ctrlKey || e.metaKey || e.altKey) return false
-    const sel = window.getSelection()
-    if (!sel?.isCollapsed || !sel.rangeCount) return false
-    const node = sel.anchorNode
-    const block = node instanceof Element
-      ? node.closest('p')
-      : node?.nodeType === Node.TEXT_NODE
-        ? node.parentElement?.closest('p')
-        : null
-    if (!block || !ref.current?.contains(block)) return false
-    const marker = block.textContent.trim()
-    const commands = { '#': 'h1', '##': 'h2', '###': 'h3' }
-    if (commands[marker]) {
-      e.preventDefault()
-      block.textContent = ''
-      formatBlock(commands[marker])
-      return true
-    }
-    if (marker === '>' || marker === '-' || marker === '*' || marker === '1.') {
-      e.preventDefault()
-      block.textContent = ''
-      document.execCommand(marker === '1.' ? 'insertOrderedList' : marker === '>' ? 'formatBlock' : 'insertUnorderedList', false, marker === '>' ? 'blockquote' : null)
-      report()
-      return true
-    }
-    return false
-  }, [formatBlock, report])
+  const applyMarkdownShortcut = useCallback(
+    (e) => {
+      if (e.key !== ' ' || e.ctrlKey || e.metaKey || e.altKey) return false
+      const sel = window.getSelection()
+      if (!sel?.isCollapsed || !sel.rangeCount) return false
+      const node = sel.anchorNode
+      const block =
+        node instanceof Element
+          ? node.closest('p')
+          : node?.nodeType === Node.TEXT_NODE
+            ? node.parentElement?.closest('p')
+            : null
+      if (!block || !ref.current?.contains(block)) return false
+      const marker = block.textContent.trim()
+      const commands = { '#': 'h1', '##': 'h2', '###': 'h3' }
+      if (commands[marker]) {
+        e.preventDefault()
+        block.textContent = ''
+        formatBlock(commands[marker])
+        return true
+      }
+      if (marker === '>' || marker === '-' || marker === '*' || marker === '1.') {
+        e.preventDefault()
+        block.textContent = ''
+        document.execCommand(
+          marker === '1.'
+            ? 'insertOrderedList'
+            : marker === '>'
+              ? 'formatBlock'
+              : 'insertUnorderedList',
+          false,
+          marker === '>' ? 'blockquote' : null
+        )
+        report()
+        return true
+      }
+      return false
+    },
+    [formatBlock, report]
+  )
 
   // ── Manual page break ────────────────────────────────────────────────────
   //
@@ -1437,10 +1454,7 @@ export default function Editor({
 
     const selection = window.getSelection()
 
-    if (
-      !selection ||
-      !selection.rangeCount
-    ) {
+    if (!selection || !selection.rangeCount) {
       return
     }
 
@@ -1456,9 +1470,10 @@ export default function Editor({
       selection.removeAllRanges()
       selection.addRange(range)
     }
-    const endElement = range.endContainer.nodeType === Node.ELEMENT_NODE
-      ? range.endContainer as Element
-      : range.endContainer.parentElement
+    const endElement =
+      range.endContainer.nodeType === Node.ELEMENT_NODE
+        ? (range.endContainer as Element)
+        : range.endContainer.parentElement
     const block = endElement?.closest('p,h1,h2,h3,blockquote')
     if (block && el.contains(block)) {
       range.setStartAfter(block)
@@ -1523,9 +1538,10 @@ export default function Editor({
         selection.removeAllRanges()
         selection.addRange(range)
       }
-      const endElement = range.endContainer.nodeType === Node.ELEMENT_NODE
-        ? range.endContainer as Element
-        : range.endContainer.parentElement
+      const endElement =
+        range.endContainer.nodeType === Node.ELEMENT_NODE
+          ? (range.endContainer as Element)
+          : range.endContainer.parentElement
       const block = endElement?.closest('p,h1,h2,h3,blockquote')
       if (block && el.contains(block)) {
         range.setStartAfter(block)
@@ -1576,42 +1592,52 @@ export default function Editor({
     if (opened) opened.opener = null
   }, [])
 
-  const handleEditorClick = useCallback((event) => {
-    const target = event.target instanceof Element ? event.target.closest('a[href]') : null
-    if (!target || target.tagName !== 'A') return
-    // A normal click remains an editing gesture. Modifier-click is the explicit
-    // navigation gesture, matching rich-text editors and avoiding lost drafts.
-    if (!(event.ctrlKey || event.metaKey)) {
+  const handleEditorClick = useCallback(
+    (event) => {
+      const target = event.target instanceof Element ? event.target.closest('a[href]') : null
+      if (!target || target.tagName !== 'A') return
+      // A normal click remains an editing gesture. Modifier-click is the explicit
+      // navigation gesture, matching rich-text editors and avoiding lost drafts.
+      if (!(event.ctrlKey || event.metaKey)) {
+        event.preventDefault()
+        const rect = target.getBoundingClientRect()
+        setLinkPopover({
+          href: normalizeSafeLinkUrl(target.getAttribute('href')),
+          text: target.textContent || target.getAttribute('href') || 'Link',
+          node: target,
+          top: rect.bottom + 8,
+          left: Math.min(rect.left, window.innerWidth - 260),
+        })
+        return
+      }
       event.preventDefault()
-      const rect = target.getBoundingClientRect()
-      setLinkPopover({
-        href: normalizeSafeLinkUrl(target.getAttribute('href')),
-        text: target.textContent || target.getAttribute('href') || 'Link',
-        node: target,
-        top: rect.bottom + 8,
-        left: Math.min(rect.left, window.innerWidth - 260),
-      })
-      return
-    }
-    event.preventDefault()
-    openSafeLink(target.getAttribute('href'))
-  }, [openSafeLink])
+      openSafeLink(target.getAttribute('href'))
+    },
+    [openSafeLink]
+  )
 
   useEffect(() => {
     if (!linkPopover) return undefined
     const close = (event) => {
-      if (!(event.target instanceof Element) || !event.target.closest('.editor-link-popover, a[href]')) setLinkPopover(null)
+      if (
+        !(event.target instanceof Element) ||
+        !event.target.closest('.editor-link-popover, a[href]')
+      )
+        setLinkPopover(null)
     }
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [linkPopover])
 
-  const removeLink = useCallback((node) => {
-    if (!node?.parentNode) return
-    node.replaceWith(...node.childNodes)
-    setLinkPopover(null)
-    report()
-  }, [report])
+  const removeLink = useCallback(
+    (node) => {
+      if (!node?.parentNode) return
+      node.replaceWith(...node.childNodes)
+      setLinkPopover(null)
+      report()
+    },
+    [report]
+  )
 
   const applyLinkInsert = useCallback(() => {
     const url = normalizeSafeLinkUrl(linkDraft)
@@ -1641,7 +1667,9 @@ export default function Editor({
     }
 
     const selection = window.getSelection()
-    const range = savedRange.current || (selection && selection.rangeCount ? selection.getRangeAt(0) : document.createRange())
+    const range =
+      savedRange.current ||
+      (selection && selection.rangeCount ? selection.getRangeAt(0) : document.createRange())
 
     const anchor = document.createElement('a')
     anchor.href = url
@@ -1698,61 +1726,56 @@ export default function Editor({
 
     let quote = ''
 
-    if (
-      sel &&
-      sel.rangeCount &&
-      el &&
-      el.contains(sel.anchorNode)
-    ) {
-      quote = sel
-        .toString()
-        .replace(/\s+/g, ' ')
-        .trim()
+    if (sel && sel.rangeCount && el && el.contains(sel.anchorNode)) {
+      quote = sel.toString().replace(/\s+/g, ' ').trim()
     }
 
     onComment?.(quote)
   }, [onComment])
 
-  const insertDictationText = useCallback((text) => {
-    const editor = ref.current
-    if (!editor || !text?.trim()) return
+  const insertDictationText = useCallback(
+    (text) => {
+      const editor = ref.current
+      if (!editor || !text?.trim()) return
 
-    editor.focus()
+      editor.focus()
 
-    if (savedRange.current) {
-      const selection = window.getSelection?.()
-      if (selection) {
-        selection.removeAllRanges()
-        selection.addRange(savedRange.current)
+      if (savedRange.current) {
+        const selection = window.getSelection?.()
+        if (selection) {
+          selection.removeAllRanges()
+          selection.addRange(savedRange.current)
+        }
       }
-    }
 
-    const inserted = document.execCommand('insertText', false, text)
+      const inserted = document.execCommand('insertText', false, text)
 
-    if (!inserted) {
-      const selection = window.getSelection?.()
-      if (selection?.rangeCount) {
-        const range = selection.getRangeAt(0)
-        const node = document.createTextNode(text)
+      if (!inserted) {
+        const selection = window.getSelection?.()
+        if (selection?.rangeCount) {
+          const range = selection.getRangeAt(0)
+          const node = document.createTextNode(text)
 
-        range.deleteContents()
-        range.insertNode(node)
-        range.setStartAfter(node)
-        range.collapse(true)
+          range.deleteContents()
+          range.insertNode(node)
+          range.setStartAfter(node)
+          range.collapse(true)
 
-        selection.removeAllRanges()
-        selection.addRange(range)
-        savedRange.current = range.cloneRange()
-      } else {
-        editor.appendChild(document.createTextNode(text))
+          selection.removeAllRanges()
+          selection.addRange(range)
+          savedRange.current = range.cloneRange()
+        } else {
+          editor.appendChild(document.createTextNode(text))
+        }
       }
-    }
 
-    report()
-    requestAnimationFrame(() => {
-      recalcRef.current?.()
-    })
-  }, [report])
+      report()
+      requestAnimationFrame(() => {
+        recalcRef.current?.()
+      })
+    },
+    [report]
+  )
 
   const stopDictation = useCallback(() => {
     const recognition = dictationRef.current
@@ -1776,15 +1799,17 @@ export default function Editor({
       return
     }
 
-    const SpeechRecognition =
-      window.SpeechRecognition ||
-      window.webkitSpeechRecognition
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
 
     if (!SpeechRecognition) {
       toast('Voice dictation is not supported in this browser. Try Chrome or Edge over HTTPS.')
       return
     }
-    if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    if (
+      window.location.protocol !== 'https:' &&
+      window.location.hostname !== 'localhost' &&
+      window.location.hostname !== '127.0.0.1'
+    ) {
       toast('Voice dictation needs a secure connection.')
       return
     }
@@ -1804,8 +1829,10 @@ export default function Editor({
     }
     recognition.onerror = (event) => {
       const error = event?.error
-      if (error === 'not-allowed' || error === 'service-not-allowed') toast('Microphone access was blocked. Allow microphone access and try again.')
-      else if (error !== 'aborted' && error !== 'no-speech') toast('Voice dictation stopped. Try again.')
+      if (error === 'not-allowed' || error === 'service-not-allowed')
+        toast('Microphone access was blocked. Allow microphone access and try again.')
+      else if (error !== 'aborted' && error !== 'no-speech')
+        toast('Voice dictation stopped. Try again.')
       setDictating(false)
       dictationRef.current = null
     }
@@ -1817,7 +1844,13 @@ export default function Editor({
       const results = Array.from(speechEvent.results || [])
       const transcript = results
         .slice(speechEvent.resultIndex || 0)
-        .filter((result) => typeof result === 'object' && result !== null && 'isFinal' in result && Boolean((result as { isFinal?: boolean }).isFinal))
+        .filter(
+          (result) =>
+            typeof result === 'object' &&
+            result !== null &&
+            'isFinal' in result &&
+            Boolean((result as { isFinal?: boolean }).isFinal)
+        )
         .map((result) => result[0]?.transcript || '')
         .join(' ')
         .trim()
@@ -1836,129 +1869,160 @@ export default function Editor({
   }, [dictating, insertDictationText, stopDictation, toast])
 
   // ── Image drop ───────────────────────────────────────────────────────────
-  const handleImageDrop = useCallback((e) => {
-    const droppedFiles = Array.from(e.dataTransfer?.files || []).filter((file): file is File => {
-      const candidate = file as File & { type?: unknown }
-      return typeof candidate.type === 'string' && candidate.type.startsWith('image/')
-    })
-    const files = droppedFiles.filter((file) => file.size <= MAX_EMBEDDED_IMAGE_BYTES)
-    if (!droppedFiles.length) return
-    if (!droppedFiles.length) return
-    e.preventDefault()
-    if (files.length !== droppedFiles.length) {
-      toast('Images larger than 5 MB are not embedded in manuscripts. Resize the image and try again.')
-    }
-    if (!files.length) return
+  const handleImageDrop = useCallback(
+    (e) => {
+      const droppedFiles = Array.from(e.dataTransfer?.files || []).filter((file): file is File => {
+        const candidate = file as File & { type?: unknown }
+        return typeof candidate.type === 'string' && candidate.type.startsWith('image/')
+      })
+      const files = droppedFiles.filter((file) => file.size <= MAX_EMBEDDED_IMAGE_BYTES)
+      if (!droppedFiles.length) return
+      if (!droppedFiles.length) return
+      e.preventDefault()
+      if (files.length !== droppedFiles.length) {
+        toast(
+          'Images larger than 5 MB are not embedded in manuscripts. Resize the image and try again.'
+        )
+      }
+      if (!files.length) return
 
-    const selection = window.getSelection()
+      const selection = window.getSelection()
 
-    files.forEach((file) => {
-      const safeFile = file as File
-      const reader = new FileReader()
+      files.forEach((file) => {
+        const safeFile = file as File
+        const reader = new FileReader()
 
-      reader.onload = () => {
-        const img = document.createElement('img')
-        const src = typeof reader.result === 'string' ? reader.result : ''
+        reader.onload = () => {
+          const img = document.createElement('img')
+          const src = typeof reader.result === 'string' ? reader.result : ''
 
-        img.src = src
-        img.alt = typeof safeFile.name === 'string' ? safeFile.name : 'Manuscript image'
-        img.style.maxWidth = '100%'
-        img.style.height = 'auto'
-        img.style.display = 'block'
-        img.style.margin = '1.25rem auto'
+          img.src = src
+          img.alt = typeof safeFile.name === 'string' ? safeFile.name : 'Manuscript image'
+          img.style.maxWidth = '100%'
+          img.style.height = 'auto'
+          img.style.display = 'block'
+          img.style.margin = '1.25rem auto'
 
-        if (
-          selection &&
-          selection.rangeCount
-        ) {
-          const range = selection.getRangeAt(0)
+          if (selection && selection.rangeCount) {
+            const range = selection.getRangeAt(0)
 
-          if (ref.current?.contains(range.commonAncestorContainer)) {
-            range.deleteContents()
-            range.insertNode(img)
+            if (ref.current?.contains(range.commonAncestorContainer)) {
+              range.deleteContents()
+              range.insertNode(img)
 
-            range.setStartAfter(img)
-            range.collapse(true)
+              range.setStartAfter(img)
+              range.collapse(true)
 
-            selection.removeAllRanges()
-            selection.addRange(range)
+              selection.removeAllRanges()
+              selection.addRange(range)
+            } else {
+              ref.current?.appendChild(img)
+            }
           } else {
             ref.current?.appendChild(img)
           }
-        } else {
-          ref.current?.appendChild(img)
+
+          report()
         }
 
-        report()
+        reader.onerror = () => {
+          toast('MoonScribe could not read that image. Your manuscript was not changed.')
+        }
+        reader.readAsDataURL(safeFile)
+      })
+    },
+    [report, toast]
+  )
+
+  const insertLibraryImage = useCallback(
+    (id) => {
+      const item = libraryImages.find((tile) => tile.id === id)
+      if (!item || !ref.current) return
+      const img = document.createElement('img')
+      img.src = item.image
+      img.alt = item.text || 'Media Library image'
+      img.style.maxWidth = '100%'
+      img.style.height = 'auto'
+      img.style.display = 'block'
+      img.style.margin = '1.25rem auto'
+      const selection = window.getSelection()
+      if (
+        selection?.rangeCount &&
+        ref.current.contains(selection.getRangeAt(0).commonAncestorContainer)
+      ) {
+        const range = selection.getRangeAt(0)
+        range.deleteContents()
+        range.insertNode(img)
+        range.setStartAfter(img)
+        range.collapse(true)
+        selection.removeAllRanges()
+        selection.addRange(range)
+      } else ref.current.appendChild(img)
+      report()
+    },
+    [libraryImages, report]
+  )
+
+  const insertPageTemplate = useCallback(
+    (templateId) => {
+      const template = PAGE_TEMPLATES.find((item) => item.id === templateId)
+      if (!template || !ref.current) return
+      const block = document.createElement('section')
+      block.className = `ms-page-template ms-page-template-${template.id}`
+      block.innerHTML = `<div class="ms-page-template-mark">${template.icon}</div><h2>${template.title}</h2><p>${template.description}</p><div class="ms-page-template-rule"></div><p class="ms-page-template-placeholder">Begin writing here…</p>`
+      const selection = window.getSelection()
+      if (
+        selection?.rangeCount &&
+        ref.current.contains(selection.getRangeAt(0).commonAncestorContainer)
+      ) {
+        const range = selection.getRangeAt(0)
+        range.deleteContents()
+        range.insertNode(block)
+        range.setStartAfter(block)
+        range.collapse(true)
+        selection.removeAllRanges()
+        selection.addRange(range)
+      } else ref.current.appendChild(block)
+      report()
+      setPageTemplatesOpen(false)
+      toast(`${template.title} inserted.`)
+    },
+    [report, toast]
+  )
+
+  const handleTemplateOrImageDrop = useCallback(
+    (event) => {
+      const designId = event.dataTransfer?.getData('application/x-moonscribe-design')
+      if (designId) {
+        event.preventDefault()
+        onApplyDesign?.(designId)
+        return
       }
-
-      reader.onerror = () => {
-        toast('MoonScribe could not read that image. Your manuscript was not changed.')
+      const templateId = event.dataTransfer?.getData(TEMPLATE_MIME)
+      if (templateId) {
+        event.preventDefault()
+        insertPageTemplate(templateId)
+        return
       }
-      reader.readAsDataURL(safeFile)
-    })
-  }, [report, toast])
-
-  const insertLibraryImage = useCallback((id) => {
-    const item = libraryImages.find((tile) => tile.id === id)
-    if (!item || !ref.current) return
-    const img = document.createElement('img')
-    img.src = item.image
-    img.alt = item.text || 'Media Library image'
-    img.style.maxWidth = '100%'
-    img.style.height = 'auto'
-    img.style.display = 'block'
-    img.style.margin = '1.25rem auto'
-    const selection = window.getSelection()
-    if (selection?.rangeCount && ref.current.contains(selection.getRangeAt(0).commonAncestorContainer)) {
-      const range = selection.getRangeAt(0)
-      range.deleteContents()
-      range.insertNode(img)
-      range.setStartAfter(img)
-      range.collapse(true)
-      selection.removeAllRanges()
-      selection.addRange(range)
-    } else ref.current.appendChild(img)
-    report()
-  }, [libraryImages, report])
-
-  const insertPageTemplate = useCallback((templateId) => {
-    const template = PAGE_TEMPLATES.find((item) => item.id === templateId)
-    if (!template || !ref.current) return
-    const block = document.createElement('section')
-    block.className = `ms-page-template ms-page-template-${template.id}`
-    block.innerHTML = `<div class="ms-page-template-mark">${template.icon}</div><h2>${template.title}</h2><p>${template.description}</p><div class="ms-page-template-rule"></div><p class="ms-page-template-placeholder">Begin writing here…</p>`
-    const selection = window.getSelection()
-    if (selection?.rangeCount && ref.current.contains(selection.getRangeAt(0).commonAncestorContainer)) {
-      const range = selection.getRangeAt(0); range.deleteContents(); range.insertNode(block); range.setStartAfter(block); range.collapse(true); selection.removeAllRanges(); selection.addRange(range)
-    } else ref.current.appendChild(block)
-    report(); setPageTemplatesOpen(false); toast(`${template.title} inserted.`)
-  }, [report, toast])
-
-  const handleTemplateOrImageDrop = useCallback((event) => {
-    const designId = event.dataTransfer?.getData('application/x-moonscribe-design')
-    if (designId) { event.preventDefault(); onApplyDesign?.(designId); return }
-    const templateId = event.dataTransfer?.getData(TEMPLATE_MIME)
-    if (templateId) { event.preventDefault(); insertPageTemplate(templateId); return }
-    if (event.dataTransfer?.files?.length) { handleImageDrop(event); return }
-    // Do not let arbitrary dragged UI text become manuscript content.
-    event.preventDefault()
-  }, [handleImageDrop, insertPageTemplate, onApplyDesign])
+      if (event.dataTransfer?.files?.length) {
+        handleImageDrop(event)
+        return
+      }
+      // Do not let arbitrary dragged UI text become manuscript content.
+      event.preventDefault()
+    },
+    [handleImageDrop, insertPageTemplate, onApplyDesign]
+  )
 
   // ── Selection toolbar state ──────────────────────────────────────────────
   useEffect(() => {
     const updateState = () => {
-      const fam = document.queryCommandValue(
-        'fontName',
-      )
+      const fam = document.queryCommandValue('fontName')
 
       if (fam) {
         const normalized = fam.toLowerCase().replace(/['"]/g, '').trim()
         const match = editorFontOptions.find((f) =>
-          String(f.value)
-            .toLowerCase()
-            .replace(/['"]/g, '')
-            .includes(normalized),
+          String(f.value).toLowerCase().replace(/['"]/g, '').includes(normalized)
         )
 
         if (match) {
@@ -1966,15 +2030,9 @@ export default function Editor({
         }
       }
 
-      const sz = document.queryCommandValue(
-        'fontSize',
-      )
+      const sz = document.queryCommandValue('fontSize')
 
-      if (
-        sz &&
-        Number(sz) >= 1 &&
-        Number(sz) <= 7
-      ) {
+      if (sz && Number(sz) >= 1 && Number(sz) <= 7) {
         const map = {
           1: '9',
           2: '10',
@@ -1985,9 +2043,7 @@ export default function Editor({
           7: '36',
         }
 
-        setFontSize(
-          map[sz] || '13',
-        )
+        setFontSize(map[sz] || '13')
       }
     }
 
@@ -1995,713 +2051,802 @@ export default function Editor({
 
     if (!el) return
 
-    el.addEventListener(
-      'keyup',
-      updateState,
-    )
+    el.addEventListener('keyup', updateState)
 
-    el.addEventListener(
-      'mouseup',
-      updateState,
-    )
+    el.addEventListener('mouseup', updateState)
 
     return () => {
-      el.removeEventListener(
-        'keyup',
-        updateState,
-      )
+      el.removeEventListener('keyup', updateState)
 
-      el.removeEventListener(
-        'mouseup',
-        updateState,
-      )
+      el.removeEventListener('mouseup', updateState)
     }
   }, [editorFontOptions])
 
   // ── Paste ────────────────────────────────────────────────────────────────
-  const handlePaste = useCallback((e) => {
-    const clipboardHtml = e.clipboardData?.getData('text/html') || ''
-    const clipboardImageFiles = Array.from(e.clipboardData?.items || [])
-      .filter((item) => {
-        const candidate = item as DataTransferItem & { kind?: string; type?: string }
-        return candidate.kind === 'file' && typeof candidate.type === 'string' && candidate.type.startsWith('image/')
-      })
-      .map((item) => (item as DataTransferItem).getAsFile())
-      .filter((file): file is File => Boolean(file))
-    const imageFiles = clipboardImageFiles.filter((file) => file.size <= MAX_EMBEDDED_IMAGE_BYTES)
-    if (clipboardImageFiles.length !== imageFiles.length) {
-      e.preventDefault()
-      toast('Images larger than 5 MB are not embedded in manuscripts. Resize the image and try again.')
-      if (!imageFiles.length) return
-    }
-    const htmlImageSources = imageFiles.length || !clipboardHtml
-      ? []
-      : Array.from(new DOMParser().parseFromString(clipboardHtml, 'text/html').querySelectorAll('img'))
-        .map((img) => img.getAttribute('src') || '')
-        .filter((src) => /^(?:data:image\/(?:png|jpe?g|gif|webp);base64,|blob:|https?:\/\/)/i.test(src))
-
-    if (imageFiles.length || htmlImageSources.length) {
-      e.preventDefault()
-      const selection = window.getSelection()
-      const savedRange = selection?.rangeCount && ref.current?.contains(selection.getRangeAt(0).commonAncestorContainer)
-        ? selection.getRangeAt(0).cloneRange()
-        : null
-
-      Promise.all([
-        ...imageFiles.map((file) => new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve({ src: reader.result, name: file.name })
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-        })),
-        ...htmlImageSources.map((src) => Promise.resolve({ src, name: 'Pasted manuscript image' })),
-      ]).then((images) => {
-        const range = savedRange || document.createRange()
-        if (!savedRange) {
-          range.selectNodeContents(ref.current)
-          range.collapse(false)
-        }
-        range.deleteContents()
-        images.forEach(({ src, name }) => {
-          const img = document.createElement('img')
-          img.src = src
-          img.alt = name || 'Pasted manuscript image'
-          img.style.maxWidth = '100%'
-          img.style.height = 'auto'
-          img.style.display = 'block'
-          img.style.margin = '1.25rem auto'
-          range.insertNode(img)
-          range.setStartAfter(img)
-          range.collapse(true)
+  const handlePaste = useCallback(
+    (e) => {
+      const clipboardHtml = e.clipboardData?.getData('text/html') || ''
+      const clipboardImageFiles = Array.from(e.clipboardData?.items || [])
+        .filter((item) => {
+          const candidate = item as DataTransferItem & { kind?: string; type?: string }
+          return (
+            candidate.kind === 'file' &&
+            typeof candidate.type === 'string' &&
+            candidate.type.startsWith('image/')
+          )
         })
-        selection?.removeAllRanges()
-        selection?.addRange(range)
-        report()
-      }).catch(() => {
-        toast('MoonScribe could not read that image. Your manuscript was not changed.')
-      })
-      return
-    }
+        .map((item) => (item as DataTransferItem).getAsFile())
+        .filter((file): file is File => Boolean(file))
+      const imageFiles = clipboardImageFiles.filter((file) => file.size <= MAX_EMBEDDED_IMAGE_BYTES)
+      if (clipboardImageFiles.length !== imageFiles.length) {
+        e.preventDefault()
+        toast(
+          'Images larger than 5 MB are not embedded in manuscripts. Resize the image and try again.'
+        )
+        if (!imageFiles.length) return
+      }
+      const htmlImageSources =
+        imageFiles.length || !clipboardHtml
+          ? []
+          : Array.from(
+              new DOMParser().parseFromString(clipboardHtml, 'text/html').querySelectorAll('img')
+            )
+              .map((img) => img.getAttribute('src') || '')
+              .filter((src) =>
+                /^(?:data:image\/(?:png|jpe?g|gif|webp);base64,|blob:|https?:\/\/)/i.test(src)
+              )
 
-    e.preventDefault()
+      if (imageFiles.length || htmlImageSources.length) {
+        e.preventDefault()
+        const selection = window.getSelection()
+        const savedRange =
+          selection?.rangeCount &&
+          ref.current?.contains(selection.getRangeAt(0).commonAncestorContainer)
+            ? selection.getRangeAt(0).cloneRange()
+            : null
 
-    const html = clipboardHtml
+        Promise.all([
+          ...imageFiles.map(
+            (file) =>
+              new Promise((resolve, reject) => {
+                const reader = new FileReader()
+                reader.onload = () => resolve({ src: reader.result, name: file.name })
+                reader.onerror = reject
+                reader.readAsDataURL(file)
+              })
+          ),
+          ...htmlImageSources.map((src) =>
+            Promise.resolve({ src, name: 'Pasted manuscript image' })
+          ),
+        ])
+          .then((images) => {
+            const range = savedRange || document.createRange()
+            if (!savedRange) {
+              range.selectNodeContents(ref.current)
+              range.collapse(false)
+            }
+            range.deleteContents()
+            images.forEach(({ src, name }) => {
+              const img = document.createElement('img')
+              img.src = src
+              img.alt = name || 'Pasted manuscript image'
+              img.style.maxWidth = '100%'
+              img.style.height = 'auto'
+              img.style.display = 'block'
+              img.style.margin = '1.25rem auto'
+              range.insertNode(img)
+              range.setStartAfter(img)
+              range.collapse(true)
+            })
+            selection?.removeAllRanges()
+            selection?.addRange(range)
+            report()
+          })
+          .catch(() => {
+            toast('MoonScribe could not read that image. Your manuscript was not changed.')
+          })
+        return
+      }
 
-    const text =
-      e.clipboardData?.getData('text/plain')
+      e.preventDefault()
 
-    const cleaned = sanitizePaste(
-      html && html.trim()
-        ? html
-        : text,
-    )
+      const html = clipboardHtml
 
-    if (!cleaned) return
+      const text = e.clipboardData?.getData('text/plain')
 
-    document.execCommand(
-      'insertHTML',
-      false,
-      cleaned,
-    )
+      const cleaned = sanitizePaste(html && html.trim() ? html : text)
 
-    report()
-  }, [report, toast])
+      if (!cleaned) return
+
+      document.execCommand('insertHTML', false, cleaned)
+
+      report()
+    },
+    [report, toast]
+  )
 
   // ── Remove scene break ──────────────────────────────────────────────────
-  const removeSceneBreak = useCallback((node) => {
-    const el = ref.current
+  const removeSceneBreak = useCallback(
+    (node) => {
+      const el = ref.current
 
-    if (
-      !el ||
-      !node ||
-      !el.contains(node)
-    ) {
-      return false
-    }
+      if (!el || !node || !el.contains(node)) {
+        return false
+      }
 
-    const prevP = node.previousElementSibling
-    const nextP = node.nextElementSibling
+      const prevP = node.previousElementSibling
+      const nextP = node.nextElementSibling
 
-    if (
-      prevP &&
-      prevP.tagName === 'P' &&
-      !prevP.textContent.trim()
-    ) {
-      prevP.remove()
-    }
+      if (prevP && prevP.tagName === 'P' && !prevP.textContent.trim()) {
+        prevP.remove()
+      }
 
-    if (
-      nextP &&
-      nextP.tagName === 'P' &&
-      !nextP.textContent.trim()
-    ) {
-      nextP.remove()
-    }
+      if (nextP && nextP.tagName === 'P' && !nextP.textContent.trim()) {
+        nextP.remove()
+      }
 
-    node.remove()
+      node.remove()
 
-    const target =
-      prevP &&
-      prevP.tagName === 'P'
-        ? prevP
-        : nextP &&
-          nextP.tagName === 'P'
-          ? nextP
-          : el
+      const target =
+        prevP && prevP.tagName === 'P' ? prevP : nextP && nextP.tagName === 'P' ? nextP : el
 
-    const sel = window.getSelection()
-    const range = document.createRange()
+      const sel = window.getSelection()
+      const range = document.createRange()
 
-    if (target === el) {
-      el.focus()
+      if (target === el) {
+        el.focus()
 
-      range.selectNodeContents(el)
-      range.collapse(false)
-    } else {
-      const focusNode =
-        target.lastChild || target
+        range.selectNodeContents(el)
+        range.collapse(false)
+      } else {
+        const focusNode = target.lastChild || target
 
-      range.setStart(
-        focusNode,
-        focusNode.nodeType === Node.TEXT_NODE
-          ? focusNode.textContent.length
-          : 0,
-      )
+        range.setStart(
+          focusNode,
+          focusNode.nodeType === Node.TEXT_NODE ? focusNode.textContent.length : 0
+        )
 
-      range.collapse(true)
-    }
+        range.collapse(true)
+      }
 
-    sel.removeAllRanges()
-    sel.addRange(range)
+      sel.removeAllRanges()
+      sel.addRange(range)
 
-    report()
+      report()
 
-    return true
-  }, [report])
+      return true
+    },
+    [report]
+  )
 
   // ── Scene break deletion ────────────────────────────────────────────────
-  const handleSceneBreakDelete = useCallback((e) => {
-    if (
-      e.key !== 'Backspace' &&
-      e.key !== 'Delete'
-    ) {
-      return false
-    }
+  const handleSceneBreakDelete = useCallback(
+    (e) => {
+      if (e.key !== 'Backspace' && e.key !== 'Delete') {
+        return false
+      }
 
-    const el = ref.current
+      const el = ref.current
 
-    if (!el) return false
+      if (!el) return false
 
-    const sel = window.getSelection()
+      const sel = window.getSelection()
 
-    if (
-      !sel ||
-      !sel.rangeCount ||
-      !sel.isCollapsed
-    ) {
-      return false
-    }
+      if (!sel || !sel.rangeCount || !sel.isCollapsed) {
+        return false
+      }
 
-    const anchor = sel.anchorNode
+      const anchor = sel.anchorNode
 
-    let container =
-      anchor?.nodeType === Node.TEXT_NODE
-        ? anchor.parentElement
-        : anchor
+      let container = anchor?.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor
 
-    if (!(container instanceof Element)) {
-      container = el
-    }
+      if (!(container instanceof Element)) {
+        container = el
+      }
 
-    const currentContainer = container instanceof Element ? container : el
+      const currentContainer = container instanceof Element ? container : el
 
-    const previousBreak =
-      currentContainer.previousElementSibling?.classList?.contains('scene-break')
+      const previousBreak = currentContainer.previousElementSibling?.classList?.contains(
+        'scene-break'
+      )
         ? currentContainer.previousElementSibling
         : null
 
-    const nextBreak =
-      currentContainer.nextElementSibling?.classList?.contains('scene-break')
+      const nextBreak = currentContainer.nextElementSibling?.classList?.contains('scene-break')
         ? currentContainer.nextElementSibling
         : null
 
-    if (
-      e.key === 'Backspace' &&
-      previousBreak
-    ) {
-      e.preventDefault()
+      if (e.key === 'Backspace' && previousBreak) {
+        e.preventDefault()
 
-      return removeSceneBreak(
-        previousBreak,
-      )
-    }
+        return removeSceneBreak(previousBreak)
+      }
 
-    if (
-      e.key === 'Delete' &&
-      nextBreak
-    ) {
-      e.preventDefault()
+      if (e.key === 'Delete' && nextBreak) {
+        e.preventDefault()
 
-      return removeSceneBreak(
-        nextBreak,
-      )
-    }
+        return removeSceneBreak(nextBreak)
+      }
 
-    const sceneBreak = container instanceof Element ? container.closest('.scene-break') : null
+      const sceneBreak = container instanceof Element ? container.closest('.scene-break') : null
 
-    if (sceneBreak) {
-      e.preventDefault()
+      if (sceneBreak) {
+        e.preventDefault()
 
-      return removeSceneBreak(sceneBreak)
-    }
+        return removeSceneBreak(sceneBreak)
+      }
 
-    return false
-  }, [removeSceneBreak])
+      return false
+    },
+    [removeSceneBreak]
+  )
 
   // ── Keyboard shortcuts ──────────────────────────────────────────────────
-  const handleKeyDown = useCallback((e) => {
-    if (handleSceneBreakDelete(e)) {
-      return
-    }
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (handleSceneBreakDelete(e)) {
+        return
+      }
 
-    if (e.key === 'Enter') {
-      skipAnnotationRef.current = true
+      // Quote exit uses an ordinary paragraph immediately after the quote.
+      // Keep the first Backspace on that empty paragraph harmless, then let a
+      // second Backspace remove the quote block deliberately. This prevents
+      // the browser's native merge behavior from deleting a quote by accident.
+      if (e.key === 'Backspace') {
+        const selection = window.getSelection()
+        const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+        const block = range?.startContainer instanceof Element
+          ? range.startContainer.closest('p')
+          : range?.startContainer.parentElement?.closest('p')
+        const previous = block?.previousElementSibling
+        const atStart = !!range?.collapsed && !!block && range.startOffset === 0
+        const empty = !!block && !(block.textContent || '').trim()
 
-      clearTimeout(
-        skipAnnotationTimer.current,
-      )
+        if (block && previous?.matches('blockquote') && atStart && empty) {
+          e.preventDefault()
 
-      skipAnnotationTimer.current =
-        setTimeout(() => {
+          if (block.dataset.quoteExitReady === 'true') {
+            const replacement = document.createElement('p')
+            replacement.innerHTML = '<br>'
+            previous.replaceWith(replacement)
+            block.remove()
+            const next = document.createRange()
+            next.setStart(replacement, 0)
+            next.collapse(true)
+            selection?.removeAllRanges()
+            selection?.addRange(next)
+          } else {
+            block.dataset.quoteExitReady = 'true'
+            block.innerHTML = '<br>'
+            const next = document.createRange()
+            next.setStart(block, 0)
+            next.collapse(true)
+            selection?.removeAllRanges()
+            selection?.addRange(next)
+          }
+
+          report()
+          return
+        }
+
+        // Never allow the browser to merge a quote into the paragraph before
+        // it. Native contenteditable Backspace otherwise deletes the quote's
+        // text and then continues deleting the preceding line. At the start
+        // of a quote, deletion is contained within that quote instead.
+        const quote = range?.startContainer instanceof Element
+          ? range.startContainer.closest('blockquote')
+          : range?.startContainer.parentElement?.closest('blockquote')
+        if (quote && range?.collapsed && quote.previousElementSibling) {
+          const start = document.createRange()
+          start.selectNodeContents(quote)
+          start.collapse(true)
+
+          if (range.compareBoundaryPoints(window.Range.START_TO_START, start) <= 0) {
+            e.preventDefault()
+            const hasText = !!(quote.textContent || '').trim()
+
+            if (!hasText) {
+              const before = quote.previousElementSibling
+              quote.remove()
+              const caret = document.createRange()
+              caret.selectNodeContents(before)
+              caret.collapse(false)
+              selection?.removeAllRanges()
+              selection?.addRange(caret)
+            } else {
+              // Backspace at the quote's leading edge is the standard
+              // contenteditable gesture for removing block formatting. Keep
+              // every quoted word and unwrap the quote into normal paragraph
+              // content instead of deleting the manuscript.
+              const paragraphs = Array.from(quote.children).filter((child) => child.matches('p'))
+              const replacement = paragraphs.length
+                ? paragraphs.map((child) => child.cloneNode(true))
+                : [quote.cloneNode(true)]
+              const first = replacement[0] as HTMLElement
+              if (first.matches('blockquote')) {
+                const paragraph = document.createElement('p')
+                paragraph.innerHTML = quote.innerHTML
+                replacement.splice(0, 1, paragraph)
+              }
+              quote.replaceWith(...replacement)
+              const caret = document.createRange()
+              caret.setStart(replacement[0], 0)
+              caret.collapse(true)
+              selection?.removeAllRanges()
+              selection?.addRange(caret)
+            }
+
+            report()
+            return
+          }
+        }
+      }
+
+      if (e.key === 'Enter') {
+        skipAnnotationRef.current = true
+
+        clearTimeout(skipAnnotationTimer.current)
+
+        skipAnnotationTimer.current = setTimeout(() => {
           skipAnnotationRef.current = false
         }, 600)
-    }
 
-    if (applyMarkdownShortcut(e)) return
+        // Pressing Enter at the end of a block quote should leave the quote,
+        // not create another quote block that can swallow the next paragraph.
+        const selection = window.getSelection()
+        const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+        const quote = range?.startContainer instanceof Element
+          ? range.startContainer.closest('blockquote')
+          : range?.startContainer.parentElement?.closest('blockquote')
+        if (quote && range?.collapsed) {
+          const end = document.createRange()
+          end.selectNodeContents(quote)
+          if (range.compareBoundaryPoints(window.Range.END_TO_END, end) >= 0) {
+            e.preventDefault()
 
-    const mod =
-      e.ctrlKey ||
-      e.metaKey
+            // Reuse an existing blank paragraph after the quote. Repeated
+            // Enter presses must not manufacture a chain of empty quote
+            // blocks or leave several quote borders in the page.
+            let paragraph = quote.nextElementSibling
+            while (paragraph?.matches('blockquote') && !(paragraph.textContent || '').trim()) {
+              const emptyQuote = paragraph
+              paragraph = paragraph.nextElementSibling
+              emptyQuote.remove()
+            }
 
-    if (!mod) return
+            if (paragraph?.matches('p') && !(paragraph.textContent || '').trim()) {
+              paragraph.innerHTML = '<br>'
+            } else {
+              paragraph = document.createElement('p')
+              paragraph.innerHTML = '<br>'
+              quote.after(paragraph)
+            }
 
-    const k = e.key.toLowerCase()
-
-    if (
-      e.shiftKey &&
-      k === 'e'
-    ) {
-      e.preventDefault()
-      insertSceneBreak()
-      return
-    }
-
-    if (
-      k === 'enter' &&
-      !e.shiftKey &&
-      pageSize !== 'continuous'
-    ) {
-      e.preventDefault()
-      insertPageBreak()
-      return
-    }
-
-    switch (k) {
-      case 'b':
-        e.preventDefault()
-        exec('bold')
-        break
-
-      case 'f':
-        e.preventDefault()
-        setFindOpen(true)
-        break
-
-      case 'i':
-        e.preventDefault()
-        exec('italic')
-        break
-
-      case 'u':
-        e.preventDefault()
-        exec('underline')
-        break
-
-      case '7':
-        if (e.shiftKey) {
-          e.preventDefault()
-          exec('insertOrderedList')
+            delete (paragraph as HTMLElement).dataset.quoteExitReady
+            const next = document.createRange()
+            next.setStart(paragraph, 0)
+            next.collapse(true)
+            selection?.removeAllRanges()
+            selection?.addRange(next)
+            report()
+            return
+          }
         }
-        break
 
-      case '8':
-        if (e.shiftKey) {
+        // Shift+Enter at the end of a quote is an explicit quote exit. It
+        // creates the same normal paragraph as Enter, without carrying quote
+        // formatting into the following line.
+        if (e.shiftKey && quote && range?.collapsed) {
           e.preventDefault()
-          exec('insertUnorderedList')
+          const paragraph = document.createElement('p')
+          paragraph.innerHTML = '<br>'
+          quote.after(paragraph)
+          const next = document.createRange()
+          next.setStart(paragraph, 0)
+          next.collapse(true)
+          selection?.removeAllRanges()
+          selection?.addRange(next)
+          report()
+          return
         }
-        break
+      }
 
-      case 'm':
-        if (e.shiftKey) {
+      if (applyMarkdownShortcut(e)) return
+
+      const mod = e.ctrlKey || e.metaKey
+
+      if (!mod) return
+
+      const k = e.key.toLowerCase()
+
+      if (e.shiftKey && k === 'e') {
+        e.preventDefault()
+        insertSceneBreak()
+        return
+      }
+
+      if (k === 'enter' && !e.shiftKey && pageSize !== 'continuous') {
+        e.preventDefault()
+        insertPageBreak()
+        return
+      }
+
+      switch (k) {
+        case 'b':
           e.preventDefault()
-          formatBlock('blockquote')
-        }
-        break
+          exec('bold')
+          break
 
-      case 'h':
-        if (e.shiftKey) {
+        case 'f':
           e.preventDefault()
-          clearHighlight()
-        }
-        break
+          setFindOpen(true)
+          break
 
-      case 'p':
-        if (e.shiftKey && pageSize !== 'continuous') {
+        case 'i':
           e.preventDefault()
-          insertPageBreak()
-        }
-        break
+          exec('italic')
+          break
 
-      case 'e':
-        e.preventDefault()
-        toggleHeading('h2')
-        break
-
-      case '1':
-        e.preventDefault()
-        toggleHeading('h2')
-        break
-
-      case '2':
-        e.preventDefault()
-        toggleHeading('h3')
-        break
-
-      case 'k':
-        e.preventDefault()
-        insertLink()
-        break
-
-      case 'd':
-        if (e.shiftKey) {
+        case 'u':
           e.preventDefault()
-          toggleDictation()
-        }
-        break
+          exec('underline')
+          break
 
-      case 's':
-        e.preventDefault()
-        onSave?.()
-        break
+        case '7':
+          if (e.shiftKey) {
+            e.preventDefault()
+            exec('insertOrderedList')
+          }
+          break
 
-      case 'z':
-        e.preventDefault()
-        execUndoRedo(
-          e.shiftKey
-            ? 'redo'
-            : 'undo',
-        )
-        break
+        case '8':
+          if (e.shiftKey) {
+            e.preventDefault()
+            exec('insertUnorderedList')
+          }
+          break
 
-      case 'y':
-        e.preventDefault()
-        execUndoRedo('redo')
-        break
+        case 'm':
+          if (e.shiftKey) {
+            e.preventDefault()
+            formatBlock('blockquote')
+          }
+          break
 
-      default:
-        break
-    }
-  }, [
-    exec,
-    execUndoRedo,
-    formatBlock,
-    toggleHeading,
-    insertSceneBreak,
-    insertPageBreak,
-    insertLink,
-    toggleDictation,
-    applyMarkdownShortcut,
-    clearHighlight,
-    onSave,
-    handleSceneBreakDelete,
-    pageSize,
-  ])
+        case 'h':
+          if (e.shiftKey) {
+            e.preventDefault()
+            clearHighlight()
+          }
+          break
 
-  useEffect(() => () => {
-    try {
-      dictationRef.current?.stop?.()
-    } catch {
-      // Ignore shutdown races while unmounting the editor.
-    }
-  }, [])
+        case 'p':
+          if (e.shiftKey && pageSize !== 'continuous') {
+            e.preventDefault()
+            insertPageBreak()
+          }
+          break
+
+        case 'e':
+          e.preventDefault()
+          toggleHeading('h2')
+          break
+
+        case '1':
+          e.preventDefault()
+          toggleHeading('h2')
+          break
+
+        case '2':
+          e.preventDefault()
+          toggleHeading('h3')
+          break
+
+        case 'k':
+          e.preventDefault()
+          insertLink()
+          break
+
+        case 'd':
+          if (e.shiftKey) {
+            e.preventDefault()
+            toggleDictation()
+          }
+          break
+
+        case 's':
+          e.preventDefault()
+          onSave?.()
+          break
+
+        case 'z':
+          e.preventDefault()
+          execUndoRedo(e.shiftKey ? 'redo' : 'undo')
+          break
+
+        case 'y':
+          e.preventDefault()
+          execUndoRedo('redo')
+          break
+
+        default:
+          break
+      }
+    },
+    [
+      exec,
+      execUndoRedo,
+      formatBlock,
+      toggleHeading,
+      insertSceneBreak,
+      insertPageBreak,
+      insertLink,
+      toggleDictation,
+      applyMarkdownShortcut,
+      clearHighlight,
+      onSave,
+      handleSceneBreakDelete,
+      pageSize,
+      report,
+    ]
+  )
+
+  useEffect(
+    () => () => {
+      try {
+        dictationRef.current?.stop?.()
+      } catch {
+        // Ignore shutdown races while unmounting the editor.
+      }
+    },
+    []
+  )
 
   // ── Context menu ─────────────────────────────────────────────────────────
-  const handleContextMenu = useCallback((e) => {
-    e.preventDefault()
-    e.stopPropagation()
+  const handleContextMenu = useCallback(
+    (e) => {
+      e.preventDefault()
+      e.stopPropagation()
 
-    const sel = window.getSelection()
+      const sel = window.getSelection()
 
-    const sceneBreakTarget =
-      e.target.closest?.(
-        '.scene-break',
-      )
+      const sceneBreakTarget = e.target.closest?.('.scene-break')
 
-    const hasSelection =
-      sel &&
-      !sel.isCollapsed &&
-      ref.current?.contains(
-        sel.anchorNode,
-      )
+      const hasSelection = sel && !sel.isCollapsed && ref.current?.contains(sel.anchorNode)
 
-    const selectedText =
-      hasSelection
-        ? sel
-            .toString()
-            .replace(/\s+/g, ' ')
-            .trim()
-        : ''
+      const selectedText = hasSelection ? sel.toString().replace(/\s+/g, ' ').trim() : ''
 
-    const linkTarget = e.target instanceof Element ? e.target.closest('a[href]') : null
-    const safeLink = linkTarget?.tagName === 'A'
-      ? normalizeSafeLinkUrl(linkTarget.getAttribute('href'))
-      : ''
+      const linkTarget = e.target instanceof Element ? e.target.closest('a[href]') : null
+      const safeLink =
+        linkTarget?.tagName === 'A' ? normalizeSafeLinkUrl(linkTarget.getAttribute('href')) : ''
 
-    openContextMenu(e, [
-      ...(safeLink
-        ? [
-            {
-              label: 'Open link',
-              icon: 'fa-solid fa-arrow-up-right-from-square',
-              onClick: () => openSafeLink(safeLink),
-            },
-            {
-              label: 'Copy link',
-              icon: 'fa-regular fa-copy',
-              onClick: () => navigator.clipboard?.writeText(safeLink),
-            },
-            {
-              label: 'Edit link',
-              icon: 'fa-solid fa-pen',
-              onClick: () => {
-                editingLinkRef.current = linkTarget
-                setLinkDraft(safeLink)
-                setLinkDialogOpen(true)
+      openContextMenu(e, [
+        ...(safeLink
+          ? [
+              {
+                label: 'Open link',
+                icon: 'fa-solid fa-arrow-up-right-from-square',
+                onClick: () => openSafeLink(safeLink),
               },
-            },
-            {
-              label: 'Remove link',
-              icon: 'fa-solid fa-link-slash',
-              onClick: () => {
-                linkTarget.replaceWith(...linkTarget.childNodes)
-                report()
+              {
+                label: 'Copy link',
+                icon: 'fa-regular fa-copy',
+                onClick: () => navigator.clipboard?.writeText(safeLink),
               },
-            },
-            'divider',
-          ]
-        : []),
-      ...(hasSelection
-        ? [
-            {
-              label: 'Bold',
-              icon: 'fa-solid fa-bold',
-              onClick: () =>
-                exec('bold'),
-            },
-            {
-              label: 'Italic',
-              icon: 'fa-solid fa-italic',
-              onClick: () =>
-                exec('italic'),
-            },
-            {
-              label: 'Underline',
-              icon: 'fa-solid fa-underline',
-              onClick: () =>
-                exec('underline'),
-            },
-            {
-              label: 'Strikethrough',
-              icon: 'fa-solid fa-strikethrough',
-              onClick: () =>
-                exec('strikeThrough'),
-            },
-            'divider',
-          ]
-        : []),
+              {
+                label: 'Edit link',
+                icon: 'fa-solid fa-pen',
+                onClick: () => {
+                  editingLinkRef.current = linkTarget
+                  setLinkDraft(safeLink)
+                  setLinkDialogOpen(true)
+                },
+              },
+              {
+                label: 'Remove link',
+                icon: 'fa-solid fa-link-slash',
+                onClick: () => {
+                  linkTarget.replaceWith(...linkTarget.childNodes)
+                  report()
+                },
+              },
+              'divider',
+            ]
+          : []),
+        ...(hasSelection
+          ? [
+              {
+                label: 'Bold',
+                icon: 'fa-solid fa-bold',
+                onClick: () => exec('bold'),
+              },
+              {
+                label: 'Italic',
+                icon: 'fa-solid fa-italic',
+                onClick: () => exec('italic'),
+              },
+              {
+                label: 'Underline',
+                icon: 'fa-solid fa-underline',
+                onClick: () => exec('underline'),
+              },
+              {
+                label: 'Strikethrough',
+                icon: 'fa-solid fa-strikethrough',
+                onClick: () => exec('strikeThrough'),
+              },
+              'divider',
+            ]
+          : []),
 
-      {
-        label: 'Heading 1',
-        icon: 'fa-solid fa-heading',
-        onClick: () =>
-          toggleHeading('h2'),
-      },
+        {
+          label: 'Heading 1',
+          icon: 'fa-solid fa-heading',
+          onClick: () => toggleHeading('h2'),
+        },
 
-      {
-        label: 'Heading 2',
-        icon: 'fa-solid fa-heading',
-        onClick: () =>
-          toggleHeading('h3'),
-      },
+        {
+          label: 'Heading 2',
+          icon: 'fa-solid fa-heading',
+          onClick: () => toggleHeading('h3'),
+        },
 
-      {
-        label: 'Normal text',
-        icon: 'fa-solid fa-paragraph',
-        onClick: () =>
-          formatBlock('p'),
-      },
+        {
+          label: 'Normal text',
+          icon: 'fa-solid fa-paragraph',
+          onClick: () => formatBlock('p'),
+        },
 
-      'divider',
+        'divider',
 
-      {
-        label: 'Scene break',
-        icon: 'fa-solid fa-minus',
-        onClick: insertSceneBreak,
-      },
+        {
+          label: 'Scene break',
+          icon: 'fa-solid fa-minus',
+          onClick: insertSceneBreak,
+        },
 
-      ...(sceneBreakTarget
-        ? [
-            {
-              label: 'Remove scene break',
-              icon: 'fa-solid fa-xmark',
-              onClick: () =>
-                removeSceneBreak(
-                  sceneBreakTarget,
-                ),
-            },
-          ]
-        : []),
+        ...(sceneBreakTarget
+          ? [
+              {
+                label: 'Remove scene break',
+                icon: 'fa-solid fa-xmark',
+                onClick: () => removeSceneBreak(sceneBreakTarget),
+              },
+            ]
+          : []),
 
-      ...(pageSize !== 'continuous'
-        ? [
-            {
-              label: 'Insert page break',
-              icon: 'fa-solid fa-file-circle-plus',
-              onClick: insertPageBreak,
-            },
-          ]
-        : []),
+        ...(pageSize !== 'continuous'
+          ? [
+              {
+                label: 'Insert page break',
+                icon: 'fa-solid fa-file-circle-plus',
+                onClick: insertPageBreak,
+              },
+            ]
+          : []),
 
-      ...(onComment &&
-      hasSelection &&
-      selectedText
-        ? [
-            'divider',
-            {
-              label: 'Add comment',
-              icon: 'fa-regular fa-comment',
-              onClick: addComment,
-            },
-          ]
-        : []),
+        ...(onComment && hasSelection && selectedText
+          ? [
+              'divider',
+              {
+                label: 'Add comment',
+                icon: 'fa-regular fa-comment',
+                onClick: addComment,
+              },
+            ]
+          : []),
 
-      'divider',
+        'divider',
 
-      {
-        label: 'Copy',
-        icon: 'fa-regular fa-copy',
-        onClick: () =>
-          exec('copy'),
-        disabled: !hasSelection,
-      },
+        {
+          label: 'Copy',
+          icon: 'fa-regular fa-copy',
+          onClick: () => exec('copy'),
+          disabled: !hasSelection,
+        },
 
-      {
-        label: 'Cut',
-        icon: 'fa-solid fa-scissors',
-        onClick: () =>
-          exec('cut'),
-        disabled: !hasSelection,
-      },
+        {
+          label: 'Cut',
+          icon: 'fa-solid fa-scissors',
+          onClick: () => exec('cut'),
+          disabled: !hasSelection,
+        },
 
-      {
-        label: 'Select all',
-        icon: 'fa-solid fa-check-double',
-        onClick: () =>
-          exec('selectAll'),
-      },
+        {
+          label: 'Select all',
+          icon: 'fa-solid fa-check-double',
+          onClick: () => exec('selectAll'),
+        },
 
-      'divider',
+        'divider',
 
-      {
-        label: 'Undo',
-        icon: 'fa-solid fa-rotate-left',
-        onClick: () =>
-          execUndoRedo('undo'),
-      },
+        {
+          label: 'Undo',
+          icon: 'fa-solid fa-rotate-left',
+          onClick: () => execUndoRedo('undo'),
+        },
 
-      {
-        label: 'Redo',
-        icon: 'fa-solid fa-rotate-right',
-        onClick: () =>
-          execUndoRedo('redo'),
-      },
-    ])
-  }, [
-    openContextMenu,
-    exec,
-    toggleHeading,
-    formatBlock,
-    insertSceneBreak,
-    insertPageBreak,
-    addComment,
-    onComment,
-    removeSceneBreak,
-    pageSize,
-    execUndoRedo,
-    openSafeLink,
-    report,
-  ])
+        {
+          label: 'Redo',
+          icon: 'fa-solid fa-rotate-right',
+          onClick: () => execUndoRedo('redo'),
+        },
+      ])
+    },
+    [
+      openContextMenu,
+      exec,
+      toggleHeading,
+      formatBlock,
+      insertSceneBreak,
+      insertPageBreak,
+      addComment,
+      onComment,
+      removeSceneBreak,
+      pageSize,
+      execUndoRedo,
+      openSafeLink,
+      report,
+    ]
+  )
 
   // ── Toolbar handlers ─────────────────────────────────────────────────────
-  const handleFontChange = useCallback((val) => {
-    if (typographyTarget === 'title') {
-      setTitleFontFamily(val)
-      onTypographyChange({ chapterTitleStyle: { ...(typography?.chapterTitleStyle || {}), fontFamily: val } })
-      return
-    }
-    setFontFamily(val)
-    applyStyle('fontFamily', val)
-    onTypographyChange({ bodyStyle: { ...(typography?.bodyStyle || {}), fontFamily: val } })
-  }, [applyStyle, onTypographyChange, typography, typographyTarget])
+  const handleFontChange = useCallback(
+    (val) => {
+      if (typographyTarget === 'title') {
+        setTitleFontFamily(val)
+        onTypographyChange({
+          chapterTitleStyle: { ...(typography?.chapterTitleStyle || {}), fontFamily: val },
+        })
+        return
+      }
+      setFontFamily(val)
+      applyStyle('fontFamily', val)
+      onTypographyChange({ bodyStyle: { ...(typography?.bodyStyle || {}), fontFamily: val } })
+    },
+    [applyStyle, onTypographyChange, typography, typographyTarget]
+  )
 
-  const handleSizeChange = useCallback((val) => {
-    setFontSize(val)
-    applyStyle(
-      'fontSize',
-      `${val}pt`,
-    )
-  }, [applyStyle])
+  const handleSizeChange = useCallback(
+    (val) => {
+      setFontSize(val)
+      applyStyle('fontSize', `${val}pt`)
+    },
+    [applyStyle]
+  )
 
-  const handleTextColorChange = useCallback((value) => {
-    if (typographyTarget === 'title') {
-      const chapterTitleStyle = { ...(typography?.chapterTitleStyle || {}) }
-      if (value) chapterTitleStyle.color = value
-      else delete chapterTitleStyle.color
-      onTypographyChange({ chapterTitleStyle })
-      return
-    }
-    applyStyle('color', value)
-  }, [applyStyle, onTypographyChange, typography, typographyTarget])
+  const handleTextColorChange = useCallback(
+    (value) => {
+      if (typographyTarget === 'title') {
+        const chapterTitleStyle = { ...(typography?.chapterTitleStyle || {}) }
+        if (value) chapterTitleStyle.color = value
+        else delete chapterTitleStyle.color
+        onTypographyChange({ chapterTitleStyle })
+        return
+      }
+      applyStyle('color', value)
+    },
+    [applyStyle, onTypographyChange, typography, typographyTarget]
+  )
 
-  const handleLineSpacingChange = useCallback((val) => {
-    setLineSpacing(val)
-    onLineSpacingChange?.(val)
+  const handleLineSpacingChange = useCallback(
+    (val) => {
+      setLineSpacing(val)
+      onLineSpacingChange?.(val)
 
-    requestAnimationFrame(() => {
-      recalcRef.current?.()
-    })
-  }, [onLineSpacingChange])
+      requestAnimationFrame(() => {
+        recalcRef.current?.()
+      })
+    },
+    [onLineSpacingChange]
+  )
 
   // ── Save selection ───────────────────────────────────────────────────────
   const saveSelection = useCallback(() => {
     const sel = window.getSelection()
 
-    if (
-      sel &&
-      sel.rangeCount
-    ) {
-      savedRange.current =
-        sel.getRangeAt(0).cloneRange()
+    if (sel && sel.rangeCount) {
+      savedRange.current = sel.getRangeAt(0).cloneRange()
     }
   }, [])
 
@@ -2710,24 +2855,18 @@ export default function Editor({
     setToolbarIdle(false)
 
     if (toolbarTimerRef.current) {
-      clearTimeout(
-        toolbarTimerRef.current,
-      )
+      clearTimeout(toolbarTimerRef.current)
     }
 
-    toolbarTimerRef.current =
-      setTimeout(() => {
-        setToolbarIdle(true)
-      }, 2200)
+    toolbarTimerRef.current = setTimeout(() => {
+      setToolbarIdle(true)
+    }, 2200)
   }, [])
 
   useEffect(() => {
     resetToolbarActivity()
 
-    return () =>
-      clearTimeout(
-        toolbarTimerRef.current,
-      )
+    return () => clearTimeout(toolbarTimerRef.current)
   }, [resetToolbarActivity])
 
   // ── Toolbar button ───────────────────────────────────────────────────────
@@ -2747,16 +2886,9 @@ export default function Editor({
     disabled?: boolean
   }) => (
     <button
-      className={`tb-btn${
-        active
-          ? ' tb-active'
-          : ''
-      }`}
+      className={`tb-btn${active ? ' tb-active' : ''}`}
       title={buttonTitle}
-      aria-label={
-        ariaLabel ||
-        buttonTitle
-      }
+      aria-label={ariaLabel || buttonTitle}
       aria-pressed={active}
       disabled={disabled}
       onMouseDown={(e) => {
@@ -2773,13 +2905,20 @@ export default function Editor({
   )
 
   const pageOption = PAGE_SIZES.find((p) => p.id === pageSize) || PAGE_SIZES[0]
-  const ps = pageSize === 'continuous'
-    ? null
-    : editorPageGeometry(pageSize, pageLayout?.pageMargin)
+  const ps = pageSize === 'continuous' ? null : editorPageGeometry(pageSize, pageLayout?.pageMargin)
 
   return (
     <>
-      <Modal open={linkDialogOpen} onClose={() => { setLinkDialogOpen(false); setLinkDraft('https://') }} title="Insert link" width={560} className="editor-link-modal">
+      <Modal
+        open={linkDialogOpen}
+        onClose={() => {
+          setLinkDialogOpen(false)
+          setLinkDraft('https://')
+        }}
+        title="Insert link"
+        width={560}
+        className="editor-link-modal"
+      >
         <div className="space-y-5">
           <div className="relative overflow-hidden rounded-[24px] border border-indigo-300/40 bg-[radial-gradient(circle_at_20%_20%,rgba(122,164,255,0.27),transparent_22%),radial-gradient(circle_at_80%_20%,rgba(170,130,255,0.25),transparent_18%),linear-gradient(135deg,#090d17_0%,#101a30_48%,#1a1b32_100%)] px-4 py-4 shadow-[0_24px_60px_rgba(72,78,180,0.22)]">
             <div className="absolute inset-0 bg-[linear-gradient(110deg,transparent_0%,rgba(255,255,255,0.08)_50%,transparent_100%)] opacity-60" />
@@ -2788,14 +2927,20 @@ export default function Editor({
                 <span className="text-2xl text-white">◉</span>
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[10px] uppercase tracking-[0.42em] text-indigo-200/80">moon import</div>
-                <div className="mt-1 text-2xl font-black tracking-[-0.06em] text-white">Link import</div>
+                <div className="text-[10px] uppercase tracking-[0.42em] text-indigo-200/80">
+                  moon import
+                </div>
+                <div className="mt-1 text-2xl font-black tracking-[-0.06em] text-white">
+                  Link import
+                </div>
               </div>
             </div>
           </div>
 
           <label className="block text-left">
-            <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-300">Website URL</span>
+            <span className="mb-2 block text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-300">
+              Website URL
+            </span>
             <input
               type="url"
               value={linkDraft}
@@ -2807,308 +2952,442 @@ export default function Editor({
           </label>
 
           <div className="flex items-center justify-end gap-3 pt-1">
-            <button type="button" className="rounded-full border border-slate-600/80 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-800" onClick={() => { setLinkDialogOpen(false); setLinkDraft('https://') }}>
+            <button
+              type="button"
+              className="rounded-full border border-slate-600/80 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+              onClick={() => {
+                setLinkDialogOpen(false)
+                setLinkDraft('https://')
+              }}
+            >
               Cancel
             </button>
-            <button type="button" className="rounded-full bg-[linear-gradient(135deg,#9cc4ff_0%,#5f7efb_32%,#272369_100%)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(90,102,255,0.45)] transition hover:translate-y-[-1px] hover:shadow-[0_14px_36px_rgba(90,102,255,0.5)]" onClick={applyLinkInsert}>
+            <button
+              type="button"
+              className="rounded-full bg-[linear-gradient(135deg,#9cc4ff_0%,#5f7efb_32%,#272369_100%)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_rgba(90,102,255,0.45)] transition hover:translate-y-[-1px] hover:shadow-[0_14px_36px_rgba(90,102,255,0.5)]"
+              onClick={applyLinkInsert}
+            >
               Insert link
             </button>
           </div>
         </div>
       </Modal>
-      {linkPopover && <div className="editor-link-popover" role="dialog" aria-label="Link actions" style={{ top: linkPopover.top, left: Math.max(8, linkPopover.left) }}>
-        <div className="editor-link-popover-url"><Icon icon="fa-solid fa-link" /> <span title={linkPopover.href}>{linkPopover.text}</span></div>
-        <div className="editor-link-popover-actions">
-          <button type="button" onClick={() => openSafeLink(linkPopover.href)}><Icon icon="fa-solid fa-arrow-up-right-from-square" /> Open</button>
-          <button type="button" onClick={() => { editingLinkRef.current = linkPopover.node; setLinkDraft(linkPopover.href); setLinkDialogOpen(true); setLinkPopover(null) }}><Icon icon="fa-solid fa-pen" /> Edit</button>
-          <button type="button" onClick={() => navigator.clipboard?.writeText(linkPopover.href)}><Icon icon="fa-regular fa-copy" /> Copy</button>
-          <button type="button" onClick={() => removeLink(linkPopover.node)}><Icon icon="fa-solid fa-link-slash" /> Remove</button>
+      {linkPopover && (
+        <div
+          className="editor-link-popover"
+          role="dialog"
+          aria-label="Link actions"
+          style={{ top: linkPopover.top, left: Math.max(8, linkPopover.left) }}
+        >
+          <div className="editor-link-popover-url">
+            <Icon icon="fa-solid fa-link" />{' '}
+            <span title={linkPopover.href}>{linkPopover.text}</span>
+          </div>
+          <div className="editor-link-popover-actions">
+            <button type="button" onClick={() => openSafeLink(linkPopover.href)}>
+              <Icon icon="fa-solid fa-arrow-up-right-from-square" /> Open
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                editingLinkRef.current = linkPopover.node
+                setLinkDraft(linkPopover.href)
+                setLinkDialogOpen(true)
+                setLinkPopover(null)
+              }}
+            >
+              <Icon icon="fa-solid fa-pen" /> Edit
+            </button>
+            <button type="button" onClick={() => navigator.clipboard?.writeText(linkPopover.href)}>
+              <Icon icon="fa-regular fa-copy" /> Copy
+            </button>
+            <button type="button" onClick={() => removeLink(linkPopover.node)}>
+              <Icon icon="fa-solid fa-link-slash" /> Remove
+            </button>
+          </div>
         </div>
-      </div>}
-    <div
-      className="editor-shell"
-      onMouseMove={
-        resetToolbarActivity
-      }
-    >
-      {findOpen && <div className="editor-find-bar" role="search" aria-label="Find and replace in chapter">
-        <Icon icon="fa-solid fa-magnifying-glass" />
-        <input autoFocus value={findQuery} onChange={(event) => { setFindQuery(event.target.value); findInChapter(event.target.value) }} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); findInChapter(findQuery) } if (event.key === 'Escape') setFindOpen(false) }} placeholder="Find in this chapter…" aria-label="Find in this chapter" />
-        <span className="editor-find-count">{findMatches ? `${findMatches} found` : findQuery ? 'Not found' : ''}</span>
-        <input value={replaceQuery} onChange={(event) => setReplaceQuery(event.target.value)} placeholder="Replace with…" aria-label="Replace with" />
-        <label className="editor-find-option"><input type="checkbox" checked={findCaseSensitive} onChange={(event) => { setFindCaseSensitive(event.target.checked); currentFindRef.current = null; findInChapter(findQuery) }} /> Match case</label>
-        <label className="editor-find-option"><input type="checkbox" checked={findWholeWord} onChange={(event) => { setFindWholeWord(event.target.checked); currentFindRef.current = null; findInChapter(findQuery) }} /> Whole word</label>
-        <button type="button" className="button button-quiet" disabled={!currentFindRef.current || !findQuery.trim()} onClick={replaceCurrentMatch}>Replace</button>
-        <button type="button" className="button button-quiet" disabled={!findQuery.trim() || !findMatches} onClick={replaceAllMatches}>Replace all</button>
-        <button type="button" className="button button-quiet" onClick={() => { setFindOpen(false); setFindQuery(''); setReplaceQuery(''); setFindMatches(0); currentFindRef.current = null }} aria-label="Close find"><Icon icon="fa-solid fa-xmark" /></button>
-      </div>}
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* TOOLBAR                                                             */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
+      )}
+      <div className="editor-shell" onMouseMove={resetToolbarActivity}>
+        {findOpen && (
+          <div className="editor-find-bar" role="search" aria-label="Find and replace in chapter">
+            <Icon icon="fa-solid fa-magnifying-glass" />
+            <input
+              autoFocus
+              value={findQuery}
+              onChange={(event) => {
+                setFindQuery(event.target.value)
+                findInChapter(event.target.value)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  findInChapter(findQuery)
+                }
+                if (event.key === 'Escape') setFindOpen(false)
+              }}
+              placeholder="Find in this chapter…"
+              aria-label="Find in this chapter"
+            />
+            <span className="editor-find-count">
+              {findMatches ? `${findMatches} found` : findQuery ? 'Not found' : ''}
+            </span>
+            <input
+              value={replaceQuery}
+              onChange={(event) => setReplaceQuery(event.target.value)}
+              placeholder="Replace with…"
+              aria-label="Replace with"
+            />
+            <label className="editor-find-option">
+              <input
+                type="checkbox"
+                checked={findCaseSensitive}
+                onChange={(event) => {
+                  setFindCaseSensitive(event.target.checked)
+                  currentFindRef.current = null
+                  findInChapter(findQuery)
+                }}
+              />{' '}
+              Match case
+            </label>
+            <label className="editor-find-option">
+              <input
+                type="checkbox"
+                checked={findWholeWord}
+                onChange={(event) => {
+                  setFindWholeWord(event.target.checked)
+                  currentFindRef.current = null
+                  findInChapter(findQuery)
+                }}
+              />{' '}
+              Whole word
+            </label>
+            <button
+              type="button"
+              className="button button-quiet"
+              disabled={!currentFindRef.current || !findQuery.trim()}
+              onClick={replaceCurrentMatch}
+            >
+              Replace
+            </button>
+            <button
+              type="button"
+              className="button button-quiet"
+              disabled={!findQuery.trim() || !findMatches}
+              onClick={replaceAllMatches}
+            >
+              Replace all
+            </button>
+            <button
+              type="button"
+              className="button button-quiet"
+              onClick={() => {
+                setFindOpen(false)
+                setFindQuery('')
+                setReplaceQuery('')
+                setFindMatches(0)
+                currentFindRef.current = null
+              }}
+              aria-label="Close find"
+            >
+              <Icon icon="fa-solid fa-xmark" />
+            </button>
+          </div>
+        )}
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        {/* TOOLBAR                                                             */}
+        {/* ─────────────────────────────────────────────────────────────────── */}
 
-      <div
-        ref={toolbarRef}
-        className={`editor-toolbar ${
-          toolbarIdle
-            ? 'is-idle'
-            : ''
-        }`}
-        onMouseDown={(e) =>
-          e.preventDefault()
-        }
-        onMouseMove={
-          resetToolbarActivity
-        }
-        onScroll={(event) => {
-          const rail = event.currentTarget
-          if (rail.scrollWidth <= rail.clientWidth + 2) return
-          if (rail.scrollLeft >= rail.scrollWidth - rail.clientWidth - 2) {
-            rail.scrollLeft = 0
-          } else if (rail.scrollLeft <= 0) {
-            rail.scrollLeft = rail.scrollWidth - rail.clientWidth
-          }
-        }}
-      >
-        {/* ── Row 1 ─────────────────────────────────────────────────────── */}
-        <div className="tb-row">
-          <Select
-            value={String(typographyTarget === 'title' ? titleFontFamily : fontFamily)}
-            onChange={(value) => handleFontChange(String(value))}
-            ariaLabel="Font family"
-            width={162}
-            disabled={readOnly}
-            onMouseDown={() => { saveSelection(); if (document.activeElement === titleRef.current) setTypographyTarget('title') }}
-            renderLabel={(opt) => (
-              <span
-                style={{
-                  fontFamily: String(opt?.value ?? ''),
+        <div className="mobile-editor-primary-toolbar" aria-label="Writing toolbar">
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => execUndoRedo('undo')}
+            aria-label="Undo"
+          >
+            <Icon icon="fa-solid fa-rotate-left" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => execUndoRedo('redo')}
+            aria-label="Redo"
+          >
+            <Icon icon="fa-solid fa-rotate-right" />
+          </button>
+          <button
+            type="button"
+            className="mobile-editor-style"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setMobileStyleOpen((open) => !open)}
+            aria-label="Paragraph style"
+            aria-expanded={mobileStyleOpen}
+          >
+            Paragraph <Icon icon="fa-solid fa-chevron-down" />
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => exec('bold')}
+            aria-label="Bold"
+          >
+            <strong>B</strong>
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => exec('italic')}
+            aria-label="Italic"
+          >
+            <em>I</em>
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => exec('underline')}
+            aria-label="Underline"
+          >
+            <u>U</u>
+          </button>
+          <button
+            type="button"
+            className="mobile-editor-more-trigger"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setMobileMoreOpen(true)}
+            aria-label="More formatting options"
+          >
+            <Icon icon="fa-solid fa-ellipsis" />
+          </button>
+        </div>
+        {mobileStyleOpen && (
+          <div className="mobile-editor-style-menu" role="menu" aria-label="Paragraph styles">
+            {[
+              ['H1', 'Heading 1', () => toggleHeading('h2')],
+              ['H2', 'Heading 2', () => toggleHeading('h3')],
+              ['H3', 'Heading 3', () => toggleHeading('h4')],
+              ['¶', 'Paragraph', () => formatBlock('p')],
+            ].map(([preview, label, action]) => (
+              <button
+                type="button"
+                role="menuitem"
+                key={label as string}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  ;(action as () => void)()
+                  setMobileStyleOpen(false)
                 }}
               >
-                {opt?.label ?? '—'}
-              </span>
-            )}
-            options={editorFontOptions}
-          />
+                <strong>{preview as string}</strong>
+                <span>{label as string}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div
+          ref={toolbarRef}
+          className={`editor-toolbar flex items-center gap-1 overflow-x-auto touch-pan-x overscroll-contain border-t border-[var(--border)] bg-[var(--surface-elev)]/95 px-2 py-1 shadow-[0_-8px_24px_rgba(0,0,0,.16)] backdrop-blur-xl ${
+            toolbarIdle ? 'is-idle' : ''
+          }`}
+          onMouseDown={(e) => e.preventDefault()}
+          onMouseMove={resetToolbarActivity}
+          onScroll={(event) => {
+            // Keep the toolbar a normal horizontal scroller on touch devices.
+            // Wrapping the scroll position at either edge made it impossible to
+            // return to earlier controls such as Designs.
+            event.stopPropagation()
+          }}
+        >
+          {/* ── Row 1 ─────────────────────────────────────────────────────── */}
+          <div className="tb-row">
+            <Select
+              value={String(typographyTarget === 'title' ? titleFontFamily : fontFamily)}
+              onChange={(value) => handleFontChange(String(value))}
+              ariaLabel="Font family"
+              width={162}
+              disabled={readOnly}
+              onMouseDown={() => {
+                saveSelection()
+                if (document.activeElement === titleRef.current) setTypographyTarget('title')
+              }}
+              renderLabel={(opt) => (
+                <span
+                  style={{
+                    fontFamily: String(opt?.value ?? ''),
+                  }}
+                >
+                  {opt?.label ?? '—'}
+                </span>
+              )}
+              options={editorFontOptions}
+            />
 
-          <Select
-            value={fontSize}
-            onChange={
-              handleSizeChange
-            }
-            ariaLabel="Font size"
-            width={62}
-            disabled={readOnly}
-            onMouseDown={
-              saveSelection
-            }
-            options={FONT_SIZES.map(
-              (s) => ({
+            <Select
+              value={fontSize}
+              onChange={handleSizeChange}
+              ariaLabel="Font size"
+              width={62}
+              disabled={readOnly}
+              onMouseDown={saveSelection}
+              options={FONT_SIZES.map((s) => ({
                 value: s,
                 label: s,
-              }),
-            )}
-          />
+              }))}
+            />
 
-          <Select
-            value={String(pageSize)}
-            onChange={(v) => {
-              const next = String(v)
-              setPageSize(next)
-              onPageLayoutChange?.({ pageSize: next })
-
-              try {
-                localStorage.setItem(
-                  'moonscribe:pageSize',
-                  next,
-                )
-              } catch {
-                // Ignore storage failures.
-              }
-
-              requestAnimationFrame(
-                () =>
-                  recalcRef.current?.(),
-              )
-            }}
-            ariaLabel="Page size"
-            width={82}
-            disabled={readOnly}
-            options={PAGE_SIZES.map(
-              (p) => ({
-                value: p.id,
-                label: p.label,
-              }),
-            )}
-          />
-
-          {ps && (
             <Select
-              value={String(ps.marginMm)}
-              onChange={(value) => {
-                onPageLayoutChange?.({ pageMargin: Number(value) })
+              value={String(pageSize)}
+              onChange={(v) => {
+                const next = String(v)
+                setPageSize(next)
+                onPageLayoutChange?.({ pageSize: next })
+
+                try {
+                  localStorage.setItem('moonscribe:pageSize', next)
+                } catch {
+                  // Ignore storage failures.
+                }
+
                 requestAnimationFrame(() => recalcRef.current?.())
               }}
-              ariaLabel="Page margins"
-              width={104}
+              ariaLabel="Page size"
+              width={82}
               disabled={readOnly}
-              options={PAGE_MARGINS}
+              options={PAGE_SIZES.map((p) => ({
+                value: p.id,
+                label: p.label,
+              }))}
             />
-          )}
 
-          <Select
-            value={lineSpacing}
-            onChange={
-              handleLineSpacingChange
-            }
-            ariaLabel="Line spacing"
-            width={72}
-            disabled={readOnly}
-            options={LINE_SPACINGS.map(
-              (s) => ({
+            {ps && (
+              <Select
+                value={String(ps.marginMm)}
+                onChange={(value) => {
+                  onPageLayoutChange?.({ pageMargin: Number(value) })
+                  requestAnimationFrame(() => recalcRef.current?.())
+                }}
+                ariaLabel="Page margins"
+                width={104}
+                disabled={readOnly}
+                options={PAGE_MARGINS}
+              />
+            )}
+
+            <Select
+              value={lineSpacing}
+              onChange={handleLineSpacingChange}
+              ariaLabel="Line spacing"
+              width={72}
+              disabled={readOnly}
+              options={LINE_SPACINGS.map((s) => ({
                 value: s.value,
                 label: s.label,
-              }),
-            )}
-          />
+              }))}
+            />
 
-          <span className="tb-sep" />
+            <span className="tb-sep" />
 
-          <Btn
-            action={() =>
-              exec('bold')
-            }
-            title="Bold (Ctrl+B)"
-            ariaLabel="Bold"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-bold" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              exec('italic')
-            }
-            title="Italic (Ctrl+I)"
-            ariaLabel="Italic"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-italic" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              exec('underline')
-            }
-            title="Underline (Ctrl+U)"
-            ariaLabel="Underline"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-underline" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              exec(
-                'strikeThrough',
-              )
-            }
-            title="Strikethrough"
-            ariaLabel="Strikethrough"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-strikethrough" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              exec('superscript')
-            }
-            title="Superscript"
-            ariaLabel="Superscript"
-            disabled={readOnly}
-          >
-            <span
-              style={{
-                fontSize:
-                  '0.75em',
-              }}
-            >
-              x²
-            </span>
-          </Btn>
-
-          <Btn
-            action={() =>
-              exec('subscript')
-            }
-            title="Subscript"
-            ariaLabel="Subscript"
-            disabled={readOnly}
-          >
-            <span
-              style={{
-                fontSize:
-                  '0.75em',
-              }}
-            >
-              x₂
-            </span>
-          </Btn>
-
-          <span className="tb-sep" />
-
-          {/* Text colour */}
-          <div
-            className="tb-color-wrap"
-            style={{
-              position:
-                'relative',
-            }}
-          >
-          <button
-              className="tb-btn tb-color-btn"
-              title="Text colour"
-              aria-label="Text colour"
+            <Btn
+              action={() => exec('bold')}
+              title="Bold (Ctrl+B)"
+              ariaLabel="Bold"
               disabled={readOnly}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                saveSelection()
-              }}
-              onClick={() =>
-                setColorPop(
-                  (p) =>
-                    p === 'text'
-                      ? null
-                      : 'text',
-                )
-              }
             >
-              <Icon icon="fa-solid fa-font" />
+              <Icon icon="fa-solid fa-bold" />
+            </Btn>
 
-              <span className="tb-color-stripe tb-color-stripe-text" />
-            </button>
+            <Btn
+              action={() => exec('italic')}
+              title="Italic (Ctrl+I)"
+              ariaLabel="Italic"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-italic" />
+            </Btn>
 
-            {colorPop ===
-              'text' && (
-              <div className="tb-color-pop">
-                <div className="tb-color-label">
-                  Text colour
-                </div>
+            <Btn
+              action={() => exec('underline')}
+              title="Underline (Ctrl+U)"
+              ariaLabel="Underline"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-underline" />
+            </Btn>
 
-                <div className="tb-color-swatches">
-                  {TEXT_COLORS.map(
-                    (c) => (
+            <Btn
+              action={() => exec('strikeThrough')}
+              title="Strikethrough"
+              ariaLabel="Strikethrough"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-strikethrough" />
+            </Btn>
+
+            <Btn
+              action={() => exec('superscript')}
+              title="Superscript"
+              ariaLabel="Superscript"
+              disabled={readOnly}
+            >
+              <span
+                style={{
+                  fontSize: '0.75em',
+                }}
+              >
+                x²
+              </span>
+            </Btn>
+
+            <Btn
+              action={() => exec('subscript')}
+              title="Subscript"
+              ariaLabel="Subscript"
+              disabled={readOnly}
+            >
+              <span
+                style={{
+                  fontSize: '0.75em',
+                }}
+              >
+                x₂
+              </span>
+            </Btn>
+
+            <span className="tb-sep" />
+
+            {/* Text colour */}
+            <div
+              className="tb-color-wrap"
+              style={{
+                position: 'relative',
+              }}
+            >
+              <button
+                className="tb-btn tb-color-btn"
+                title="Text colour"
+                aria-label="Text colour"
+                disabled={readOnly}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  saveSelection()
+                }}
+                onClick={() => setColorPop((p) => (p === 'text' ? null : 'text'))}
+              >
+                <Icon icon="fa-solid fa-font" />
+
+                <span className="tb-color-stripe tb-color-stripe-text" />
+              </button>
+
+              {colorPop === 'text' && (
+                <div className="tb-color-pop">
+                  <div className="tb-color-label">Text colour</div>
+
+                  <div className="tb-color-swatches">
+                    {TEXT_COLORS.map((c) => (
                       <button
                         key={c}
                         className="tb-swatch"
                         style={{
-                          background:
-                            c,
-                          border:
-                            c ===
-                            '#ffffff'
-                              ? '1px solid var(--border)'
-                              : undefined,
+                          background: c,
+                          border: c === '#ffffff' ? '1px solid var(--border)' : undefined,
                         }}
                         onMouseDown={(e) => {
                           e.preventDefault()
@@ -3117,91 +3396,69 @@ export default function Editor({
                         onClick={() => {
                           handleTextColorChange(c)
 
-                          setColorPop(
-                            null,
-                          )
+                          setColorPop(null)
                         }}
                         disabled={readOnly}
                         aria-label={c}
                         title={c}
                       />
-                    ),
-                  )}
+                    ))}
+                  </div>
+
+                  <button
+                    className="tb-swatch-clear"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      handleTextColorChange('')
+
+                      setColorPop(null)
+                    }}
+                    disabled={readOnly}
+                  >
+                    Remove colour
+                  </button>
                 </div>
+              )}
+            </div>
 
-                <button
-                  className="tb-swatch-clear"
-                  onMouseDown={(e) =>
-                    e.preventDefault()
-                  }
-                  onClick={() => {
-                    handleTextColorChange('')
-
-                    setColorPop(
-                      null,
-                    )
-                  }}
-                  disabled={readOnly}
-                >
-                  Remove colour
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Highlight */}
-          <div
-            className="tb-color-wrap"
-            style={{
-              position:
-                'relative',
-            }}
-          >
-            <button
-              className="tb-btn tb-color-btn"
-              title="Highlight"
-              aria-label="Highlight"
-              disabled={readOnly}
-              onMouseDown={(e) => {
-                e.preventDefault()
-                saveSelection()
+            {/* Highlight */}
+            <div
+              className="tb-color-wrap"
+              style={{
+                position: 'relative',
               }}
-              onClick={() =>
-                setColorPop(
-                  (p) =>
-                    p ===
-                    'highlight'
-                      ? null
-                      : 'highlight',
-                )
-              }
             >
-              <Icon icon="fa-solid fa-highlighter" />
+              <button
+                className="tb-btn tb-color-btn"
+                title="Highlight"
+                aria-label="Highlight"
+                disabled={readOnly}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  saveSelection()
+                }}
+                onClick={() => setColorPop((p) => (p === 'highlight' ? null : 'highlight'))}
+              >
+                <Icon icon="fa-solid fa-highlighter" />
 
-              <span className="tb-color-stripe tb-color-stripe-hl" />
-            </button>
+                <span className="tb-color-stripe tb-color-stripe-hl" />
+              </button>
 
-            {colorPop ===
-              'highlight' && (
-              <div className="tb-color-pop">
-                <div className="tb-color-label">
-                  Highlight
-                </div>
+              {colorPop === 'highlight' && (
+                <div className="tb-color-pop">
+                  <div className="tb-color-label">Highlight</div>
 
-                <div className="tb-color-swatches tb-color-swatches-lg">
-                  {HIGHLIGHT_COLORS.map(
-                    (c) => (
+                  <div className="tb-color-swatches tb-color-swatches-lg">
+                    {HIGHLIGHT_COLORS.map((c) => (
                       <button
                         key={c}
                         className="tb-swatch"
                         style={{
                           background:
-                            c ===
-                            'transparent'
+                            c === 'transparent'
                               ? 'repeating-conic-gradient(#ddd 0% 25%, white 0% 50%) 50% / 8px 8px'
                               : c,
-                          border:
-                            '1px solid var(--border)',
+                          border: '1px solid var(--border)',
                         }}
                         onMouseDown={(e) => {
                           e.preventDefault()
@@ -3214,489 +3471,652 @@ export default function Editor({
                             applyStyle('backgroundColor', c)
                           }
 
-                          setColorPop(
-                            null,
-                          )
+                          setColorPop(null)
                         }}
                         disabled={readOnly}
-                        title={
-                          c ===
-                          'transparent'
-                            ? 'Remove highlight'
-                            : c
-                        }
-                        aria-label={
-                          c ===
-                          'transparent'
-                            ? 'Remove highlight'
-                            : c
-                        }
+                        title={c === 'transparent' ? 'Remove highlight' : c}
+                        aria-label={c === 'transparent' ? 'Remove highlight' : c}
                       />
-                    ),
-                  )}
-                </div>
+                    ))}
+                  </div>
 
-                <div
-                  style={{
-                    display:
-                      'flex',
-                    alignItems:
-                      'center',
-                    gap: 6,
-                    marginTop: 6,
-                  }}
-                >
-                  <span
+                  <div
                     style={{
-                      fontSize:
-                        '0.75rem',
-                      color:
-                        'var(--grey)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      marginTop: 6,
                     }}
                   >
-                    Custom
-                  </span>
+                    <span
+                      style={{
+                        fontSize: '0.75rem',
+                        color: 'var(--grey)',
+                      }}
+                    >
+                      Custom
+                    </span>
 
-                  <input
-                    type="color"
-                    className="tb-custom-color"
-                    defaultValue="#fff7a8"
-                    onMouseDown={(e) =>
-                      e.stopPropagation()
-                    }
-                    disabled={readOnly}
-                    onChange={(e) =>
-                      applyStyle(
-                        'backgroundColor',
-                        e.target
-                          .value,
-                      )
-                    }
-                  />
+                    <input
+                      type="color"
+                      className="tb-custom-color"
+                      defaultValue="#fff7a8"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      disabled={readOnly}
+                      onChange={(e) => applyStyle('backgroundColor', e.target.value)}
+                    />
 
-                  <button
-                    className="tb-swatch-clear"
-                    style={{
-                      marginTop: 0,
-                    }}
-                    onMouseDown={(e) =>
-                      e.preventDefault()
-                    }
-                    onClick={() => {
-                      clearHighlight()
+                    <button
+                      className="tb-swatch-clear"
+                      style={{
+                        marginTop: 0,
+                      }}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        clearHighlight()
 
-                      setColorPop(
-                        null,
-                      )
-                    }}
-                    disabled={readOnly}
-                  >
-                    Remove
-                  </button>
+                        setColorPop(null)
+                      }}
+                      disabled={readOnly}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
+            </div>
+
+            <span className="tb-sep" />
+
+            {dictationSupported && (
+              <Btn
+                action={toggleDictation}
+                title={
+                  dictating ? 'Stop dictation (Ctrl+Shift+D)' : 'Start dictation (Ctrl+Shift+D)'
+                }
+                ariaLabel={dictating ? 'Stop dictation' : 'Start dictation'}
+                active={dictating}
+                disabled={readOnly}
+              >
+                <Icon icon={dictating ? 'fa-solid fa-wave-square' : 'fa-solid fa-microphone'} />
+              </Btn>
             )}
-          </div>
 
-          <span className="tb-sep" />
-
-          {dictationSupported && (
             <Btn
-              action={toggleDictation}
-              title={dictating ? 'Stop dictation (Ctrl+Shift+D)' : 'Start dictation (Ctrl+Shift+D)'}
-              ariaLabel={dictating ? 'Stop dictation' : 'Start dictation'}
-              active={dictating}
+              action={() => exec('removeFormat')}
+              title="Clear formatting"
+              ariaLabel="Clear formatting"
               disabled={readOnly}
             >
-              <Icon icon={dictating ? 'fa-solid fa-wave-square' : 'fa-solid fa-microphone'} />
+              <Icon icon="fa-solid fa-text-slash" />
             </Btn>
-          )}
 
-          <Btn
-            action={() =>
-              exec('removeFormat')
-            }
-            title="Clear formatting"
-            ariaLabel="Clear formatting"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-text-slash" />
-          </Btn>
+            {onDesigns && (
+              <>
+                <span className="tb-sep" />
 
-          {onDesigns && (
-            <>
-              <span className="tb-sep" />
-
-              <button
-                className="tb-btn tb-btn-designs"
-                title="Designs — premade styles for your manuscript"
-                aria-label="Designs"
-                disabled={readOnly}
-                onMouseDown={(e) =>
-                  e.preventDefault()
-                }
-                onClick={onDesigns}
-              >
-                <Icon icon="fa-solid fa-palette" />
-                <span>
-                  Designs
-                </span>
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* ── Row 2 ─────────────────────────────────────────────────────── */}
-        <div className="tb-row">
-          <Btn
-            action={() =>
-              toggleHeading('h2')
-            }
-            title="Heading 1 (Ctrl+1)"
-            ariaLabel="Heading 1"
-            disabled={readOnly}
-          >
-            H1
-          </Btn>
-
-          <Btn
-            action={() =>
-              toggleHeading('h3')
-            }
-            title="Heading 2 (Ctrl+2)"
-            ariaLabel="Heading 2"
-            disabled={readOnly}
-          >
-            H2
-          </Btn>
-
-          <Btn
-            action={() =>
-              toggleHeading('h4')
-            }
-            title="Heading 3"
-            ariaLabel="Heading 3"
-            disabled={readOnly}
-          >
-            H3
-          </Btn>
-
-          <Btn
-            action={() =>
-              formatBlock('p')
-            }
-            title="Normal text"
-            ariaLabel="Normal text"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-paragraph" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              formatBlock(
-                'blockquote',
-              )
-            }
-            title="Block quote"
-            ariaLabel="Block quote"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-quote-left" />
-          </Btn>
-
-          <span className="tb-sep" />
-
-          <Btn
-            action={() =>
-              exec(
-                'insertUnorderedList',
-              )
-            }
-            title="Bullet list"
-            ariaLabel="Bullet list"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-list-ul" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              exec(
-                'insertOrderedList',
-              )
-            }
-            title="Numbered list"
-            ariaLabel="Numbered list"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-list-ol" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              exec('indent')
-            }
-            title="Indent"
-            ariaLabel="Indent"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-indent" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              exec('outdent')
-            }
-            title="Outdent"
-            ariaLabel="Outdent"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-outdent" />
-          </Btn>
-
-          <span className="tb-sep" />
-
-          <Btn
-            action={() =>
-              exec('justifyLeft')
-            }
-            title="Align left"
-            ariaLabel="Align left"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-align-left" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              exec('justifyCenter')
-            }
-            title="Align centre"
-            ariaLabel="Align centre"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-align-center" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              exec('justifyRight')
-            }
-            title="Align right"
-            ariaLabel="Align right"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-align-right" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              exec('justifyFull')
-            }
-            title="Justify"
-            ariaLabel="Justify"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-align-justify" />
-          </Btn>
-
-          <span className="tb-sep" />
-
-          <Btn
-            action={insertLink}
-            title="Insert link (Ctrl+K)"
-            ariaLabel="Insert link"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-link" />
-          </Btn>
-
-          {libraryImages.length > 0 && <div className="editor-media-picker" title="Insert image from Media Library">
-            <button type="button" className="editor-media-icon" aria-label="Open Media Library images" onClick={() => setMediaOpen((open) => !open)}><Icon icon="fa-regular fa-image" /></button>
-            {mediaOpen && <div className="editor-media-popover"><strong>Media Library</strong><div>{libraryImages.map((item) => <button type="button" key={item.id} onClick={() => { insertLibraryImage(item.id); setMediaOpen(false) }}><img src={item.image} alt="" /><span>{item.text || 'Untitled image'}</span></button>)}</div></div>}
-          </div>}
-
-          <div className="editor-media-picker editor-template-picker" title="Page templates">
-            <button type="button" className="editor-media-icon" aria-label="Open page templates" onClick={() => onDesigns?.()}><Icon icon="fa-solid fa-file-lines" /></button>
-            {pageTemplatesOpen && <div className="editor-media-popover editor-page-template-popover"><strong>Page templates</strong><div>{PAGE_TEMPLATES.map((template) => <button type="button" key={template.id} draggable onDragStart={(event) => { event.dataTransfer.setData(TEMPLATE_MIME, template.id); event.dataTransfer.effectAllowed = 'copy' }} onClick={() => insertPageTemplate(template.id)}><span>{template.icon}</span><span><b>{template.title}</b><small>{template.description}</small></span></button>)}</div></div>}
+                <button
+                  className="tb-btn tb-btn-designs"
+                  title="Designs — premade styles for your manuscript"
+                  aria-label="Designs"
+                  disabled={readOnly}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={onDesigns}
+                >
+                  <Icon icon="fa-solid fa-palette" />
+                  <span>Designs</span>
+                </button>
+              </>
+            )}
+            <button
+              type="button"
+              className="tb-btn mobile-toolbar-more"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setMobileMoreOpen(true)}
+              aria-label="More formatting options"
+              title="More formatting options"
+            >
+              <Icon icon="fa-solid fa-ellipsis" /> <span>More</span>
+            </button>
           </div>
 
-          <Btn
-            action={insertSceneBreak}
-            title="Scene break (Ctrl+Shift+E)"
-            ariaLabel="Scene break"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-ellipsis" />
-          </Btn>
-
-          {pageSize !==
-            'continuous' && (
-            <>
-              <Btn action={insertPageBreak} title="Manual page break (Ctrl+Enter)" ariaLabel="Insert manual page break" disabled={readOnly}>
-                <Icon icon="fa-solid fa-file-circle-plus" />
-              </Btn>
-              <Btn action={recalculatePageBreaks} title="Recalculate automatic page breaks" ariaLabel="Recalculate automatic page breaks" disabled={readOnly}>
-                <Icon icon="fa-solid fa-arrows-rotate" />
-              </Btn>
-            </>
-          )}
-
-          {onComment && (
-            <>
-              <span className="tb-sep" />
-
-              <Btn
-                action={addComment}
-                title="Comment on selected text"
-                ariaLabel="Add comment"
-              >
-                <Icon icon="fa-regular fa-comment-dots" />
-              </Btn>
-            </>
-          )}
-
-          <span className="tb-sep" />
-
-          <Btn
-            action={() =>
-              execUndoRedo('undo')
-            }
-            title="Undo (Ctrl+Z)"
-            ariaLabel="Undo"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-rotate-left" />
-          </Btn>
-
-          <Btn
-            action={() =>
-              execUndoRedo('redo')
-            }
-            title="Redo (Ctrl+Y)"
-            ariaLabel="Redo"
-            disabled={readOnly}
-          >
-            <Icon icon="fa-solid fa-rotate-right" />
-          </Btn>
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* EDITOR                                                              */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
-
-      <div className="editor-wrap-outer">
-        <div
-          className="editor-wrap"
-          ref={wrapRef}
-        >
-          <div className="editor-desk">
-            <div
-              className={`editor-canvas${
-                ps
-                  ? ' editor-canvas-paged'
-                  : ''
-              }`}
-              style={{
-                ...(ps
-                  ? {
-                      width: ps.widthPx,
-                      minHeight:
-                        ps.heightPx,
-                      '--pg-width': `${ps.widthPx}px`,
-                      '--pg-height': `${ps.heightPx}px`,
-                      '--pg-body-h': `${ps.bodyHeightPx}px`,
-                      '--page-margin-top': `${ps.marginTopPx}px`,
-                      '--page-margin-right': `${ps.marginRightPx}px`,
-                      '--page-margin-bottom': `${ps.marginBottomPx}px`,
-                      '--page-margin-left': `${ps.marginLeftPx}px`,
-                    }
-                  : {}),
-                '--editor-line-height': lineSpacing,
-                '--editor-font-size': ps ? '12pt' : undefined,
-              } as React.CSSProperties}
+          {/* ── Row 2 ─────────────────────────────────────────────────────── */}
+          <div className="tb-row">
+            <Btn
+              action={() => toggleHeading('h2')}
+              title="Heading 1 (Ctrl+1)"
+              ariaLabel="Heading 1"
+              disabled={readOnly}
             >
-              {/* ── Chapter title ─────────────────────────────────────── */}
-              {title !==
-                undefined && (
-                <div className="editor-head">
-                  <textarea
-                    ref={titleRef}
-                    className="chapter-edit-title"
-                    style={{
-                      fontFamily: titleFontFamily,
-                      color: typography?.chapterTitleStyle?.color,
+              H1
+            </Btn>
+
+            <Btn
+              action={() => toggleHeading('h3')}
+              title="Heading 2 (Ctrl+2)"
+              ariaLabel="Heading 2"
+              disabled={readOnly}
+            >
+              H2
+            </Btn>
+
+            <Btn
+              action={() => toggleHeading('h4')}
+              title="Heading 3"
+              ariaLabel="Heading 3"
+              disabled={readOnly}
+            >
+              H3
+            </Btn>
+
+            <Btn
+              action={() => formatBlock('p')}
+              title="Normal text"
+              ariaLabel="Normal text"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-paragraph" />
+            </Btn>
+
+            <Btn
+              action={() => formatBlock('blockquote')}
+              title="Block quote"
+              ariaLabel="Block quote"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-quote-left" />
+            </Btn>
+
+            <span className="tb-sep" />
+
+            <Btn
+              action={() => exec('insertUnorderedList')}
+              title="Bullet list"
+              ariaLabel="Bullet list"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-list-ul" />
+            </Btn>
+
+            <Btn
+              action={() => exec('insertOrderedList')}
+              title="Numbered list"
+              ariaLabel="Numbered list"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-list-ol" />
+            </Btn>
+
+            <Btn
+              action={() => exec('indent')}
+              title="Indent"
+              ariaLabel="Indent"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-indent" />
+            </Btn>
+
+            <Btn
+              action={() => exec('outdent')}
+              title="Outdent"
+              ariaLabel="Outdent"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-outdent" />
+            </Btn>
+
+            <span className="tb-sep" />
+
+            <Btn
+              action={() => exec('justifyLeft')}
+              title="Align left"
+              ariaLabel="Align left"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-align-left" />
+            </Btn>
+
+            <Btn
+              action={() => exec('justifyCenter')}
+              title="Align centre"
+              ariaLabel="Align centre"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-align-center" />
+            </Btn>
+
+            <Btn
+              action={() => exec('justifyRight')}
+              title="Align right"
+              ariaLabel="Align right"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-align-right" />
+            </Btn>
+
+            <Btn
+              action={() => exec('justifyFull')}
+              title="Justify"
+              ariaLabel="Justify"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-align-justify" />
+            </Btn>
+
+            <span className="tb-sep" />
+
+            <Btn
+              action={insertLink}
+              title="Insert link (Ctrl+K)"
+              ariaLabel="Insert link"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-link" />
+            </Btn>
+
+            {libraryImages.length > 0 && (
+              <div className="editor-media-picker" title="Insert image from Media Library">
+                <button
+                  type="button"
+                  className="editor-media-icon"
+                  aria-label="Open Media Library images"
+                  onClick={() => setMediaOpen((open) => !open)}
+                >
+                  <Icon icon="fa-regular fa-image" />
+                </button>
+                {mediaOpen && (
+                  <div className="editor-media-popover">
+                    <strong>Media Library</strong>
+                    <div>
+                      {libraryImages.map((item) => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          onClick={() => {
+                            insertLibraryImage(item.id)
+                            setMediaOpen(false)
+                          }}
+                        >
+                          <img src={item.image} alt="" />
+                          <span>{item.text || 'Untitled image'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="editor-media-picker editor-template-picker" title="Page templates">
+              <button
+                type="button"
+                className="editor-media-icon"
+                aria-label="Open page templates"
+                onClick={() => onDesigns?.()}
+              >
+                <Icon icon="fa-solid fa-file-lines" />
+              </button>
+              {pageTemplatesOpen && (
+                <div className="editor-media-popover editor-page-template-popover">
+                  <strong>Page templates</strong>
+                  <div>
+                    {PAGE_TEMPLATES.map((template) => (
+                      <button
+                        type="button"
+                        key={template.id}
+                        draggable
+                        onDragStart={(event) => {
+                          event.dataTransfer.setData(TEMPLATE_MIME, template.id)
+                          event.dataTransfer.effectAllowed = 'copy'
+                        }}
+                        onClick={() => insertPageTemplate(template.id)}
+                      >
+                        <span>{template.icon}</span>
+                        <span>
+                          <b>{template.title}</b>
+                          <small>{template.description}</small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Btn
+              action={insertSceneBreak}
+              title="Scene break (Ctrl+Shift+E)"
+              ariaLabel="Scene break"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-ellipsis" />
+            </Btn>
+
+            {pageSize !== 'continuous' && (
+              <>
+                <Btn
+                  action={insertPageBreak}
+                  title="Manual page break (Ctrl+Enter)"
+                  ariaLabel="Insert manual page break"
+                  disabled={readOnly}
+                >
+                  <Icon icon="fa-solid fa-file-circle-plus" />
+                </Btn>
+                <Btn
+                  action={recalculatePageBreaks}
+                  title="Recalculate automatic page breaks"
+                  ariaLabel="Recalculate automatic page breaks"
+                  disabled={readOnly}
+                >
+                  <Icon icon="fa-solid fa-arrows-rotate" />
+                </Btn>
+              </>
+            )}
+
+            {onComment && (
+              <>
+                <span className="tb-sep" />
+
+                <Btn action={addComment} title="Comment on selected text" ariaLabel="Add comment">
+                  <Icon icon="fa-regular fa-comment-dots" />
+                </Btn>
+              </>
+            )}
+
+            <span className="tb-sep" />
+
+            <Btn
+              action={() => execUndoRedo('undo')}
+              title="Undo (Ctrl+Z)"
+              ariaLabel="Undo"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-rotate-left" />
+            </Btn>
+
+            <Btn
+              action={() => execUndoRedo('redo')}
+              title="Redo (Ctrl+Y)"
+              ariaLabel="Redo"
+              disabled={readOnly}
+            >
+              <Icon icon="fa-solid fa-rotate-right" />
+            </Btn>
+          </div>
+        </div>
+        {mobileMoreOpen && (
+          <div
+            className="mobile-editor-sheet-overlay"
+            role="presentation"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setMobileMoreOpen(false)
+            }}
+          >
+            <section
+              className="mobile-editor-sheet"
+              role="dialog"
+              aria-modal="true"
+              aria-label="More formatting options"
+            >
+              <span className="mobile-sheet-handle" />
+              <header>
+                <strong>Formatting</strong>
+                <button
+                  type="button"
+                  onClick={() => setMobileMoreOpen(false)}
+                  aria-label="Close formatting options"
+                >
+                  <Icon icon="fa-solid fa-xmark" />
+                </button>
+              </header>
+              <div className="mobile-editor-sheet-grid">
+                {[
+                  ['H1', 'Heading 1', () => toggleHeading('h2')],
+                  ['H2', 'Heading 2', () => toggleHeading('h3')],
+                  ['H3', 'Heading 3', () => toggleHeading('h4')],
+                  ['¶', 'Paragraph', () => formatBlock('p')],
+                  ['B', 'Bold', () => exec('bold')],
+                  ['I', 'Italic', () => exec('italic')],
+                  ['U', 'Underline', () => exec('underline')],
+                  ['S', 'Strikethrough', () => exec('strikeThrough')],
+                  [
+                    <Icon icon="fa-solid fa-list-ul" />,
+                    'Bulleted list',
+                    () => exec('insertUnorderedList'),
+                  ],
+                  [
+                    <Icon icon="fa-solid fa-list-ol" />,
+                    'Numbered list',
+                    () => exec('insertOrderedList'),
+                  ],
+                  [
+                    <Icon icon="fa-solid fa-quote-left" />,
+                    'Block quote',
+                    () => formatBlock('blockquote'),
+                  ],
+                  [<Icon icon="fa-solid fa-code" />, 'Code block', () => formatBlock('pre')],
+                  [<Icon icon="fa-solid fa-align-left" />, 'Align left', () => exec('justifyLeft')],
+                  [
+                    <Icon icon="fa-solid fa-align-center" />,
+                    'Align centre',
+                    () => exec('justifyCenter'),
+                  ],
+                  [
+                    <Icon icon="fa-solid fa-align-right" />,
+                    'Align right',
+                    () => exec('justifyRight'),
+                  ],
+                  [<Icon icon="fa-solid fa-align-justify" />, 'Justify', () => exec('justifyFull')],
+                  [<Icon icon="fa-solid fa-indent" />, 'Indent', () => exec('indent')],
+                  [<Icon icon="fa-solid fa-outdent" />, 'Outdent', () => exec('outdent')],
+                  [<Icon icon="fa-solid fa-link" />, 'Insert link', insertLink],
+                  [
+                    <Icon icon="fa-solid fa-text-slash" />,
+                    'Clear format',
+                    () => exec('removeFormat'),
+                  ],
+                ].map(([preview, label, action]) => (
+                  <button
+                    type="button"
+                    className="mobile-format-tile"
+                    key={label as string}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => {
+                      ;(action as () => void)()
+                      setMobileMoreOpen(false)
                     }}
-                    value={title}
-                    rows={1}
-                    aria-label="Chapter title"
-                    onChange={(e) => {
-                      resizeChapterTitle()
-                      onTitleChange?.(
-                        e.target.value,
-                      )
-                    }}
-                    onFocus={() => setTypographyTarget('title')}
-                    onBlur={() =>
-                      onTitleBlur?.()
+                    aria-label={label as string}
+                  >
+                    <span className="mobile-format-preview">{preview as React.ReactNode}</span>
+                    <span className="mobile-format-label">{label as string}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="mobile-format-more-tools"
+                  onClick={() => setMobileToolsOpen((open) => !open)}
+                  aria-expanded={mobileToolsOpen}
+                >
+                  <span>More tools</span>
+                  <Icon
+                    icon={
+                      mobileToolsOpen ? 'fa-solid fa-chevron-down' : 'fa-solid fa-chevron-right'
                     }
-                    placeholder="Chapter title…"
-                    onContextMenu={(
-                      e,
-                    ) => {
-                      e.preventDefault()
-                      e.stopPropagation()
+                  />
+                </button>
+                {mobileToolsOpen && (
+                  <div className="mobile-format-extra-tools">
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        setFindOpen(true)
+                        setMobileMoreOpen(false)
+                      }}
+                    >
+                      <Icon icon="fa-solid fa-magnifying-glass" /> Find in chapter
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        insertLink()
+                        setMobileMoreOpen(false)
+                      }}
+                    >
+                      <Icon icon="fa-solid fa-link" /> Insert link
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        insertSceneBreak()
+                        setMobileMoreOpen(false)
+                      }}
+                    >
+                      <Icon icon="fa-solid fa-ellipsis" /> Scene break
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        insertPageBreak()
+                        setMobileMoreOpen(false)
+                      }}
+                    >
+                      <Icon icon="fa-solid fa-file-circle-plus" /> Page break
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        const index = PAGE_SIZES.findIndex((item) => item.id === pageSize)
+                        const next =
+                          PAGE_SIZES[(index + 1) % PAGE_SIZES.length]?.id || PAGE_SIZES[0].id
+                        setPageSize(next)
+                        onPageLayoutChange?.({ pageSize: next })
+                        try {
+                          localStorage.setItem('moonscribe:pageSize', next)
+                        } catch { /* Storage may be unavailable in private or embedded contexts. */ }
+                        requestAnimationFrame(() => recalcRef.current?.())
+                      }}
+                    >
+                      <Icon icon="fa-solid fa-ruler-combined" /> Page size · {pageOption.label}
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => {
+                        addComment()
+                        setMobileMoreOpen(false)
+                      }}
+                    >
+                      <Icon icon="fa-regular fa-comment-dots" /> Add comment
+                    </button>
+                    {onDesigns && (
+                      <button
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          onDesigns()
+                          setMobileMoreOpen(false)
+                        }}
+                      >
+                        <Icon icon="fa-solid fa-palette" /> Designs
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        )}
 
-                      const inp =
-                        e.currentTarget
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        {/* EDITOR                                                              */}
+        {/* ─────────────────────────────────────────────────────────────────── */}
 
-                      const hasSel =
-                        inp.selectionStart !==
-                        inp.selectionEnd
+        <div className="editor-wrap-outer">
+          <div className="editor-wrap min-w-0 overflow-x-hidden" ref={wrapRef}>
+            <div className="editor-desk">
+              <div
+                className={`editor-canvas${ps ? ' editor-canvas-paged' : ''}`}
+                style={
+                  {
+                    ...(ps
+                      ? {
+                          width: ps.widthPx,
+                          minHeight: ps.heightPx,
+                          '--pg-width': `${ps.widthPx}px`,
+                          '--pg-height': `${ps.heightPx}px`,
+                          '--pg-body-h': `${ps.bodyHeightPx}px`,
+                          '--page-margin-top': `${ps.marginTopPx}px`,
+                          '--page-margin-right': `${ps.marginRightPx}px`,
+                          '--page-margin-bottom': `${ps.marginBottomPx}px`,
+                          '--page-margin-left': `${ps.marginLeftPx}px`,
+                        }
+                      : {}),
+                    '--editor-line-height': lineSpacing,
+                    '--editor-font-size': ps ? '12pt' : undefined,
+                  } as React.CSSProperties
+                }
+              >
+                {/* ── Chapter title ─────────────────────────────────────── */}
+                {title !== undefined && (
+                  <div className="editor-head">
+                    <textarea
+                      ref={titleRef}
+                      className="chapter-edit-title"
+                      style={{
+                        fontFamily: titleFontFamily,
+                        color: typography?.chapterTitleStyle?.color,
+                      }}
+                      value={title}
+                      rows={1}
+                      aria-label="Chapter title"
+                      onChange={(e) => {
+                        resizeChapterTitle()
+                        onTitleChange?.(e.target.value)
+                      }}
+                      onFocus={() => setTypographyTarget('title')}
+                      onBlur={() => onTitleBlur?.()}
+                      placeholder="Chapter title…"
+                      onContextMenu={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
 
-                      openContextMenu(
-                        e,
-                        [
+                        const inp = e.currentTarget
+
+                        const hasSel = inp.selectionStart !== inp.selectionEnd
+
+                        openContextMenu(e, [
                           {
                             label: 'Cut',
                             icon: 'fa-solid fa-scissors',
-                            onClick:
-                              () => {
-                                inp.focus()
-                                document.execCommand(
-                                  'cut',
-                                )
-                              },
-                            disabled:
-                              !hasSel,
+                            onClick: () => {
+                              inp.focus()
+                              document.execCommand('cut')
+                            },
+                            disabled: !hasSel,
                           },
 
                           {
                             label: 'Copy',
                             icon: 'fa-regular fa-copy',
-                            onClick:
-                              () => {
-                                inp.focus()
-                                document.execCommand(
-                                  'copy',
-                                )
-                              },
-                            disabled:
-                              !hasSel,
+                            onClick: () => {
+                              inp.focus()
+                              document.execCommand('copy')
+                            },
+                            disabled: !hasSel,
                           },
 
                           {
                             label: 'Paste',
                             icon: 'fa-solid fa-paste',
-                            onClick:
-                              () => {
-                                inp.focus()
-                                document.execCommand(
-                                  'paste',
-                                )
-                              },
+                            onClick: () => {
+                              inp.focus()
+                              document.execCommand('paste')
+                            },
                           },
 
                           'divider',
@@ -3704,11 +4124,10 @@ export default function Editor({
                           {
                             label: 'Select all',
                             icon: 'fa-solid fa-check-double',
-                            onClick:
-                              () => {
-                                inp.focus()
-                                inp.select()
-                              },
+                            onClick: () => {
+                              inp.focus()
+                              inp.select()
+                            },
                           },
 
                           'divider',
@@ -3716,505 +4135,460 @@ export default function Editor({
                           {
                             label: 'Undo',
                             icon: 'fa-solid fa-rotate-left',
-                            onClick:
-                              () =>
-                                execUndoRedo(
-                                  'undo',
-                                ),
+                            onClick: () => execUndoRedo('undo'),
                           },
 
                           {
                             label: 'Redo',
                             icon: 'fa-solid fa-rotate-right',
-                            onClick:
-                              () =>
-                                execUndoRedo(
-                                  'redo',
-                                ),
+                            onClick: () => execUndoRedo('redo'),
                           },
-                        ],
-                      )
-                    }}
-                  />
-                </div>
-              )}
+                        ])
+                      }}
+                    />
+                  </div>
+                )}
 
-              {/* ── One continuous editor ─────────────────────────────── */}
-              <div
-                ref={ref}
-                className="prose"
-                contentEditable={!readOnly}
-                suppressContentEditableWarning
-                role="textbox"
-                aria-multiline="true"
-                aria-label="Manuscript editor"
-                aria-readonly={readOnly}
-                spellCheck={!readOnly && spellCheck}
-                autoCorrect={autoCorrect ? 'on' : 'off'}
-                autoCapitalize="sentences"
-                data-placeholder={
-                  placeholder ||
-                  'The first sentence is the hardest. Start anywhere.'
-                }
-                onInput={report}
-                onFocus={() => { setTypographyTarget('body'); onEditorFocus() }}
-                onClick={handleEditorClick}
-                onBeforeInput={ensureCaretInTextBlock}
-                onBlur={() => { report(); onEditorBlur() }}
-                onPaste={handlePaste}
-                onKeyDown={
-                  handleKeyDown
-                }
-                onContextMenu={
-                  handleContextMenu
-                }
-                onDragOver={(e) => {
-                  if (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes(TEMPLATE_MIME) || e.dataTransfer.types.includes('application/x-moonscribe-design')) e.preventDefault()
-                }}
-                onDrop={
-                  handleTemplateOrImageDrop
-                }
-                onMouseOver={(e) => {
-                  const target = e.target instanceof Element ? e.target : null
-                  const commentSpan = target?.closest('.comment-anchor') as HTMLElement | null
-
-                  if (commentSpan) {
-                    onCommentHover?.(
-                      commentSpan.dataset.commentId || null,
-                    )
-                    setCharTip(null)
-                    setEntityTip(null)
-                    return
+                {/* ── One continuous editor ─────────────────────────────── */}
+                <div
+                  ref={ref}
+                  className="prose"
+                  contentEditable={!readOnly}
+                  suppressContentEditableWarning
+                  role="textbox"
+                  aria-multiline="true"
+                  aria-label="Manuscript editor"
+                  aria-readonly={readOnly}
+                  lang="en"
+                  spellCheck={!readOnly && spellCheck !== false}
+                  autoCorrect={autoCorrect ? 'on' : 'off'}
+                  autoCapitalize="sentences"
+                  data-placeholder={
+                    placeholder || 'The first sentence is the hardest. Start anywhere.'
                   }
+                  onInput={report}
+                  onFocus={() => {
+                    setTypographyTarget('body')
+                    onEditorFocus()
+                  }}
+                  onBeforeInput={ensureCaretInTextBlock}
+                  onBlur={() => {
+                    report()
+                    onEditorBlur()
+                  }}
+                  onPaste={handlePaste}
+                  onKeyDown={handleKeyDown}
+                  onContextMenu={handleContextMenu}
+                  onDragOver={(e) => {
+                    if (
+                      e.dataTransfer.types.includes('Files') ||
+                      e.dataTransfer.types.includes(TEMPLATE_MIME) ||
+                      e.dataTransfer.types.includes('application/x-moonscribe-design')
+                    )
+                      e.preventDefault()
+                  }}
+                  onDrop={handleTemplateOrImageDrop}
+                  onMouseOver={(e) => {
+                    // Touch-sized editor surfaces use deliberate taps for
+                    // entity cards. Hover events on mobile fire during scroll
+                    // and were causing the card to flash and reposition.
+                    if (window.matchMedia?.('(max-width: 760px)').matches) return
+                    const target = e.target instanceof Element ? e.target : null
+                    const commentSpan = target?.closest('.comment-anchor') as HTMLElement | null
 
-                  const nameSpan = target?.closest('.hl-name') as HTMLElement | null
+                    if (commentSpan) {
+                      onCommentHover?.(commentSpan.dataset.commentId || null)
+                      setCharTip(null)
+                      setEntityTip(null)
+                      return
+                    }
 
-                  if (nameSpan) {
-                    setEntityTip(null)
+                    const nameSpan = target?.closest('.hl-name') as HTMLElement | null
 
-                    const char = charactersRef.current.find((c) => c.id === nameSpan.dataset.charId)
+                    if (nameSpan) {
+                      const from = e.relatedTarget instanceof Element ? e.relatedTarget : null
+                      if (from?.closest('.hl-name') === nameSpan) return
+                      setEntityTip(null)
 
-                    if (char) {
+                      const char = charactersRef.current.find(
+                        (c) => c.id === nameSpan.dataset.charId
+                      )
+
+                      if (char) {
+                        const rect = nameSpan.getBoundingClientRect()
+
+                        setCharTip({
+                          char,
+                          x: Math.max(
+                            150,
+                            Math.min(window.innerWidth - 150, rect.left + rect.width / 2)
+                          ),
+                            y: Math.min(window.innerHeight - 24, Math.max(24, rect.bottom + 12)),
+                        })
+                      }
+
+                      return
+                    }
+
+                    const entitySpan = target?.closest('.hl-entity') as HTMLElement | null
+
+                    if (entitySpan) {
+                      const from = e.relatedTarget instanceof Element ? e.relatedTarget : null
+                      if (from?.closest('.hl-entity') === entitySpan) return
+                      setCharTip(null)
+
+                      const entity = entitiesRef.current.find(
+                        (en) => en.id === entitySpan.dataset.entityId
+                      )
+
+                      if (entity) {
+                        const rect = entitySpan.getBoundingClientRect()
+
+                        setEntityTip({
+                          entity,
+                          x: Math.max(
+                            150,
+                            Math.min(window.innerWidth - 150, rect.left + rect.width / 2)
+                          ),
+                            y: Math.min(window.innerHeight - 24, Math.max(24, rect.bottom + 12)),
+                        })
+                      }
+
+                      return
+                    }
+
+                    if (!charTip) setCharTip(null)
+                    if (!entityTip) setEntityTip(null)
+                  }}
+                  onClick={(e) => {
+                    handleEditorClick(e)
+                    if (!window.matchMedia?.('(max-width: 760px)').matches) return
+                    const target = e.target instanceof Element ? e.target : null
+                    const nameSpan = target?.closest('.hl-name') as HTMLElement | null
+                    const entitySpan = target?.closest('.hl-entity') as HTMLElement | null
+                    if (!nameSpan && !entitySpan) return
+
+                    if (nameSpan) {
+                      const char = charactersRef.current.find((item) => item.id === nameSpan.dataset.charId)
+                      if (!char) return
                       const rect = nameSpan.getBoundingClientRect()
-
+                      setEntityTip(null)
                       setCharTip({
                         char,
                         x: Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2)),
                         y: Math.max(150, rect.top),
                       })
-                    }
-
-                    return
-                  }
-
-                  const entitySpan = target?.closest('.hl-entity') as HTMLElement | null
-
-                  if (entitySpan) {
-                    setCharTip(null)
-
-                    const entity = entitiesRef.current.find((en) => en.id === entitySpan.dataset.entityId)
-
-                    if (entity) {
+                    } else if (entitySpan) {
+                      const entity = entitiesRef.current.find((item) => item.id === entitySpan.dataset.entityId)
+                      if (!entity) return
                       const rect = entitySpan.getBoundingClientRect()
-
+                      setCharTip(null)
                       setEntityTip({
                         entity,
                         x: Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2)),
                         y: Math.max(150, rect.top),
                       })
                     }
+                  }}
+                  onMouseOut={(e) => {
+                    if (window.matchMedia?.('(max-width: 760px)').matches) return
+                    const target = e.target instanceof Element ? e.target : null
+                    const related = e.relatedTarget instanceof Element ? e.relatedTarget : null
 
-                    return
-                  }
+                    if (target?.closest('.comment-anchor')) {
+                      onCommentHover?.(null)
+                    }
 
-                  setCharTip(null)
-                  setEntityTip(
-                    null,
-                  )
-                }}
-                onTouchStart={(e) => {
-                  const target = e.target instanceof Element ? e.target : null
-                  const nameSpan = target?.closest('.hl-name') as HTMLElement | null
-                  if (!nameSpan) return
-                  const char = charactersRef.current.find((c) => c.id === nameSpan.dataset.charId)
-                  if (!char) return
-                  const rect = nameSpan.getBoundingClientRect()
-                  setCharTip({ char, x: Math.max(150, Math.min(window.innerWidth - 150, rect.left + rect.width / 2)), y: Math.max(150, rect.top) })
-                }}
-                onMouseOut={(e) => {
-                  const target = e.target instanceof Element ? e.target : null
-                  const related = e.relatedTarget instanceof Element ? e.relatedTarget : null
+                    const from = target?.closest('.hl-name, .hl-entity')
+                    const to = related?.closest('.hl-name, .hl-entity')
+                    if (from && to === from) return
 
-                  if (target?.closest('.comment-anchor')) {
-                    onCommentHover?.(null)
-                  }
+                    if (!related?.closest('.char-tip')) {
+                      setCharTip(null)
+                    }
 
-                  if (!related?.closest('.char-tip')) {
-                    setCharTip(null)
-                  }
-
-                  if (!related?.closest('.entity-tip')) {
-                    setEntityTip(null)
-                  }
-                }}
-              />
-
-              {liveCollaborators.length > 0 && (
-                <div className="editor-presence-layer" aria-hidden="true">
-                  {liveCollaborators.map((person) => (
-                    <div
-                      key={person.id}
-                      className={`editor-presence-marker ${person.activity === 'writing' ? 'is-writing' : 'is-viewing'}`}
-                      style={{ '--presence-color': person.color, '--presence-top': `${person.topRatio * 100}%` } as React.CSSProperties}
-                    >
-                      <span className="editor-presence-stripe" />
-                      <span className="editor-presence-bubble">{person.shortLabel}</span>
-                      <span className="editor-presence-label">
-                        <b>{person.username || 'Collaborator'}</b>
-                        <small>{person.activity === 'writing' ? 'Writing' : 'Viewing'}{person.lineNumber ? ` · line ${person.lineNumber}` : ''}</small>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* ── Page information ─────────────────────────────────── */}
-              {pageSize !==
-                'continuous' && (
-                <div
-                  className="editor-page-status"
-                  aria-live="polite"
-                >
-                  <span>
-                    {pageOption.label}
-                  </span>
-
-                  <span>
-                    {pageCount}{' '}
-                    {pageCount ===
-                    1
-                      ? 'page'
-                      : 'pages'}
-                  </span>
-                  <span className="editor-page-status-auto">Automatic pagination</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <ScrollRail
-          scrollElRef={
-            wrapRef
-          }
-          markers={liveCollaborators}
-        />
-      </div>
-
-      {/* ── Colour popover backdrop ─────────────────────────────────────── */}
-      {colorPop && (
-        <div
-          style={{
-            position:
-              'fixed',
-            inset: 0,
-            zIndex: 998,
-          }}
-          onMouseDown={() =>
-            setColorPop(null)
-          }
-        />
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* CHARACTER TOOLTIP                                                   */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
-
-      {charTip &&
-        (() => {
-          const c =
-            charTip.char
-
-          const initials = (
-            c.name || '?'
-          )
-            .split(/\s+/)
-            .filter(Boolean)
-            .slice(0, 2)
-            .map(
-              (w) => w[0],
-            )
-            .join('')
-            .toUpperCase()
-
-          const baseColor =
-            c.color ||
-            '#8a6a52'
-
-          const stats = [
-            c.age,
-            c.gender,
-            c.species,
-          ].filter(Boolean)
-
-          const hasDetails = Boolean(
-            stats.length ||
-            c.bio ||
-            c.appearance ||
-            c.motivation ||
-            c.occupation,
-          )
-          const hasRole = Boolean(c.role)
-
-          return (
-            <div
-              className={`char-tip ${hasDetails ? '' : 'compact'} ${hasRole ? '' : 'no-role'}`}
-              style={{
-                '--ctip-color': baseColor,
-                left: charTip.x,
-                top: charTip.y,
-              } as React.CSSProperties}
-              onMouseLeave={() =>
-                setCharTip(null)
-              }
-            >
-              <div className="char-tip-banner">
-                <div
-                  className="char-tip-banner-bg"
-                  style={{
-                    background: `linear-gradient(135deg, ${baseColor}cc 0%, ${baseColor}44 100%)`,
+                    if (!related?.closest('.entity-tip')) {
+                      setEntityTip(null)
+                    }
                   }}
                 />
 
-                <div className="char-tip-avatar-wrap">
-                  {c.portrait ? (
-                    <img
-                      src={
-                        c.portrait
-                      }
-                      alt={
-                        c.name
-                      }
-                      className="char-tip-portrait"
-                    />
-                  ) : (
-                    <div
-                      className="char-tip-initials"
-                      style={{
-                        background:
-                          baseColor,
-                      }}
-                    >
-                      {
-                        initials
-                      }
-                    </div>
-                  )}
-                </div>
-
-                <div className="char-tip-header-text">
-                  <div className="char-tip-name">
-                    {c.name}
-                  </div>
-
-                  {c.role && (
-                    <div className="char-tip-role">
-                      {
-                        c.role
-                      }
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {stats.length >
-                0 && (
-                <div className="char-tip-stats">
-                  {stats.map(
-                    (
-                      s,
-                      i,
-                    ) => (
-                      <span
-                        key={i}
-                        className="char-tip-chip"
+                {liveCollaborators.length > 0 && (
+                  <div className="editor-presence-layer" aria-hidden="true">
+                    {liveCollaborators.map((person) => (
+                      <div
+                        key={person.id}
+                        className={`editor-presence-marker ${person.activity === 'writing' ? 'is-writing' : 'is-viewing'}`}
+                        style={
+                          {
+                            '--presence-color': person.color,
+                            '--presence-top': `${person.topRatio * 100}%`,
+                          } as React.CSSProperties
+                        }
                       >
-                        {s}
-                      </span>
-                    ),
-                  )}
-                </div>
-              )}
+                        <span className="editor-presence-stripe" />
+                        <span className="editor-presence-bubble">{person.shortLabel}</span>
+                        <span className="editor-presence-label">
+                          <b>{person.username || 'Collaborator'}</b>
+                          <small>
+                            {person.activity === 'writing' ? 'Writing' : 'Viewing'}
+                            {person.lineNumber ? ` · line ${person.lineNumber}` : ''}
+                          </small>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-              {(c.bio ||
-                c.appearance ||
-                c.motivation) && (
-                <div className="char-tip-excerpt">
-                  {(
-                    c.bio ||
-                    c.appearance ||
-                    c.motivation ||
-                    ''
-                  ).slice(
-                    0,
-                    120,
-                  )}
+                {/* ── Page information ─────────────────────────────────── */}
+                {pageSize !== 'continuous' && (
+                  <div className="editor-page-status" aria-live="polite">
+                    <span>{pageOption.label}</span>
 
-                  {(
-                    c.bio ||
-                    c.appearance ||
-                    c.motivation ||
-                    ''
-                  ).length >
-                  120
-                    ? '…'
-                    : ''}
-                </div>
-              )}
+                    <span>
+                      {pageCount} {pageCount === 1 ? 'page' : 'pages'}
+                    </span>
+                    <span className="editor-page-status-auto">Automatic pagination</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
-              {c.occupation && (
-                <div className="char-tip-occupation">
-                  <i
-                    className="fa-solid fa-briefcase"
+          <ScrollRail
+            scrollElRef={wrapRef}
+            markers={liveCollaborators}
+            context={{
+              title,
+              text: ref.current?.innerText || String(initialHtml || '').replace(/<[^>]+>/g, '\n'),
+              characters: entities.filter((entity) => /character|person/i.test(String(entity.kind || entity.type || ''))).map((entity) => entity.name || entity.title).filter(Boolean),
+              places: entities.filter((entity) => /place|location/i.test(String(entity.kind || entity.type || ''))).map((entity) => entity.name || entity.title).filter(Boolean),
+            }}
+          />
+        </div>
+
+        {/* ── Colour popover backdrop ─────────────────────────────────────── */}
+        {colorPop && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 998,
+            }}
+            onMouseDown={() => setColorPop(null)}
+          />
+        )}
+
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        {/* CHARACTER TOOLTIP                                                   */}
+        {/* ─────────────────────────────────────────────────────────────────── */}
+
+        {(charTip || entityTip) && (
+          <div
+            className="entity-preview-backdrop"
+            role="presentation"
+            onClick={() => {
+              setCharTip(null)
+              setEntityTip(null)
+            }}
+          />
+        )}
+
+        {charTip &&
+          (() => {
+            const c = charTip.char
+
+            const initials = (c.name || '?')
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((w) => w[0])
+              .join('')
+              .toUpperCase()
+
+            const baseColor = c.color || '#8a6a52'
+
+            const stats = [c.age, c.gender, c.species].filter(Boolean)
+
+            const hasDetails = Boolean(
+              stats.length || c.bio || c.appearance || c.motivation || c.occupation
+            )
+            const hasRole = Boolean(c.role)
+
+            return (
+              <div
+                className={`char-tip ${hasDetails ? '' : 'compact'} ${hasRole ? '' : 'no-role'}`}
+                style={
+                  {
+                    '--ctip-color': baseColor,
+                    left: charTip.x,
+                    top: charTip.y,
+                  } as React.CSSProperties
+                }
+              >
+                <div className="char-tip-banner">
+                  <div
+                    className="char-tip-banner-bg"
                     style={{
-                      fontSize:
-                        '0.7rem',
-                      opacity:
-                        0.6,
+                      background: `linear-gradient(135deg, ${baseColor}cc 0%, ${baseColor}44 100%)`,
                     }}
                   />
 
-                  {
-                    c.occupation
-                  }
+                  <div className="char-tip-avatar-wrap">
+                    {c.portrait ? (
+                      <img src={c.portrait} alt={c.name} className="char-tip-portrait" />
+                    ) : (
+                      <div
+                        className="char-tip-initials"
+                        style={{
+                          background: baseColor,
+                        }}
+                      >
+                        {initials}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="char-tip-header-text">
+                    <div className="char-tip-name">{c.name}</div>
+
+                    {c.role && <div className="char-tip-role">{c.role}</div>}
+                  </div>
                 </div>
-              )}
 
-              <div className="story-tip-foot">
-                <span><i className="fa-solid fa-user" /> Character</span>
-                <span>{hasDetails ? 'Story profile' : 'Profile details not added yet'}</span>
+                {stats.length > 0 && (
+                  <div className="char-tip-stats">
+                    {stats.map((s, i) => (
+                      <span key={i} className="char-tip-chip">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {(c.bio || c.appearance || c.motivation) && (
+                  <div className="char-tip-excerpt">
+                    {(c.bio || c.appearance || c.motivation || '').slice(0, 120)}
+
+                    {(c.bio || c.appearance || c.motivation || '').length > 120 ? '…' : ''}
+                  </div>
+                )}
+
+                {c.occupation && (
+                  <div className="char-tip-occupation">
+                    <i
+                      className="fa-solid fa-briefcase"
+                      style={{
+                        fontSize: '0.7rem',
+                        opacity: 0.6,
+                      }}
+                    />
+
+                    {c.occupation}
+                  </div>
+                )}
+
+                <div className="story-tip-foot">
+                  <span>
+                    <i className="fa-solid fa-user" /> Character
+                  </span>
+                  <span>{hasDetails ? 'Story profile' : 'Profile details not added yet'}</span>
+                </div>
               </div>
-            </div>
-          )
-        })()}
+            )
+          })()}
 
-      {/* ─────────────────────────────────────────────────────────────────── */}
-      {/* ENTITY TOOLTIP                                                      */}
-      {/* ─────────────────────────────────────────────────────────────────── */}
+        {/* ─────────────────────────────────────────────────────────────────── */}
+        {/* ENTITY TOOLTIP                                                      */}
+        {/* ─────────────────────────────────────────────────────────────────── */}
 
-      {entityTip &&
-        (() => {
-          const entity =
-            entityTip.entity
+        {entityTip &&
+          (() => {
+            const entity = entityTip.entity
 
-          const KIND_ICONS = {
-            faction:
-              'fa-solid fa-shield-halved',
-            artefact:
-              'fa-solid fa-gem',
-            place:
-              'fa-solid fa-location-dot',
-          }
+            const KIND_ICONS = {
+              faction: 'fa-solid fa-shield-halved',
+              artefact: 'fa-solid fa-gem',
+              place: 'fa-solid fa-location-dot',
+            }
 
-          const KIND_LABELS = {
-            faction:
-              'Faction',
-            artefact:
-              'Artefact',
-            place:
-              'Place',
-          }
+            const KIND_LABELS = {
+              faction: 'Faction',
+              artefact: 'Artefact',
+              place: 'Place',
+            }
 
-          const color =
-            entity.color ||
-            '#7B9EBF'
+            const color = entity.color || '#7B9EBF'
 
-          const meta = entity.kind === 'faction'
-            ? entity.allegiance
-            : entity.kind === 'artefact'
-              ? entity.origin
-              : entity.kind === 'place'
-                ? entity.region
-                : null
+            const meta =
+              entity.kind === 'faction'
+                ? entity.allegiance
+                : entity.kind === 'artefact'
+                  ? entity.origin
+                  : entity.kind === 'place'
+                    ? entity.region
+                    : null
 
-          return (
-            <div
-              className="entity-tip"
-              style={{
-                '--etip-color': color,
-                left: entityTip.x,
-                top: entityTip.y,
-              } as React.CSSProperties}
-              onMouseLeave={() =>
-                setEntityTip(
-                  null,
-                )
-              }
-            >
+            return (
               <div
-                className="entity-tip-banner"
-                style={{
-                  background: `linear-gradient(135deg, ${color}cc 0%, ${color}44 100%)`,
-                }}
+                className="entity-tip"
+                style={
+                  {
+                    '--etip-color': color,
+                    left: entityTip.x,
+                    top: entityTip.y,
+                  } as React.CSSProperties
+                }
               >
                 <div
-                  className="entity-tip-icon"
+                  className="entity-tip-banner"
                   style={{
-                    background:
-                      color,
+                    background: `linear-gradient(135deg, ${color}cc 0%, ${color}44 100%)`,
                   }}
                 >
-                  <i
-                    className={
-                      KIND_ICONS[
-                        entity.kind
-                      ] ||
-                      'fa-solid fa-circle'
-                    }
-                  />
-                </div>
-
-                <div className="entity-tip-header-text">
-                  <div className="entity-tip-name">
-                    {
-                      entity.name
-                    }
+                  <div
+                    className="entity-tip-icon"
+                    style={{
+                      background: color,
+                    }}
+                  >
+                    <i className={KIND_ICONS[entity.kind] || 'fa-solid fa-circle'} />
                   </div>
 
-                  <div className="entity-tip-kind">
-                    {KIND_LABELS[
-                      entity.kind
-                    ] ||
-                      entity.kind}
+                  <div className="entity-tip-header-text">
+                    <div className="entity-tip-name">{entity.name}</div>
+
+                    <div className="entity-tip-kind">{KIND_LABELS[entity.kind] || entity.kind}</div>
                   </div>
                 </div>
-              </div>
 
-              {entity.notes && (
-                <div className="entity-tip-excerpt">
-                  {entity.notes.slice(
-                    0,
-                    140,
-                  )}
+                {entity.notes && (
+                  <div className="entity-tip-excerpt">
+                    {entity.notes.slice(0, 140)}
 
-                  {entity.notes
-                    .length >
-                  140
-                    ? '…'
-                    : ''}
+                    {entity.notes.length > 140 ? '…' : ''}
+                  </div>
+                )}
+
+                {meta && (
+                  <div className="entity-tip-meta">
+                    <i className={KIND_ICONS[entity.kind]} /> {meta}
+                  </div>
+                )}
+
+                <div className="story-tip-foot">
+                  <span>
+                    <i className={KIND_ICONS[entity.kind] || 'fa-solid fa-circle'} />{' '}
+                    {KIND_LABELS[entity.kind] || 'Story entity'}
+                  </span>
+                  <span>
+                    {entity.notes || meta ? 'World profile' : 'Profile details not added yet'}
+                  </span>
                 </div>
-              )}
-
-              {meta && <div className="entity-tip-meta"><i className={KIND_ICONS[entity.kind]} /> {meta}</div>}
-
-              <div className="story-tip-foot">
-                <span><i className={KIND_ICONS[entity.kind] || 'fa-solid fa-circle'} /> {KIND_LABELS[entity.kind] || 'Story entity'}</span>
-                <span>{entity.notes || meta ? 'World profile' : 'Profile details not added yet'}</span>
               </div>
-            </div>
-          )
-        })()}
-    </div>
+            )
+          })()}
+      </div>
     </>
   )
 }

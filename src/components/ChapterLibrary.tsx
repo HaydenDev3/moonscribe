@@ -1,7 +1,7 @@
 // A roomier view of the chapter list: a wide pop-out with Recently edited and
 // the full outline. Keeps the same actions as the sidebar (open, move, edit,
 // delete, tidy, merge, drag to reorder, context menu).
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Modal from './Modal'
 import Icon from './Icon'
 import { formatWords } from '../utils/words'
@@ -11,17 +11,30 @@ import { buildTree, computeNumbers, titleFor, isContainer } from '../utils/numbe
 
 export default function ChapterLibrary({ open, onClose, chapters, currentId, onSelect, onAdd, onMove, onEdit, onDelete, onTidy, onMerge, onReorder }) {
   const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState('all')
+  const [sort, setSort] = useState('order')
+  const [sortOpen, setSortOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(() => new Set())
+  const touchStartY = useRef<number | null>(null)
   const { openContextMenu } = useContextMenu()
 
   const visibleChapters = chapters.filter((c) => {
+    if (filter === 'edited' && !(c.updatedAt && c.updatedAt > (c.createdAt || 0))) return false
+    if (filter === 'drafts' && c.status !== 'draft') return false
+    if (filter === 'pinned' && !c.pinned) return false
     if (!query.trim()) return true
     const text = `${c.title || ''} ${c.part || ''} ${c.kind || ''}`.toLowerCase()
     return text.includes(query.trim().toLowerCase())
   })
+  const sortedVisibleChapters = useMemo(() => [...visibleChapters].sort((a, b) => {
+    if (sort === 'updated') return (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)
+    if (sort === 'title') return String(a.title || '').localeCompare(String(b.title || ''))
+    if (sort === 'words') return (b.wordCount || 0) - (a.wordCount || 0)
+    return (a.order || 0) - (b.order || 0)
+  }), [sort, visibleChapters])
   const { numbers, tree } = useMemo(
-    () => ({ numbers: computeNumbers(chapters), tree: buildTree(visibleChapters) }),
-    [chapters, visibleChapters]
+    () => ({ numbers: computeNumbers(chapters), tree: buildTree(sortedVisibleChapters) }),
+    [chapters, sortedVisibleChapters]
   )
   const recent = [...chapters]
     .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
@@ -92,6 +105,7 @@ export default function ChapterLibrary({ open, onClose, chapters, currentId, onS
           onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move' }}
           onDrop={(e) => handleDropOn(e, c)}
         >
+          {container && <span className="chapter-folder-icon" aria-hidden="true"><Icon icon="fa-solid fa-folder" /></span>}
           {container && node.children.length > 0 && (
             <button
               className="button button-quiet caret"
@@ -127,7 +141,8 @@ export default function ChapterLibrary({ open, onClose, chapters, currentId, onS
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Chapters" width={680}>
+    <Modal open={open} onClose={onClose} title="Chapters" width={680} className="chapter-library-modal">
+      <div className="chapter-library-mobile-surface" onTouchStart={(event) => { touchStartY.current = event.touches[0]?.clientY ?? null }} onTouchEnd={(event) => { const start = touchStartY.current; touchStartY.current = null; const end = event.changedTouches[0]?.clientY ?? start; if (start !== null && end !== null && end - start > 72) onClose() }}>
       <div className="library-search">
         <Icon icon="fa-solid fa-magnifying-glass" />
         <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search chapters…" aria-label="Search chapters" autoFocus />
@@ -136,6 +151,10 @@ export default function ChapterLibrary({ open, onClose, chapters, currentId, onS
             <Icon icon="fa-solid fa-xmark" />
           </button>
         )}
+      </div>
+      <div className="chapter-mobile-filters" role="tablist" aria-label="Chapter filters">
+        {['all', 'edited', 'drafts', 'pinned'].map((value) => <button key={value} type="button" role="tab" aria-selected={filter === value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}
+        <div className="chapter-mobile-sort"><span>Sort by</span><div className="chapter-sort-picker"><button type="button" className="chapter-sort-trigger" aria-label="Sort chapters by" aria-haspopup="listbox" aria-expanded={sortOpen} onClick={() => setSortOpen((open) => !open)}>{({ order: 'Story order', updated: 'Recently edited', title: 'Title', words: 'Word count' } as Record<string, string>)[sort]}<Icon icon="fa-solid fa-chevron-down" /></button>{sortOpen && <div className="chapter-sort-menu" role="listbox" aria-label="Chapter sort options">{[['order', 'Story order'], ['updated', 'Recently edited'], ['title', 'Title'], ['words', 'Word count']].map(([value, label]) => <button type="button" role="option" aria-selected={sort === value} className={sort === value ? 'active' : ''} key={value} onClick={() => { setSort(value); setSortOpen(false) }}>{label}<Icon icon={sort === value ? 'fa-solid fa-check' : 'fa-solid fa-arrow-down-short-wide'} /></button>)}</div>}</div></div>
       </div>
 
       {query.trim() === '' && recent.length > 0 && (
@@ -165,6 +184,8 @@ export default function ChapterLibrary({ open, onClose, chapters, currentId, onS
         ) : (
           tree.map((n) => renderNode(n, 0))
         )}
+      </div>
+      <button type="button" className="chapter-mobile-new button button-primary" onClick={() => onAdd('chapter', null)}><Icon icon="fa-solid fa-plus" /> New chapter</button>
       </div>
     </Modal>
   )

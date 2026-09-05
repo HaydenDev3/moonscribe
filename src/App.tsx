@@ -35,6 +35,8 @@ import { createNote } from './db/notes'
 import { updateDiscordPresence, clearDiscordPresence } from './platform/discordPresence'
 
 const PrintView = lazy(() => import('./pages/PrintView'))
+const AuthorWebsite = lazy(() => import('./pages/AuthorWebsite'))
+const PublicAuthorWebsite = lazy(() => import('./pages/PublicAuthorWebsite'))
 
 function Loading() {
   return (
@@ -191,6 +193,9 @@ export default function App() {
           <Route path="/community" element={<PublicPage page="community" />} />
           <Route path="/contact" element={<PublicPage page="contact" />} />
           <Route path="/dashboard" element={enterStudio(<FeatureGuard featureName="dashboard" title="Dashboard unavailable"><Dashboard /></FeatureGuard>)} />
+          <Route path="/author-website" element={enterStudio(<AuthorWebsite />)} />
+          <Route path="/@:username" element={<PublicAuthorWebsite />} />
+          <Route path="/@:username/about" element={<PublicAuthorWebsite />} />
           <Route path="/admin" element={enterStudio(<AdminDashboard />)} />
           <Route
             path="/novel/:id/design/print"

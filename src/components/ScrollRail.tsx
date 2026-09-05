@@ -2,11 +2,12 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { motion } from 'motion/react'
 
 // A manuscript-position rail synced to the editor scroll surface.
-export default function ScrollRail({ scrollElRef, className = '', markers = [] }) {
+export default function ScrollRail({ scrollElRef, className = '', markers = [], context = null }) {
   const [thumbTop, setThumbTop]     = useState(0)
   const [thumbHeight, setThumbHeight] = useState(40)
   const [canScroll, setCanScroll]   = useState(false)
   const [active, setActive]         = useState(false)
+  const [hoverRatio, setHoverRatio] = useState<number | null>(null)
   const railTrackRef = useRef(null)
   const dragging     = useRef(false)
   const dragStartY   = useRef(0)
@@ -59,6 +60,12 @@ export default function ScrollRail({ scrollElRef, className = '', markers = [] }
     el.scrollTop = Math.max(0, ratio) * (el.scrollHeight - el.clientHeight)
   }
 
+  const onTrackMove = (e) => {
+    if (!context || !railTrackRef.current) return
+    const rect = railTrackRef.current.getBoundingClientRect()
+    setHoverRatio(Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)))
+  }
+
   const onThumbDown = (e) => {
     e.preventDefault()
     dragging.current    = true
@@ -94,7 +101,11 @@ export default function ScrollRail({ scrollElRef, className = '', markers = [] }
         className="scroll-rail-track"
         ref={railTrackRef}
         onClick={onTrackClick}
+        onMouseMove={onTrackMove}
+        onMouseLeave={() => setHoverRatio(null)}
       >
+        {context && hoverRatio !== null && <span className="scroll-rail-hover-hill" style={{ top: `${hoverRatio * 100}%` }} aria-hidden="true" />}
+        {context && hoverRatio !== null && <RailContextTip context={context} ratio={hoverRatio} />}
         <motion.div
           className="scroll-rail-thumb"
           initial={false}
@@ -127,4 +138,20 @@ export default function ScrollRail({ scrollElRef, className = '', markers = [] }
 
     </div>
   )
+}
+
+function RailContextTip({ context, ratio }) {
+  const lines = String(context.text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  const index = Math.min(Math.max(0, lines.length - 1), Math.floor(ratio * lines.length))
+  const excerpt = lines[index] || context.excerpt || 'No content at this position.'
+  const progress = `${Math.round(ratio * 100)}% through`
+  return <div className="scroll-rail-context-tip" role="status" aria-live="polite">
+    <strong>{context.title || 'Current chapter'}</strong>
+    <p>{excerpt.slice(0, 180)}{excerpt.length > 180 ? '…' : ''}</p>
+    {(context.characters?.length > 0 || context.places?.length > 0) && <div className="scroll-rail-context-meta">
+      {context.characters?.length > 0 && <span><b>Characters</b>{context.characters.slice(0, 4).join(' · ')}</span>}
+      {context.places?.length > 0 && <span><b>Places</b>{context.places.slice(0, 4).join(' · ')}</span>}
+    </div>}
+    <small>{progress}</small>
+  </div>
 }

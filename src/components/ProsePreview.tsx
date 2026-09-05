@@ -34,7 +34,9 @@ export default function ProsePreview({
     const kind = el.classList.contains('hl-name') ? 'name' : 'term'
     const id = kind === 'name' ? el.dataset.charId : el.dataset.termId
     if (!id) return
-    setHover({ kind, id, x: r.left + r.width / 2, y: r.top, bottom: r.bottom })
+    setHover((current) => current?.kind === kind && current.id === id && Math.abs(current.x - (r.left + r.width / 2)) < 1
+      ? current
+      : { kind, id, x: r.left + r.width / 2, y: r.top, bottom: r.bottom })
   }, [])
 
   const scheduleClose = useCallback(() => {
@@ -44,11 +46,14 @@ export default function ProsePreview({
 
   const onOver = useCallback((e) => {
     const el = e.target.closest?.('.hl-name, .hl-term')
-    if (el) openFor(el)
+    const from = e.relatedTarget instanceof Element ? e.relatedTarget : null
+    if (el && !from?.closest?.('.hl-name, .hl-term')?.isSameNode(el)) openFor(el)
   }, [openFor])
 
   const onOut = useCallback((e) => {
-    if (e.target.closest?.('.hl-name, .hl-term')) scheduleClose()
+    const el = e.target.closest?.('.hl-name, .hl-term')
+    const to = e.relatedTarget instanceof Element ? e.relatedTarget : null
+    if (el && !to?.closest?.('.hl-name, .hl-term')?.isSameNode(el)) scheduleClose()
   }, [scheduleClose])
 
   const character = hover?.kind === 'name' ? charById.get(hover.id) : null

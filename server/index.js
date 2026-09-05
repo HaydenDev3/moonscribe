@@ -73,6 +73,7 @@ const STORES = new Set([
   'moodboard',
   'projectFiles',
   'workspacePreferences',
+  'authorWebsites',
   'accountPreferences',
   'glossary',
   'annotations',
@@ -309,6 +310,13 @@ function setupSchema(db) {
       updated_at INTEGER NOT NULL,
       deleted    INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (store, id)
+    );
+    CREATE TABLE IF NOT EXISTS sync_requests (
+      user_id TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      response_json TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, idempotency_key)
     );
     CREATE INDEX IF NOT EXISTS idx_records_since ON records(updated_at);
     CREATE TABLE IF NOT EXISTS tokens (
@@ -847,6 +855,24 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       }
       return
     }
+
+    // Author websites deliberately use the same per-user record store as the
+    // local-first client, while the public endpoint exposes only published data.
+    const websiteUser = () => userFromToken(database, String(req.headers.authorization || '').replace(/^Bearer\s+/i, '') || requestCookie(req, 'moonscribe_session'))
+    const websitePayload = (value, published = false) => {
+      const input = value && typeof value === 'object' ? value : {}
+      const cleanUrl = (raw) => { try { const u = new URL(String(raw || '')); return ['http:', 'https:', 'mailto:'].includes(u.protocol) ? u.toString() : '' } catch { return '' } }
+      const books = Array.isArray(input.books) ? input.books.slice(0, 50).map((b, i) => ({ novelId: String(b.novelId || '').slice(0, 120), title: String(b.title || '').slice(0, 200), description: String(b.description || '').slice(0, 3000), cover: String(b.cover || '').slice(0, 2_000_000), status: String(b.status || '').slice(0, 80), url: cleanUrl(b.url), order: i })).filter((b) => b.novelId && b.title) : []
+      const links = Array.isArray(input.links) ? input.links.slice(0, 30).map((l) => ({ id: String(l.id || '').slice(0, 80), label: String(l.label || '').slice(0, 120), url: cleanUrl(l.url), kind: ['instagram', 'x', 'youtube', 'github', 'contact', 'website'].includes(l.kind) ? l.kind : 'website' })).filter((l) => l.label && l.url) : []
+      const posts = Array.isArray(input.posts) ? input.posts.slice(0, 12).map((p) => ({ id: String(p.id || '').slice(0, 80), title: String(p.title || '').slice(0, 200), date: String(p.date || '').slice(0, 20), excerpt: String(p.excerpt || '').slice(0, 1200), url: cleanUrl(p.url), published: Boolean(p.published) })).filter((p) => p.id && p.title) : []
+      return { id: 'author-website', kind: 'author-website', version: 2, title: String(input.title || '').slice(0, 200), authorName: String(input.authorName || '').slice(0, 160), tagline: String(input.tagline || '').slice(0, 300), bio: String(input.bio || '').slice(0, 10000), location: String(input.location || '').slice(0, 120), profileImage: String(input.profileImage || '').slice(0, 2_000_000), heroImage: String(input.heroImage || '').slice(0, 4_000_000), heroEyebrow: String(input.heroEyebrow || 'AUTHOR · WRITER · STORYTELLER').slice(0, 160), intro: String(input.intro || '').slice(0, 2000), primaryCta: String(input.primaryCta || 'Explore My Books').slice(0, 80), secondaryCta: String(input.secondaryCta || 'Read the Journal').slice(0, 80), heroQuote: String(input.heroQuote || '').slice(0, 500), books, showBookDescriptions: input.showBookDescriptions !== false, showBookStatus: input.showBookStatus !== false, aboutHeading: String(input.aboutHeading || 'About the Author').slice(0, 120), aboutText: String(input.aboutText || '').slice(0, 5000), interests: Array.isArray(input.interests) ? input.interests.slice(0, 6).map((x) => String(x || '').slice(0, 80)).filter(Boolean) : [], journalEnabled: Boolean(input.journalEnabled), posts, links, theme: ['moonlight', 'parchment', 'ember', 'midnight'].includes(input.theme) ? input.theme : 'moonlight', accent: /^#[0-9a-f]{6}$/i.test(String(input.accent || '')) ? input.accent : '#d6a64b', background: /^#[0-9a-f]{6}$/i.test(String(input.background || '')) ? input.background : '#080b0e', typography: ['editorial', 'classic', 'modern'].includes(input.typography) ? input.typography : 'editorial', heroOverlay: Math.max(20, Math.min(90, Number(input.heroOverlay) || 68)), sectionSpacing: ['compact', 'comfortable', 'spacious'].includes(input.sectionSpacing) ? input.sectionSpacing : 'comfortable', showMoonScribe: input.showMoonScribe !== false, privacyUrl: cleanUrl(input.privacyUrl) || (String(input.privacyUrl || '').startsWith('/') ? String(input.privacyUrl).slice(0, 200) : ''), contactUrl: cleanUrl(input.contactUrl), published: Boolean(published), publishedAt: published ? (Number(input.publishedAt) || Date.now()) : undefined, updatedAt: Date.now() }
+    }
+    if (path === '/api/author-website' && req.method === 'GET') { const uid = websiteUser(); if (!uid) return json(res, 401, { error: 'Sign in to manage your author website.' }); const row = database.prepare("SELECT payload FROM records WHERE user_id = ? AND store = 'authorWebsites' AND id = 'author-website' AND deleted = 0").get(uid); return json(res, 200, { website: row ? safeJson(row.payload) : null }) }
+    if (path === '/api/author-website' && req.method === 'POST') { const uid = websiteUser(); if (!uid) return json(res, 401, { error: 'Sign in to manage your author website.' }); readBody(req, 8 * 1024 * 1024).then(({ website }) => { if (!website || String(website.authorName || '').trim().length < 1) throw new Error('authorName is required'); const clean = websitePayload(website, false); const ownsNovel = database.prepare("SELECT 1 FROM records WHERE user_id = ? AND store = 'novels' AND id = ? AND deleted = 0"); const sharesNovel = database.prepare('SELECT 1 FROM novel_members WHERE member_user_id = ? AND novel_id = ? AND (expires_at IS NULL OR expires_at > ?)'); if (clean.books.some((book) => !ownsNovel.get(uid, book.novelId) && !sharesNovel.get(uid, book.novelId, Date.now()))) throw new Error('One or more selected books are not available to this account.'); database.prepare("INSERT INTO records (store, id, novel_id, user_id, payload, updated_at, deleted) VALUES ('authorWebsites', 'author-website', NULL, ?, ?, ?, 0) ON CONFLICT(user_id, store, id) DO UPDATE SET payload=excluded.payload, updated_at=excluded.updated_at, deleted=0").run(uid, JSON.stringify(clean), Date.now()); json(res, 200, { website: clean }) }).catch((e) => json(res, 400, { error: e.message })) ; return }
+    if (path === '/api/author-website/publish' && req.method === 'POST') { const uid = websiteUser(); if (!uid) return json(res, 401, { error: 'Sign in to publish your author website.' }); const row = database.prepare("SELECT payload FROM records WHERE user_id = ? AND store = 'authorWebsites' AND id = 'author-website' AND deleted = 0").get(uid); if (!row) return json(res, 404, { error: 'Save a website draft first.' }); const clean = websitePayload(safeJson(row.payload), true); database.prepare("UPDATE records SET payload = ?, updated_at = ? WHERE user_id = ? AND store = 'authorWebsites' AND id = 'author-website'").run(JSON.stringify(clean), Date.now(), uid); json(res, 200, { website: clean, url: `/@${database.prepare('SELECT username FROM users WHERE id = ?').get(uid).username}` }); return }
+    if (path === '/api/author-website/unpublish' && req.method === 'POST') { const uid = websiteUser(); if (!uid) return json(res, 401, { error: 'Sign in to unpublish your author website.' }); const row = database.prepare("SELECT payload FROM records WHERE user_id = ? AND store = 'authorWebsites' AND id = 'author-website' AND deleted = 0").get(uid); if (!row) return json(res, 404, { error: 'No author website draft exists.' }); const clean = websitePayload(safeJson(row.payload), false); database.prepare("UPDATE records SET payload = ?, updated_at = ? WHERE user_id = ? AND store = 'authorWebsites' AND id = 'author-website'").run(JSON.stringify(clean), Date.now(), uid); return json(res, 200, { website: clean }); }
+    const publicWebsite = path.match(/^\/api\/public\/author\/([^/]+)$/)
+    if (publicWebsite && req.method === 'GET') { const username = decodeURIComponent(publicWebsite[1]).replace(/^@/, '').trim(); const row = database.prepare("SELECT r.payload, u.username FROM records r JOIN users u ON u.id = r.user_id WHERE lower(u.username) = lower(?) AND u.disabled_at IS NULL AND r.store = 'authorWebsites' AND r.id = 'author-website' AND r.deleted = 0").get(username); const website = row ? safeJson(row.payload) : null; return website?.published ? json(res, 200, { website }) : json(res, 404, { error: 'Published author website not found.' }) }
 
     if (path === '/api/articles' && req.method === 'GET') {
       json(res, 200, { articles: loadBabyLoveGrowthArticles(dir) })
@@ -2098,6 +2124,11 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     if (path === '/api/sync/push' && req.method === 'POST') {
       readBody(req)
         .then(async ({ records }) => {
+          const idempotencyKey = String(req.headers['idempotency-key'] || '').trim()
+          if (idempotencyKey) {
+            const previous = database.prepare('SELECT response_json FROM sync_requests WHERE user_id = ? AND idempotency_key = ?').get(userId, idempotencyKey)
+            if (previous) return json(res, 200, JSON.parse(previous.response_json))
+          }
           if (!Array.isArray(records)) throw new Error('records array expected')
           const upsert = database.prepare(
             `INSERT INTO records (store, id, novel_id, user_id, payload, updated_at, deleted)
@@ -2159,7 +2190,9 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
                 stores: [...new Set(cloudRecords.map((record) => record.store).filter(Boolean))],
               }))
             }
-            json(res, 200, { ok: true, serverTime: Date.now(), accepted, rejected })
+            const response = { ok: true, serverTime: Date.now(), accepted, rejected }
+            if (idempotencyKey) database.prepare('INSERT OR IGNORE INTO sync_requests (user_id, idempotency_key, response_json, created_at) VALUES (?, ?, ?, ?)').run(userId, idempotencyKey, JSON.stringify(response), Date.now())
+            json(res, 200, response)
           } catch (err) {
             database.exec('ROLLBACK')
             throw err

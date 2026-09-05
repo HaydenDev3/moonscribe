@@ -90,6 +90,15 @@ function openSocket(path) {
   })
 }
 
+describe('author website API', () => {
+  it('protects draft publishing operations and hides unpublished public sites', async () => {
+    await startServer({ rateLimit: false })
+    expect((await get('/api/author-website')).status).toBe(401)
+    expect((await post('/api/author-website/unpublish', {})).status).toBe(401)
+    expect((await get('/api/public/author/not-published')).status).toBe(404)
+  })
+})
+
 function nextSocketMessage(socket, predicate = () => true) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('Timed out waiting for WebSocket message')), 2_000)

@@ -73,6 +73,7 @@ import CollaborationPresence from '../components/CollaborationPresence'
 import { publishLiveRecord } from '../sync/engine'
 import { sentenceDiff } from '../utils/sentenceDiff'
 import { listMoodboard, deleteTile } from '../db/moodboard'
+import { markPerformance } from '../utils/performance'
 
 const GOAL_PRESETS = [300, 500, 1000]
 
@@ -111,6 +112,8 @@ export default function Novel() {
   const { id, mode, section } = useParams()
   const activeSection = section || mode || 'write'
   const location = useLocation()
+  const navigate = useNavigate()
+  const isMobileEditorSurface = activeSection === 'write' && !['/media', '/design', '/corkboard', '/planning', '/characters', '/world', '/relationships', '/timeline', '/story-memory', '/prose-tools', '/analytics'].some((suffix) => location.pathname.endsWith(suffix))
   const { focusMode, setFocusMode, toast, openSettings, isNovelUnlocked, unlockNovel, settings, hasRole, syncNow } = useApp()
   const canShare = hasRole('admin') || hasRole('developer') || hasRole('beta_tester')
   const { openContextMenu } = useContextMenu()
@@ -129,15 +132,10 @@ export default function Novel() {
   const [dirty, setDirty] = useState(false)
   const [savedAt, setSavedAt] = useState(null)
   const [reading, setReading] = useState(false)
-  const [mobileReadPreferenceApplied, setMobileReadPreferenceApplied] = useState(false)
-  useEffect(() => {
-    if (mobileReadPreferenceApplied || typeof window === 'undefined') return
-    if (window.matchMedia('(max-width: 600px)').matches && activeSection === 'write') setReading(true)
-    setMobileReadPreferenceApplied(true)
-  }, [activeSection, mobileReadPreferenceApplied])
   const [restoreTick, setRestoreTick] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)
+  const [mobileHubOpen, setMobileHubOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [splitOpen, setSplitOpen] = useState(false)
   const [isMobileViewport, setIsMobileViewport] = useState(false)
@@ -151,6 +149,11 @@ export default function Novel() {
   useEffect(() => {
     if (isMobileViewport && splitOpen) setSplitOpen(false)
   }, [isMobileViewport, splitOpen])
+  useEffect(() => {
+    if (!location.state?.openChapters) return
+    setLibraryOpen(true)
+    navigate(location.pathname, { replace: true, state: { ...location.state, openChapters: false } })
+  }, [location.pathname, location.state, navigate])
   const [historyOpen, setHistoryOpen] = useState(false)
   const [annotations, setAnnotations] = useState([])
   const [annotationsOpen, setAnnotationsOpen] = useState(false)
@@ -242,6 +245,7 @@ export default function Novel() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
+      markPerformance('novel-route-start')
       const n = await getNovel(id)
       if (cancelled) return
       if (!n) {
@@ -254,25 +258,11 @@ export default function Novel() {
       chaptersRef.current = chs
       setNovel(n)
       setChapters(chs)
+      markPerformance('novel-editor-ready')
       setEditorDesign(n.layout?.editorDesign || null)
       setCustomDesignBg(n.layout?.customPageBg || '#ffffff')
       setCustomDesignText(n.layout?.customPageText || '#1a1a18')
       setGoalWords(n.goalWords || 500)
-      setTodayW(await todayWords(id))
-      setCharacters(await listCharacters(id))
-      setTerms(await listGlossary(id))
-      const [factions, artefacts, places, worldItems] = await Promise.all([
-        listEntities(id, 'faction'),
-        listEntities(id, 'artefact'),
-        listEntities(id, 'place'),
-        listWorld(id),
-      ])
-      const kindMap = { place: 'place', faction: 'faction', item: 'artefact' }
-      const worldEntities = worldItems
-        .filter((w) => kindMap[w.kind])
-        .map((w) => ({ id: w.id, name: w.name, kind: kindMap[w.kind], color: w.color || null }))
-      setEntities([...factions, ...artefacts, ...places, ...worldEntities])
-      setRelationships(await listRelationships(id))
       const recent = readRecentWriting()
       const first = chs.find((c) => recent?.novelId === id && c.id === recent.chapterId) || chs.find((c) => c.id === n.lastChapterId) || chs[0]
       if (first) {
@@ -291,6 +281,29 @@ export default function Novel() {
         setChapter(first)
         setWordCount(first.wordCount || 0)
         setTitleDraft(first.title || '')
+      }
+      const secondaryData = Promise.all([
+        todayWords(id),
+        listCharacters(id),
+        listGlossary(id),
+        listEntities(id, 'faction'),
+        listEntities(id, 'artefact'),
+        listEntities(id, 'place'),
+        listWorld(id),
+        listRelationships(id),
+      ])
+      const [today, loadedCharacters, loadedTerms, factions, artefacts, places, worldItems, loadedRelationships] = await secondaryData
+      if (cancelled) return
+      setTodayW(today)
+      setCharacters(loadedCharacters)
+      setTerms(loadedTerms)
+      const kindMap = { place: 'place', faction: 'faction', item: 'artefact' }
+      const worldEntities = worldItems
+        .filter((w) => kindMap[w.kind])
+        .map((w) => ({ id: w.id, name: w.name, kind: kindMap[w.kind], color: w.color || null }))
+      setEntities([...factions, ...artefacts, ...places, ...worldEntities])
+      setRelationships(loadedRelationships)
+      if (first) {
         if (recent?.novelId === id && recent.chapterId === first.id && Number(recent.scrollTop) > 0) {
           requestAnimationFrame(() => {
             const wrap = document.querySelector('.editor-wrap')
@@ -702,7 +715,11 @@ export default function Novel() {
         // flight. Doing so interrupts the contenteditable transaction and
         // was the source of the shared-room crash screen.
         pendingRemoteChapterRef.current = incoming
-        if (isEditorFocusedRef.current || hasLocalDraftRef.current || saveInFlightRef.current || dirty) return
+        // Focus alone is not evidence of a local edit: writers commonly leave
+        // the chapter open while another device writes. The editor is
+        // remounted only when this device has no unsaved work, so remote text
+        // becomes visible immediately without interrupting local typing.
+        if (hasLocalDraftRef.current || saveInFlightRef.current || dirty) return
         contentRef.current = incoming.content || ''
         currentWordsRef.current = Number(incoming.wordCount) || 0
         lastCountRef.current[incoming.id] = Number(incoming.wordCount) || 0
@@ -711,6 +728,7 @@ export default function Novel() {
         setTitleDraft(incoming.title || '')
         setDirty(false)
         setSavedAt(new Date())
+        setRestoreTick((tick) => tick + 1)
       }
     } else if (record.store === 'annotations') {
       const targetChapterId = record.payload?.chapterId || record.chapterId
@@ -1169,7 +1187,6 @@ export default function Novel() {
 
   const hasProse = !!(chapter && chapter.content && chapter.content.replace(/<[^>]*>/g, '').trim())
   const mentionsMap = useMemo(() => autoChapterMentions(chapters, characters), [chapters, characters])
-  const navigate = useNavigate()
   const openSection = useCallback((seg) => { navigate(`/novel/${id}/${seg}`) }, [id, navigate])
 
   if (notFound) {
@@ -1203,7 +1220,7 @@ export default function Novel() {
 
   return (
     <div
-      className={`workspace ${editorDesign ? `design-${editorDesign}` : ''} ${focusMode && activeSection === 'write' ? 'focus-mode' : ''}`}
+      className={`workspace ${editorDesign ? `design-${editorDesign}` : ''} ${focusMode && activeSection === 'write' ? 'focus-mode' : ''} ${libraryOpen ? 'chapter-library-open' : ''}`}
       style={editorDesign === 'custom' ? ({ ['--design-custom-bg' as any]: customDesignBg, ['--design-custom-text' as any]: customDesignText } as CSSProperties) : undefined}
     >
       <Sidebar
@@ -1307,20 +1324,21 @@ export default function Novel() {
                 </>
               )}
             </span>
+            <button type="button" className="mobile-hub-trigger" onClick={() => setMobileHubOpen(true)} aria-label="Open novel hub"><Icon icon="fa-solid fa-table-cells-large" /></button>
           </div>
           <div className="actions-row">
             {canShare && <CollaborationPresence novelId={id} chapterId={chapter?.id} chapterTitle={chapter?.title} workspace={SECTION_LABELS[activeSection] || activeSection} onPresenceChange={setCollaboratorPresence} onRecord={applyLiveRecord} />}
             <button className={`button button-ghost ${!canShare ? 'beta-locked-button' : ''}`} onClick={() => canShare && setShareOpen(true)} disabled={!canShare} title={canShare ? 'Invite writers and manage access' : 'Share is locked during the beta'}><Icon icon={canShare ? 'fa-solid fa-user-plus' : 'fa-solid fa-lock'} style={{ marginRight: 6 }} /> Share</button>
             {activeSection === 'write' ? (
               reading ? (
-                <button className="button button-primary" onClick={() => setReading(false)}><Icon icon="fa-solid fa-pen-nib" style={{ marginRight: 6 }} /> Write</button>
+                <button className="button button-primary workspace-read-toggle" onClick={() => setReading(false)}><Icon icon="fa-solid fa-pen-nib" style={{ marginRight: 6 }} /> Write</button>
               ) : (
-                <button className="button button-ghost" onClick={() => setReading(true)}>Read</button>
+                <button className="button button-ghost workspace-read-toggle" onClick={() => setReading(true)}>Read</button>
               )
             ) : (
               <Link className="button button-primary" to={`/novel/${id}`}><Icon icon="fa-solid fa-pen-nib" style={{ marginRight: 6 }} /> Write</Link>
             )}
-            <div style={{ position: 'relative' }}>
+            <div className="workspace-export-action" style={{ position: 'relative' }}>
               <input ref={importMdRef} type="file" accept=".md,.markdown,text/markdown,text/plain" style={{ display: 'none' }} onChange={handleImportMd} />
               <input ref={importRtfRef} type="file" accept=".rtf,text/rtf,application/rtf" style={{ display: 'none' }} onChange={handleImportRtf} />
               <button className="button button-ghost" onClick={() => setExportOpen(true)}><Icon icon="fa-solid fa-download" style={{ marginRight: 6 }} /> Export</button>
@@ -1333,7 +1351,14 @@ export default function Novel() {
           </div>
         </div>
 
-        {activeSection === 'write' && openChapterTabs.length > 0 && <div className="chapter-tabbar" aria-label="Open chapters">
+        {isMobileEditorSurface && <div className="mobile-chapter-header">
+          <button type="button" className="min-h-11 min-w-11" onClick={() => navigate(`/novel/${id}`, { state: { openChapters: true } })} aria-label="Back to chapters" title="Back to chapters"><Icon icon="fa-solid fa-arrow-left" /></button>
+          <div><strong>{chapter ? titleFor(chapter, computeNumbers(chapters)) : 'Chapters'}</strong><small>{novel.title}</small></div>
+          <button type="button" className="mobile-chapter-app-menu" onClick={() => setMobileHubOpen(true)} aria-label="Open app menu" title="Open app menu"><Icon icon="fa-solid fa-table-cells-large" /></button>
+          <button type="button" onClick={(event) => openContextMenu(event, [{ label: reading ? 'Edit chapter' : 'Preview chapter', icon: reading ? 'fa-solid fa-pen' : 'fa-regular fa-eye', onClick: () => setReading(!reading) }, { label: 'Open Designer', icon: 'fa-solid fa-palette', onClick: () => navigate(`/novel/${id}/design`) }])} aria-label="Chapter actions"><Icon icon="fa-solid fa-ellipsis" /></button>
+        </div>}
+
+        {activeSection === 'write' && openChapterTabs.length > 0 && <div className="chapter-tabbar flex min-w-0 items-center gap-1 overflow-x-auto overscroll-contain px-2 py-1" aria-label="Open chapters">
           {openChapterTabs.map((tabId) => {
             const tabChapter = chapters.find((item) => item.id === tabId)
             if (!tabChapter) return null
@@ -1676,6 +1701,16 @@ export default function Novel() {
         </Suspense>
       </div>
 
+      {mobileHubOpen && <MobileNovelHub novel={novel} onClose={() => setMobileHubOpen(false)} onOpenLibrary={() => setLibraryOpen(true)} onExport={() => setExportOpen(true)} onSettings={() => openSettings()} />}
+
+      <nav className="mobile-novel-nav flex items-end justify-around gap-1 border-t border-white/10 bg-[#0b0b0f]/95 px-2 py-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] backdrop-blur-xl" aria-label="Mobile novel navigation">
+        <button aria-current={location.pathname === `/novel/${id}` && !libraryOpen ? 'page' : undefined} className="grid min-h-11 min-w-11 place-items-center gap-1 rounded-lg px-2 py-1 text-[.62rem] text-[#858188] transition-colors hover:text-[#c79b53] focus-visible:outline-2 focus-visible:outline-[#c79b53]" type="button" onClick={() => navigate('/dashboard')}><Icon icon="fa-solid fa-house" /><span>Home</span></button>
+        <button aria-current={libraryOpen ? 'page' : undefined} className="grid min-h-11 min-w-11 place-items-center gap-1 rounded-lg px-2 py-1 text-[.62rem] text-[#858188] transition-colors hover:text-[#c79b53] focus-visible:outline-2 focus-visible:outline-[#c79b53]" type="button" onClick={() => setLibraryOpen(true)}><Icon icon="fa-solid fa-book-open" /><span>Library</span></button>
+        <button type="button" className="mobile-novel-create grid h-12 w-12 min-w-12 place-items-center rounded-full border-2 border-[#c79b53] bg-[#141218] text-[#c79b53] shadow-[0_5px_20px_rgba(0,0,0,.45)] focus-visible:outline-2 focus-visible:outline-[#f1d28a]" onClick={() => void addNode('chapter')} aria-label="Create chapter"><Icon icon="fa-solid fa-plus" /></button>
+        <button aria-current={location.pathname.endsWith('/writing-journal') ? 'page' : undefined} className="grid min-h-11 min-w-11 place-items-center gap-1 rounded-lg px-2 py-1 text-[.62rem] text-[#858188] transition-colors hover:text-[#c79b53] focus-visible:outline-2 focus-visible:outline-[#c79b53]" type="button" onClick={() => navigate(`/novel/${id}/writing-journal`)}><Icon icon="fa-solid fa-feather-pointed" /><span>Journal</span></button>
+        <button className="grid min-h-11 min-w-11 place-items-center gap-1 rounded-lg px-2 py-1 text-[.62rem] text-[#858188] transition-colors hover:text-[#c79b53] focus-visible:outline-2 focus-visible:outline-[#c79b53]" type="button" onClick={() => openSettings()}><Icon icon="fa-solid fa-ellipsis" /><span>More</span></button>
+      </nav>
+
       <ChapterEditModal chapter={editChapter} onChange={setEditChapter} onClose={() => setEditChapter(null)} onSave={saveChapterEdit} />
       <MergeModal source={mergeSource} chapters={chapters} onClose={() => setMergeSource(null)} onMerge={handleMerge} />
       <ConfirmDialog open={!!deleteChapterTarget} onClose={() => setDeleteChapterTarget(null)} onConfirm={handleTrashChapter} title="Move this chapter to the Trash?">
@@ -1726,6 +1761,51 @@ export default function Novel() {
       }} />
     </div>
   )
+}
+
+function MobileNovelHub({ novel, onClose, onOpenLibrary, onExport, onSettings }) {
+  const navigate = useNavigate()
+  const [query, setQuery] = useState('')
+  const closeRef = useRef<HTMLButtonElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    closeRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onCloseRef.current()
+      if (event.key === 'Tab') {
+        const focusable = Array.from(document.querySelectorAll<HTMLElement>('.mobile-hub-sheet button, .mobile-hub-sheet a, .mobile-hub-sheet input, .mobile-hub-sheet select, .mobile-hub-sheet textarea')).filter((element) => !element.hasAttribute('disabled') && element.getAttribute('aria-hidden') !== 'true')
+        if (!focusable.length) return
+        const first = focusable[0]
+        const last = focusable[focusable.length - 1]
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      previousFocusRef.current?.focus()
+    }
+  }, [])
+  const groups: Array<[string, Array<[string, string, string]>]> = [
+    ['WRITE', [['Chapters', '', 'fa-solid fa-list'], ['Draft board', 'corkboard', 'fa-solid fa-table-columns']]],
+    ['PLAN', [['Planning cockpit', 'planning', 'fa-solid fa-diagram-project'], ['Characters', 'characters', 'fa-solid fa-user-group'], ['Worldbuilding', 'world', 'fa-solid fa-globe'], ['Relationships', 'relationships', 'fa-solid fa-share-nodes'], ['Timeline / continuity', 'timeline', 'fa-solid fa-timeline']]],
+    ['CREATE', [['Designer', 'design', 'fa-solid fa-palette'], ['Media library', 'media', 'fa-solid fa-images']]],
+    ['REVIEW', [['Story memory', 'story-memory', 'fa-solid fa-brain'], ['Prose tools', 'prose-tools', 'fa-solid fa-wand-magic-sparkles'], ['Analytics', 'analytics', 'fa-solid fa-chart-line']]],
+    ['GENERAL', [['Help & feedback', 'help', 'fa-solid fa-circle-question']]],
+  ]
+  const go = (path) => { onClose(); if (path === 'settings') onSettings?.(); else if (path === 'help') navigate('/dashboard?view=insights'); else if (path === 'export') onExport(); else if (path) navigate(`/novel/${novel.id}/${path}`); else onOpenLibrary() }
+  return <div className="mobile-hub-overlay fixed inset-0 z-[2400] flex items-end bg-black/65 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="mobile-hub-title" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="mobile-hub-sheet w-full max-h-[92dvh] touch-pan-y overscroll-contain overflow-y-auto rounded-t-3xl border-t border-[#c79b53]/30 bg-[#0b0b0f] px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2 shadow-[0_-22px_70px_rgba(0,0,0,.5)]">
+      <div className="mobile-hub-handle" />
+      <header><button ref={closeRef} type="button" onClick={onClose} aria-label="Close novel hub"><Icon icon="fa-solid fa-xmark" /></button><div><span>ACTIVE NOVEL</span><h2 id="mobile-hub-title">{novel.title}</h2><p><i className="mobile-hub-online-dot" aria-label="Synced online" />Your story workspace</p></div></header>
+      <label className="mobile-hub-search flex items-center gap-2 rounded-xl border border-white/10 bg-white/[.025] px-3"><Icon icon="fa-solid fa-magnifying-glass" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workspace…" aria-label="Search workspace" /></label>
+      <div className="mobile-hub-groups grid gap-5">{groups.map(([label, items]) => { const filtered = items.filter(([title]) => title.toLowerCase().includes(query.toLowerCase().trim())); return filtered.length ? <section className="grid gap-1" key={label}><span className="mobile-hub-label mb-1 text-[.62rem] font-bold tracking-[.16em] text-[#c79b53]">{label}</span>{filtered.map(([title, path, icon]) => <button className="flex min-h-11 items-center gap-3 rounded-xl border border-white/10 bg-white/[.025] px-3 text-left text-sm text-[#eee8df] transition-colors hover:border-[#c79b53]/40 hover:bg-[#c79b53]/10 focus-visible:outline-2 focus-visible:outline-[#c79b53]" type="button" key={title} onClick={() => go(path)}><Icon icon={icon} /><span className="min-w-0 flex-1">{title}</span><Icon icon="fa-solid fa-chevron-right" /></button>)}</section> : null})}</div>
+    </div>
+  </div>
 }
 
 function ChapterEditModal({ chapter, onChange, onClose, onSave }) {

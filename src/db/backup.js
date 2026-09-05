@@ -4,7 +4,7 @@ import { getDB } from './db'
 import { toWire, fromWire } from '../sync/serialize'
 
 const BACKUP_VERSION = 3
-const ALL_STORES = ['novels', 'chapters', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'projectFiles', 'workspacePreferences', 'glossary', 'annotations', 'branches', 'suggestions', 'meta']
+const ALL_STORES = ['novels', 'chapters', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'projectFiles', 'workspacePreferences', 'authorWebsites', 'glossary', 'annotations', 'branches', 'suggestions', 'meta']
 
 export async function exportBackup() {
   const db = await getDB()
