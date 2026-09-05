@@ -7,7 +7,11 @@ import { isDesktopRuntime } from '../api/config'
 import { NativeDatabase } from '../platform/nativeDatabase'
 
 const environment = import.meta.env.VITE_MOONSCRIBE_ENV || (import.meta.env.DEV ? 'development' : 'production')
-const DB_VERSION = 11
+// Keep this higher than every released browser schema. Some 1.1.4 clients
+// reached version 11 with an incomplete object-store set after an interrupted
+// upgrade. Opening at a new version reruns the non-destructive store creation
+// loop below and repairs those profiles without clearing their writing.
+const DB_VERSION = 12
 
 const STORES = ['novels', 'chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'projectFiles', 'workspacePreferences', 'accountPreferences', 'authorWebsites', 'glossary', 'annotations', 'branches', 'suggestions', 'research', 'storyThreads', 'sceneChecklists', 'betaPackages', 'tombstones', 'meta', 'snapshots']
 

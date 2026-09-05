@@ -493,7 +493,7 @@ export default function AuthorWebsite() {
             </Panel>
           </div>
         </aside>
-        <section className="min-w-0 bg-[#090a0d] p-3 md:p-5">
+        <section className="min-w-0 self-start bg-[#090a0d] p-4">
           <div className="mx-auto mb-3 flex max-w-[1220px] items-center justify-between">
             <div>
               <strong className="text-sm">Live preview</strong>

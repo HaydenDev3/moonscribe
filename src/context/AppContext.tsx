@@ -253,6 +253,19 @@ export function AppProvider({ children }) {
       const discordAvatar = await getMeta('discordAvatar', null)
       const discordUsername = await getMeta('discordUsername', null)
       const authProvider = await getMeta('authProvider', null)
+      // The authenticated profile is the source of truth for identity media.
+      // A device-local avatar cache can be missing or stale on a newly opened
+      // browser, which previously made the same account render initials on
+      // one device and its real profile image on another.
+      const canonicalAvatar = cfg.token
+        ? (parsedProfile?.discordAvatar || discordAvatar || null)
+        : null
+      const canonicalProvider = cfg.token
+        ? (parsedProfile?.provider || authProvider || null)
+        : null
+      if (cfg.token && parsedProfile?.discordAvatar && parsedProfile.discordAvatar !== discordAvatar) {
+        await setMeta('discordAvatar', parsedProfile.discordAvatar)
+      }
       setSync({
         server: cfg.server,
         // Provider metadata is only a display cache. Never use it to render
@@ -262,8 +275,8 @@ export function AppProvider({ children }) {
         // first background pass. The status listener will move it through
         // syncing/synced (or error) immediately afterwards.
         status: cfg.server && cfg.token ? 'connecting' : 'offline',
-        discordAvatar: cfg.token ? discordAvatar : null,
-        provider: cfg.token ? authProvider : null
+        discordAvatar: canonicalAvatar,
+        provider: canonicalProvider
       })
 
       // HashRouter keeps desktop callback parameters after the hash
