@@ -1,8 +1,8 @@
 # MoonScribe documentation
 
-Current release: **1.1.4** (5 September 2026).
+Current release: **1.1.5** (5 September 2026).
 
-This release adds the Author Website workspace at `/author-website`, public author routes at `/@username` and `/@username/about`, selected public book metadata, responsive themes, draft and publish controls, and contextual editor scroll-rail previews.
+This release adds the repository boundary and canonical structured-document foundation while retaining the 1.1.4 Author Website workspace, public author routes, responsive themes, draft and publish controls, and contextual editor scroll-rail previews.
 
 MoonScribe is a local-first novel-writing, worldbuilding, planning, and book-design application. This handbook documents the product as it exists, its trust boundaries, and the work required for a public 1.0 release.
 

@@ -1,9 +1,10 @@
-import { useEffect, useState, type ChangeEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Icon from '../components/Icon'
 import WebsiteLoading from '../components/WebsiteLoading'
 import { useApp } from '../context/AppContext'
 import { getAuthorWebsite, saveAuthorWebsite } from '../db/authorWebsite'
+import { wordsAndChapters } from '../db/chapters'
 import { getConfig } from '../sync/engine'
 import AuthorSite from '../websites/AuthorSite'
 import {
@@ -15,17 +16,18 @@ import {
 } from '../websites/model'
 
 type Status =
-  'saved' | 'dirty' | 'saving' | 'draft-saved' | 'publishing' | 'published' | 'publish-failed'
+  'saved' | 'dirty' | 'saving' | 'syncing' | 'draft-saved' | 'publishing' | 'published' | 'publish-failed'
 const field =
   'mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-[#f1ece3] outline-none transition placeholder:text-white/25 focus:border-[#c99a3d]/60 focus:ring-2 focus:ring-[#c99a3d]/10'
 const label = 'block text-[11px] font-semibold uppercase tracking-[.14em] text-white/45'
 
 export default function AuthorWebsite() {
-  const { novels = [], syncUsername, settings, toast } = useApp() as any
+  const { novels = [], syncUsername, settings, toast, syncNow } = useApp() as any
   const navigate = useNavigate()
   const [site, setSite] = useState<AuthorWebsiteDocument | null>(null)
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop')
   const [status, setStatus] = useState<Status>('saved')
+  const [bookCounts, setBookCounts] = useState<Record<string, any>>({})
   useEffect(() => {
     let live = true
     const name = settings?.writerName || syncUsername || ''
@@ -36,16 +38,26 @@ export default function AuthorWebsite() {
       live = false
     }
   }, [settings?.writerName, syncUsername])
+  useEffect(() => {
+    let live = true
+    Promise.all(novels.map(async (novel: any) => [novel.id, await wordsAndChapters(novel.id)] as const)).then((entries) => { if (live) setBookCounts(Object.fromEntries(entries)) }).catch(() => {})
+    return () => { live = false }
+  }, [novels])
   const update = (patch: Partial<AuthorWebsiteDocument>) => {
     setSite((s) => (s ? { ...s, ...patch } : s))
     setStatus('dirty')
   }
-  const persist = async (silent = false) => {
+  const persist = useCallback(async (silent = false) => {
     if (!site) return null
     setStatus('saving')
     try {
       const local = await saveAuthorWebsite(site)
       setSite(normalizeAuthorWebsite(local, site.authorName))
+      setStatus('syncing')
+      // authorWebsites is a normal syncable IndexedDB store. Trigger the
+      // shared engine after the local write so cloud-connected authors see
+      // website edits on their other devices without a second data path.
+      try { await syncNow?.() } catch { /* retain the local draft for retry */ }
       setStatus('draft-saved')
       if (!silent) toast?.('Website draft saved.')
       window.setTimeout(() => setStatus('saved'), 1600)
@@ -55,7 +67,22 @@ export default function AuthorWebsite() {
       toast?.(error instanceof Error ? error.message : 'Draft could not be saved.')
       return null
     }
-  }
+  }, [site, syncNow, toast])
+  useEffect(() => {
+    if (status !== 'dirty' || !site) return undefined
+    const timer = window.setTimeout(() => { void persist(true) }, 650)
+    return () => window.clearTimeout(timer)
+  }, [status, site, persist])
+  useEffect(() => {
+    const protectPendingSave = (event: globalThis.BeforeUnloadEvent) => {
+      if (status === 'dirty' || status === 'saving' || status === 'syncing') {
+        event.preventDefault()
+        event.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', protectPendingSave)
+    return () => window.removeEventListener('beforeunload', protectPendingSave)
+  }, [status])
   const saveRemote = async (current: AuthorWebsiteDocument) => {
     const cfg = await getConfig()
     if (!cfg.server || !cfg.token) throw new Error('Sign in to publish your author website.')
@@ -129,7 +156,8 @@ export default function AuthorWebsite() {
               novelId: novel.id,
               title: novel.title,
               description: novel.blurb || '',
-              cover: typeof novel.cover === 'string' ? novel.cover : undefined,
+              cover: novel.layout?.cover?.frontImage || (typeof novel.cover === 'string' ? novel.cover : undefined),
+              coverDesign: novel.layout?.cover,
               status: novel.collection === 'finished' ? 'Published' : 'Coming soon',
               url: '',
               order: site.books.length,
@@ -522,7 +550,7 @@ export default function AuthorWebsite() {
             className={`mx-auto overflow-hidden rounded-2xl border border-white/10 bg-black shadow-[0_24px_80px_rgba(0,0,0,.45)] transition-[max-width] duration-300 ${device === 'mobile' ? 'max-w-[390px]' : 'max-w-[1220px]'}`}
           >
             <div className={device === 'mobile' ? 'h-[780px] overflow-y-auto' : 'min-h-[760px]'}>
-              <AuthorSite site={site} compact={device === 'mobile'} />
+              <AuthorSite site={site} compact={device === 'mobile'} counts={bookCounts} />
             </div>
           </div>
         </section>
@@ -696,6 +724,7 @@ function statusText(status: Status) {
     saved: 'Saved locally',
     dirty: 'Unsaved changes',
     saving: 'Saving…',
+    syncing: 'Syncing…',
     'draft-saved': 'Draft saved',
     publishing: 'Publishing…',
     published: 'Published',

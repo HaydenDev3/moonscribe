@@ -30,7 +30,9 @@ import DashboardHome, { MobileDashboardHeader } from '../dashboard/DashboardHome
 import ProfileAvatar from '../components/ProfileAvatar'
 import GlobalMedia from '../dashboard/GlobalMedia'
 import AdSlot from '../components/AdSlot'
+import BookShelf from '../components/books/BookShelf'
 import { readRecentWriting } from '../utils/recentWriting'
+import '../styles/dashboard-mobile-fixes.css'
 
 const COVER_STYLES = [
   { key: 'moonstone', label: 'Moonstone' },
@@ -878,10 +880,8 @@ export default function Dashboard() {
                 )}
               </div>
             ) : (
-              <div className="novel-grid">
-                {g.items.map((n) => (
-                  <NovelCard key={n.id} novel={n} {...sharedCardProps} />
-                ))}
+              <div className="novel-bookshelf-wrap">
+                <BookShelf books={g.items.map((n) => ({ ...n, novelId: n.id, author: syncUsername, cover: n.layout?.cover?.frontImage || n.cover, coverDesign: n.layout?.cover }))} counts={counts} />
                 {g.items.length === 0 && novels.length > 0 && (
                   <div className="empty" style={{ gridColumn: '1 / -1' }}>
                     <div className="empty-icon"><Icon icon="fa-solid fa-magnifying-glass" /></div>

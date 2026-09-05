@@ -176,6 +176,10 @@ export default function CoverMockup3D(props) {
     refresh(); focusSurface(propsRef.current.surface || propsRef.current.activeSurface); applyEnvironment(); sceneRef.current = { refresh, focusSurface, applyEnvironment }
     const resize = () => {
       const rect = mount.getBoundingClientRect()
+      // The desktop studio intentionally offsets the book to make room for
+      // its side rail. Mobile has no side rail, so recenter the same model in
+      // the available viewport without changing desktop composition.
+      book.position.x = propsRef.current.centered || rect.width <= 900 ? 0 : -.7
       const aspect = Math.max(.2, rect.width / Math.max(1, rect.height))
       renderer.setSize(Math.max(1, rect.width), Math.max(1, rect.height), false)
       camera.aspect = aspect
@@ -185,7 +189,7 @@ export default function CoverMockup3D(props) {
       const fitWidth = (width + depth + .7) / (2 * Math.tan(horizontalFov / 2))
       // Keep the cover prominent in the available stage, including when the
       // designer rail is open. Manual zoom still provides the final control.
-      fitCameraDistance = Math.max(fitHeight, fitWidth) * 1.02
+      fitCameraDistance = Math.max(fitHeight, fitWidth) * (propsRef.current.lockScreen ? 1.32 : 1.02)
       applyZoom()
     }; const observer = new ResizeObserver(resize); observer.observe(mount); resize()
     const raycaster = new THREE.Raycaster(); const pointer = new THREE.Vector2(); let travel = 0

@@ -29,8 +29,26 @@
 .proof-page-list button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .proof-page-list button:hover,.proof-page-list button.active { color:var(--charcoal); background:var(--accent-soft); }
 .print-proof-shell .device-preview { margin:0; }
+.mobile-print-pager { display:none; }
 @media(max-width:900px){.print-toolbar{grid-template-columns:1fr auto}.print-controls{grid-column:1/-1;order:3}.print-proof-shell{padding:16px}.print-proof-sidebar{width:190px;flex-basis:190px}}
-@media(max-width:640px){.print-toolbar{display:flex;flex-wrap:wrap}.print-controls{display:flex;overflow:auto;width:100%;padding-bottom:4px}.print-proof-shell{display:block;padding:10px}.print-proof-sidebar{position:static;width:auto;max-height:none;margin-bottom:12px}.proof-page-list{display:grid;grid-template-columns:repeat(4,1fr);max-height:120px;overflow:auto}.device-preview{width:100%!important;height:auto!important}.print-proof-shell .book-view{transform:none!important;width:100%!important;min-height:680px!important}}
+@media(max-width:640px){.print-toolbar{display:flex;flex-wrap:wrap;gap:12px;padding:14px 12px}.print-view-heading{width:100%}.print-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;overflow:visible;width:100%;padding:0}.print-controls label{min-width:0}.print-controls select,.print-controls input{width:100%;box-sizing:border-box;min-height:44px}.actions-row{width:100%;display:grid;grid-template-columns:1fr 1fr;gap:8px}.actions-row .button{min-height:44px;padding-inline:8px}.mobile-print-pager{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;order:5}.mobile-print-pager button{min-height:44px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--grey);font:600 .72rem var(--font-ui)}.mobile-print-pager button.active{border-color:var(--accent);color:var(--charcoal);background:var(--accent-soft)}.mobile-print-page-settings .print-proof-shell{display:none}.mobile-print-page-pages .print-controls{display:none}.mobile-print-page-pages .print-view-heading small{display:block}.print-proof-shell{display:block;padding:10px}.print-proof-sidebar{position:static;width:auto;max-height:none;margin-bottom:12px}.proof-page-list{display:grid;grid-template-columns:repeat(4,1fr);max-height:120px;overflow:auto}.device-preview{width:100%!important;height:auto!important}.print-proof-shell .book-view{transform:none!important;width:100%!important;min-height:680px!important}.mobile-print-page-pages .print-proof-sidebar{display:none}.mobile-print-page-pages .device-preview{margin:0 auto}.mobile-print-page-pages .book-view{min-height:0!important}}
+
+@media(max-width:640px){
+  .print-view{min-height:100dvh;overflow-x:hidden}
+  .print-toolbar{position:relative;display:flex;flex-direction:column;align-items:stretch;gap:14px;padding:16px 12px 18px;overflow:visible}
+  .print-view-heading{width:100%}
+  .print-controls{display:grid;grid-template-columns:1fr;gap:12px;overflow:visible;width:100%;padding:0}
+  .print-controls label{display:grid;grid-template-columns:minmax(0,1fr);gap:5px;min-width:0}
+  .print-controls select,.print-controls input{width:100%;box-sizing:border-box;min-height:46px}
+  .print-controls .print-theme-toggle{display:flex;align-items:center;gap:9px;min-height:44px}
+  .print-controls .print-theme-toggle input{width:20px;height:20px;flex:0 0 auto}
+  .actions-row{width:100%;display:grid;grid-template-columns:1fr;gap:8px}
+  .actions-row .button{min-height:46px;padding-inline:8px}
+  .mobile-print-pager{display:grid;grid-template-columns:1fr 1fr;gap:6px;width:100%;order:5}
+  .mobile-print-pager button{min-height:46px}
+  .mobile-print-page-settings .print-proof-shell{display:none}
+  .mobile-print-page-pages .print-controls{display:none}
+}
 
 @media print {
   body { background: #fff !important; }

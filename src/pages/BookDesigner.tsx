@@ -22,6 +22,7 @@ import { listMoodboard } from '../db/moodboard'
 import { ASSET_MIME } from '../designs/assets'
 import { PAGE_TEMPLATES } from '../designs/pageTemplates'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
+import './mobile-designer.css'
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -129,6 +130,10 @@ const PREVIEW_MODES = [
   { key: 'interior', label: 'Interior', icon: 'fa-solid fa-file-lines' },
   { key: 'flat-wrap', label: 'Flat wrap', icon: 'fa-solid fa-panorama' },
   { key: 'comparison', label: 'Compare', icon: 'fa-solid fa-code-compare' },
+  { key: 'front', label: 'Front Cover', icon: 'fa-solid fa-book-open' },
+  { key: 'back', label: 'Back Cover', icon: 'fa-solid fa-book' },
+  { key: 'spine', label: 'Spine', icon: 'fa-solid fa-bars-staggered' },
+  { key: 'print', label: 'Print View', icon: 'fa-solid fa-print' },
 ]
 
 function preflightDesigner({ novel, layout, cover, chapters, measurements }) {
@@ -284,6 +289,10 @@ export default function BookDesigner({
   const [stageOver, setStageOver]   = useState(false)
   const [canUndo, setCanUndo]       = useState(false)
   const [canRedo, setCanRedo]       = useState(false)
+  const [mobileSheet, setMobileSheet] = useState<string | null>(null)
+  const [mobileStepsOpen, setMobileStepsOpen] = useState(false)
+  const [mobileFullscreen, setMobileFullscreen] = useState(false)
+  const [isMobileDesigner, setIsMobileDesigner] = useState(false)
   const overTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const saveTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const layoutRef   = useRef<any>(null)
@@ -297,6 +306,13 @@ export default function BookDesigner({
   const presenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const presenceStateRef = useRef({ stageView: 'cover', coverSurface: 'front', section: 'cover', canEditDesigner: true, novelReady: false })
   const designerFontOptions = useMemo(() => buildDesignerFontOptions({ systemFonts, customFonts }), [customFonts, systemFonts])
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 900px)')
+    const sync = () => setIsMobileDesigner(media.matches)
+    sync(); media.addEventListener?.('change', sync)
+    return () => media.removeEventListener?.('change', sync)
+  }, [])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -633,6 +649,21 @@ export default function BookDesigner({
 
   const SECTION_GROUPS = ['Cover', 'Pages']
 
+  // One preview renderer is shared by desktop and mobile. Mobile changes the
+  // chrome around this renderer, never the underlying design state.
+  const renderPreview = (mode = previewMode) => {
+    if (mode === 'cover' || mode === 'front' || mode === 'back' || mode === 'spine') {
+      return <Cover3D novel={novel} cover={cover} autoSpin={!spinFrozen} immersive={coverFocused} surface={mode === 'front' ? 'front' : mode === 'back' ? 'back' : mode === 'spine' ? 'spine' : coverSurface} environment={bookEnvironment} measurements={measurements} designerFontOptions={designerFontOptions}
+        onSurfaceSelect={(selected) => { setCoverSurface(selected); setSpinFrozen(true); setSection('image'); setPanelOpen(true) }}
+        onSurfaceContext={(event, selected) => { setCoverSurface(selected); setMobileSheet('more') }} />
+    }
+    if (mode === 'flat-wrap') return <FlatWrapPreview novel={novel} cover={cover} measurements={measurements} designerFontOptions={designerFontOptions} />
+    if (mode === 'comparison') return <div className="designer-comparison-preview"><div className="book-mini"><InteriorPreview novel={novel} cover={cover} layout={layout} chapters={chapters} font={font} sig={sig} activeEditorDesign={activeEditorDesign} /></div><div className="book-mini"><InteriorPreview novel={novel} cover={cover} layout={{ ...layout, lineSpacing: '1.5' }} chapters={chapters} font={font} sig={sig} activeEditorDesign={activeEditorDesign} /></div></div>
+    return <div className="book-mini"><InteriorPreview novel={novel} cover={cover} layout={layout} chapters={chapters} font={font} sig={sig} activeEditorDesign={activeEditorDesign} /></div>
+  }
+
+  if (isMobileDesigner) return <MobileDesignerFlow novel={novel} cover={cover} layout={layout} chapters={chapters} measurements={measurements} workflow={workflow} workflowIndex={workflowIndex} setWorkflowStage={setWorkflowStage} saveState={saveState} onBack={() => navigate(`/novel/${id}`)} onMore={() => setMobileSheet('more')} onPrint={() => navigate(`/novel/${id}/design/print`)} previewMode={previewMode} setPreviewMode={setPreviewMode} setStageView={setStageView} coverSurface={coverSurface} setCoverSurface={(value) => { setCoverSurface(value); setSpinFrozen(true); setSection('image'); setPanelOpen(true) }} bookEnvironment={bookEnvironment} setBookEnvironment={setBookEnvironment} spinFrozen={spinFrozen} setSpinFrozen={setSpinFrozen} showGuides={showGuides} setShowGuides={setShowGuides} canUndo={canUndo} canRedo={canRedo} undo={undo} redo={redo} onFullscreen={() => setMobileFullscreen((value) => !value)} fullscreen={mobileFullscreen} mobileSheet={mobileSheet} setMobileSheet={setMobileSheet} mobileStepsOpen={mobileStepsOpen} setMobileStepsOpen={setMobileStepsOpen} renderPreview={renderPreview} renderTool={(tool) => renderSection(tool, { cover, novel, layout, sig, updateCover, update, applyCoverDesign, applyEditorDesign, activeCoverDesign, activeEditorDesign, toast, coverSurface, setCoverSurface, measurements, designerFontOptions, libraryImages, chapters })} />
+
   return (
     <div className={embedded ? 'designer-embedded-shell' : 'app'} style={embedded ? { display: 'flex', flex: 1, minHeight: 0, height: '100%' } : undefined}>
       {!embedded && novel && <SubPageTopbar novel={novel} title="Designer" />}
@@ -727,7 +758,7 @@ export default function BookDesigner({
           {/* Top bar */}
           <div className="ds-stage-bar studio-bar flex min-w-0 items-center gap-2 max-md:sticky max-md:top-0 max-md:z-20 max-md:overflow-x-auto max-md:bg-[#0b0b0f]/95 max-md:px-2 max-md:py-2 max-md:backdrop-blur-xl">
             <div className="ds-stage-tabs studio-seg designer-stage-main">
-              <TabsList className="designer-stage-tabs-list flex min-w-max gap-1">{PREVIEW_MODES.map((mode) => (
+              <TabsList className="designer-stage-tabs-list flex min-w-max gap-1">{PREVIEW_MODES.filter((mode) => ['cover', 'interior', 'flat-wrap', 'comparison'].includes(mode.key)).map((mode) => (
                 <TabsTrigger key={mode.key} className={`ds-stage-tab min-h-11 shrink-0 rounded-lg px-3 text-xs focus-visible:outline-2 focus-visible:outline-[#c79b53] ${previewMode === mode.key ? 'active' : ''}`} onClick={() => {
                   setPreviewMode(mode.key)
                   if (mode.key === 'cover' || mode.key === 'flat-wrap') { setStageView('cover'); setCoverFocused(false) }
@@ -793,29 +824,7 @@ export default function BookDesigner({
 
           {/* Canvas */}
           <div className={`ds-canvas ${stageView === 'cover' ? `book-environment book-environment-${bookEnvironment}` : ''} ${showGuides ? 'show-print-guides' : ''}`} title={stageView === 'cover' ? `Paste an image onto the ${coverSurface} with Ctrl+V` : undefined}>
-            {stageView === 'cover' && previewMode === 'cover' ? (
-              <Cover3D novel={novel} cover={cover} autoSpin={!spinFrozen} immersive={coverFocused} surface={coverSurface} environment={bookEnvironment} measurements={measurements} designerFontOptions={designerFontOptions}
-                onSurfaceSelect={(selected) => { setCoverSurface(selected); setSpinFrozen(true); setSection('image'); setPanelOpen(true) }}
-                onSurfaceContext={(event, selected) => {
-                  setCoverSurface(selected)
-                  const hasImage = !!cover[`${selected}Image`]
-                  openContextMenu(event, [
-                    { label: `Paste image on ${selected}`, icon: 'fa-solid fa-paste', onClick: () => pasteSurfaceImage(selected) },
-                    { label: `${hasImage ? 'Replace' : 'Upload'} ${selected} image`, icon: 'fa-solid fa-arrow-up-from-bracket', onClick: () => chooseSurfaceImage(selected) },
-                    { label: `Edit ${selected} crop`, icon: 'fa-solid fa-crop-simple', onClick: () => { setSection('image'); setPanelOpen(true) } },
-                    'divider',
-                    { label: `Remove ${selected} image`, icon: 'fa-solid fa-trash', danger: true, disabled: !hasImage, onClick: () => updateCover({ [`${selected}Image`]: null }) }
-                  ])
-                }} />
-            ) : stageView === 'cover' && previewMode === 'flat-wrap' ? (
-              <FlatWrapPreview novel={novel} cover={cover} measurements={measurements} designerFontOptions={designerFontOptions} />
-            ) : previewMode === 'comparison' ? (
-              <div className="designer-comparison-preview"><div className="book-mini"><InteriorPreview novel={novel} cover={cover} layout={layout} chapters={chapters} font={font} sig={sig} activeEditorDesign={activeEditorDesign} /></div><div className="book-mini"><InteriorPreview novel={novel} cover={cover} layout={{ ...layout, lineSpacing: '1.5' }} chapters={chapters} font={font} sig={sig} activeEditorDesign={activeEditorDesign} /></div></div>
-            ) : (
-              <div className="book-mini">
-                <InteriorPreview novel={novel} cover={cover} layout={layout} chapters={chapters} font={font} sig={sig} activeEditorDesign={activeEditorDesign} />
-              </div>
-            )}
+            {renderPreview()}
           </div>
 
         </div>
@@ -827,6 +836,22 @@ export default function BookDesigner({
 function PageTemplatesTab({ activeEditorDesign, applyEditorDesign, toast }) {
   const designId = (template) => `page-${template.id.replace('chapter-opening', 'chapter').replace('map-notes', 'map')}`
   return <div className="ds-page-templates"><p className="ds-hint">Apply a complete page design to your manuscript. These templates use the same Designs system as the Editor.</p><div className="ds-template-grid">{PAGE_TEMPLATES.map((template) => { const id = designId(template); return <button type="button" key={template.id} className={`ds-template-card ${activeEditorDesign === id ? 'active' : ''}`} onClick={() => { applyEditorDesign(id); toast(`${template.title} applied.`) }}><span className="ds-template-glyph">{template.icon}</span><strong>{template.title}</strong><small>{template.description}</small><em>Apply design</em></button> })}</div></div>
+}
+
+function MobileDesignerFlow({ novel, workflow, workflowIndex, setWorkflowStage, saveState, onBack, onMore, onPrint, previewMode, setPreviewMode, setStageView, coverSurface, setCoverSurface, bookEnvironment, setBookEnvironment, spinFrozen, setSpinFrozen, showGuides, setShowGuides, canUndo, canRedo, undo, redo, onFullscreen, fullscreen, mobileSheet, setMobileSheet, mobileStepsOpen, setMobileStepsOpen, renderPreview, renderTool }: any) {
+  const setMobileFullscreen = onFullscreen
+  const surfaceLabel = coverSurface === 'front' ? 'Front cover' : coverSurface === 'back' ? 'Back cover' : 'Spine'
+  const toolMap: Record<string, string> = { design: 'cover', text: 'effects', media: 'media', style: 'palette', surface: 'image', pages: 'body' }
+  const step = DESIGN_WORKFLOWS[workflowIndex] || DESIGN_WORKFLOWS[1]
+  const selectPreview = (key: string) => { setMobileSheet(null); if (key === 'print') { onPrint(); return }; if (['front', 'back', 'spine'].includes(key)) { setCoverSurface(key); setPreviewMode(key); setStageView('cover'); setSpinFrozen(true); return }; setPreviewMode(key); setStageView(key === 'interior' || key === 'comparison' ? 'page' : 'cover') }
+  return <div className={`mobile-book-studio ${fullscreen ? 'is-fullscreen' : ''}`} data-surface={coverSurface}>
+    <header className="mobile-book-studio-header"><button type="button" className="mobile-studio-icon" onClick={onBack} aria-label="Back to book"><Icon icon="fa-solid fa-chevron-left" /></button><div className="mobile-studio-title"><strong>{novel.title || 'Book Studio'}</strong><span>{step.label} · <i className={`designer-save-dot ${saveState}`} />{saveState === 'syncing' ? 'Saving…' : saveState === 'error' ? 'Save failed' : 'Saved'}</span></div><button type="button" className="mobile-studio-icon" onClick={onMore} aria-label="More Designer options"><Icon icon="fa-solid fa-ellipsis" /></button></header>
+    <div className="mobile-studio-stepbar"><button type="button" onClick={() => setWorkflowStage(DESIGN_WORKFLOWS[Math.max(0, workflowIndex - 1)].key)} aria-label="Previous step"><Icon icon="fa-solid fa-chevron-left" /></button><button type="button" className="mobile-studio-step-current" onClick={() => setMobileStepsOpen(true)}><span>{step.label} Design</span><small>{workflowIndex + 1} / {DESIGN_WORKFLOWS.length} · tap to change</small></button><button type="button" onClick={() => setWorkflowStage(DESIGN_WORKFLOWS[Math.min(DESIGN_WORKFLOWS.length - 1, workflowIndex + 1)].key)} aria-label="Next step"><Icon icon="fa-solid fa-chevron-right" /></button></div>
+    {mobileStepsOpen && <div className="mobile-studio-step-sheet" role="dialog" aria-label="Book Studio steps"><div className="mobile-sheet-grabber" /><h2>Book Studio</h2>{DESIGN_WORKFLOWS.map((item, index) => <button type="button" className={workflow === item.key ? 'active' : ''} key={item.key} onClick={() => { setWorkflowStage(item.key); setMobileStepsOpen(false) }}><span>{index + 1}</span><strong>{item.label}</strong><small>{item.description}</small></button>)}<button type="button" className="button button-quiet" onClick={() => setMobileStepsOpen(false)}>Done</button></div>}
+    <main className="mobile-studio-preview-wrap"><div className="mobile-studio-preview-actions"><button type="button" onClick={undo} disabled={!canUndo} aria-label="Undo"><Icon icon="fa-solid fa-rotate-left" /></button><button type="button" onClick={redo} disabled={!canRedo} aria-label="Redo"><Icon icon="fa-solid fa-rotate-right" /></button><button type="button" onClick={() => setMobileSheet('view')} aria-label="Camera and preview options"><Icon icon="fa-solid fa-eye" /></button><button type="button" onClick={onFullscreen} aria-label="Fullscreen preview"><Icon icon="fa-solid fa-expand" /></button></div><div className="mobile-studio-preview">{renderPreview(previewMode)}</div><div className="mobile-studio-mode"><button type="button" onClick={() => setMobileSheet('preview')}>{PREVIEW_MODES.find((mode) => mode.key === previewMode)?.label || '3D Book'} <Icon icon="fa-solid fa-chevron-down" /></button><button type="button" onClick={() => setMobileSheet('surface')}>{surfaceLabel} <Icon icon="fa-solid fa-chevron-down" /></button></div></main>
+    <nav className="mobile-studio-dock" aria-label="Designer tools">{[['design','Design','fa-solid fa-wand-magic-sparkles'],['text','Text','fa-solid fa-font'],['media','Media','fa-regular fa-images'],['style','Style','fa-solid fa-swatchbook'],['more','More','fa-solid fa-ellipsis']].map(([key, label, icon]) => <button type="button" key={key} className={mobileSheet === key ? 'active' : ''} onClick={() => setMobileSheet(key)}><Icon icon={icon} /><span>{label}</span></button>)}</nav>
+    {mobileSheet && <div className="mobile-studio-sheet" role="dialog" aria-label="Designer controls"><div className="mobile-sheet-grabber" /><header><strong>{mobileSheet === 'preview' ? 'Preview mode' : mobileSheet === 'view' ? 'Camera view' : mobileSheet === 'surface' ? 'Edit surface' : mobileSheet === 'more' ? 'More tools' : mobileSheet[0].toUpperCase() + mobileSheet.slice(1)}</strong><button type="button" onClick={() => setMobileSheet(null)} aria-label="Close controls"><Icon icon="fa-solid fa-xmark" /></button></header>{mobileSheet === 'preview' && <div className="mobile-sheet-options">{PREVIEW_MODES.map((mode) => <button type="button" className={previewMode === mode.key ? 'active' : ''} key={mode.key} onClick={() => selectPreview(mode.key)}><Icon icon={mode.icon} />{mode.label}<span>{previewMode === mode.key ? '✓' : '›'}</span></button>)}</div>}{mobileSheet === 'surface' && <div className="mobile-sheet-options">{[['front','Front Cover'],['spine','Spine'],['back','Back Cover']].map(([key, label]) => <button type="button" className={coverSurface === key ? 'active' : ''} key={key} onClick={() => { setCoverSurface(key); setMobileSheet(key === 'front' ? 'design' : 'surface') }}>{label}<span>{coverSurface === key ? '✓' : '›'}</span></button>)}</div>}{mobileSheet === 'view' && <div className="mobile-sheet-options">{[['front','Front'],['spine','Spine'],['back','Back'],['angle','3D angle']].map(([key, label]) => <button type="button" key={key} onClick={() => { if (['front','spine','back'].includes(key)) setCoverSurface(key); setSpinFrozen(true); setMobileSheet(null) }}>{label}<span>›</span></button>)}<label className="mobile-sheet-toggle"><span>Environment</span><select value={bookEnvironment} onChange={(event) => { setBookEnvironment(event.target.value); window.localStorage?.setItem?.('moonscribe_book_environment', event.target.value) }}>{BOOK_ENVIRONMENTS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label></div>}{['design','text','media','style'].includes(mobileSheet) && <div className="mobile-sheet-content">{renderTool(toolMap[mobileSheet] || 'cover')}<button type="button" className="button button-primary mobile-sheet-done" onClick={() => setMobileSheet(null)}>Done</button></div>}{mobileSheet === 'more' && <div className="mobile-sheet-options"><button type="button" onClick={() => { setShowGuides(!showGuides); setMobileSheet(null) }}>{showGuides ? 'Hide' : 'Show'} print guides</button><button type="button" onClick={() => { setMobileSheet('pages') }}>Interior & page layout</button><button type="button" onClick={() => { setMobileSheet('view'); setMobileFullscreen(true) }}>Fullscreen preview</button></div>}</div>}
+  </div>
 }
 
 // ─── section renderer ─────────────────────────────────────────────────────────

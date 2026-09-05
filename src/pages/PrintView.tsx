@@ -28,6 +28,7 @@ export default function PrintView() {
   const [mode, setMode] = useState<'proof' | 'reader' | 'continuous'>('proof')
   const [zoom, setZoom] = useState(1)
   const [selectedPage, setSelectedPage] = useState(0)
+  const [mobilePrintPage, setMobilePrintPage] = useState<'settings' | 'pages'>('settings')
 
   useEffect(() => {
     ;(async () => {
@@ -137,7 +138,7 @@ export default function PrintView() {
   }
 
   return (
-    <div className="print-view">
+    <div className={`print-view mobile-print-page-${mobilePrintPage}`}>
       <style>{pageCss}</style>
       <div className="print-toolbar">
         <div className="print-view-heading"><span>BOOK PROOF</span><strong>{novel.title}</strong><small>{preview.pageCount} pages · {Math.round(w)} × {Math.round(h)} mm</small></div>
@@ -154,6 +155,10 @@ export default function PrintView() {
           <button className="button button-ghost" onClick={() => navigate(`/novel/${id}/design`)}>← Back to designer</button>
           <button className="button button-primary" onClick={() => window.print()}>🖨 Print / Save as PDF</button>
         </div>
+        <nav className="mobile-print-pager" aria-label="Print view sections">
+          <button type="button" className={mobilePrintPage === 'settings' ? 'active' : ''} onClick={() => setMobilePrintPage('settings')}>1 · Settings</button>
+          <button type="button" className={mobilePrintPage === 'pages' ? 'active' : ''} onClick={() => { setMobilePrintPage('pages'); setMode('reader') }}>2 · Read pages</button>
+        </nav>
       </div>
 
       <div className={`print-proof-shell mode-${mode}`}>

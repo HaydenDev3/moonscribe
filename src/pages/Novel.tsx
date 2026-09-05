@@ -131,7 +131,7 @@ export default function Novel() {
   const [editingGoal, setEditingGoal] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [savedAt, setSavedAt] = useState(null)
-  const [reading, setReading] = useState(false)
+  const [reading, setReading] = useState(() => new URLSearchParams(location.search).get('mode') === 'read')
   const [restoreTick, setRestoreTick] = useState(0)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [libraryOpen, setLibraryOpen] = useState(false)

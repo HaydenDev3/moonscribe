@@ -2444,6 +2444,77 @@ body::after {
 .lockscreen-error { color: var(--rose-deep); font-size: 0.84rem; margin-bottom: var(--space-3); }
 .lockscreen-hint { color: var(--grey-soft); font-size: 0.76rem; margin: var(--space-4) 0 0; }
 
+/* App lock: a quiet, book-first MoonScribe entry point. */
+.lockscreen-cinematic {
+  min-height: 100dvh;
+  overflow: auto;
+  position: relative;
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: clamp(28px, 6vh, 72px) max(20px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom));
+  color: #efe8da;
+  background: radial-gradient(circle at 50% 38%, rgba(182, 132, 47, .12), transparent 32%), radial-gradient(circle at 50% 100%, rgba(255,255,255,.035), transparent 55%), #09090b;
+}
+.lockscreen-cinematic::before { content: ''; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,.52) 100%); }
+.lockscreen-brand { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; width: min(900px, 100%); margin: 0 auto; color: #efe8da; }
+.lockscreen-brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid rgba(210, 157, 65, .7); border-radius: 50%; color: #d6a64b; font: 600 1.15rem Georgia, serif; }
+.lockscreen-brand strong { display: block; color: #efe8da; font: 600 1.15rem Georgia, serif; letter-spacing: .01em; }
+.lockscreen-brand small { display: block; margin-top: 2px; color: var(--grey-soft, #9a948b); font-size: .72rem; }
+.lockscreen-layout { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(240px, 340px) minmax(300px, 420px); align-items: center; justify-content: center; gap: clamp(42px, 8vw, 88px); width: min(900px, 100%); min-height: min(690px, calc(100dvh - 120px)); margin: 0 auto; }
+.lockscreen-book { display: grid; place-items: center; height: min(480px, 54dvh); min-height: 300px; filter: drop-shadow(0 28px 28px rgba(0,0,0,.5)); }
+.lockscreen-book .cover-renderer-shell, .lockscreen-book .cover-mockup-3d { width: 100%; max-width: 100%; height: 100%; min-height: 0; background: transparent; border: 0; box-shadow: none; overflow: hidden; }
+.lockscreen-book .cover-renderer-status { display: none; }
+.lockscreen-book-fallback { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 190px; aspect-ratio: .68; border: 1px solid rgba(211,158,66,.55); border-radius: 3px 8px 8px 3px; background: linear-gradient(145deg,#161519,#2b251b); box-shadow: 14px 18px 0 #0d0d0f, 0 30px 35px rgba(0,0,0,.5); color: #d6a64b; text-align: center; }
+.lockscreen-book-fallback span { margin-bottom: 26px; font-size: 2.5rem; }.lockscreen-book-fallback b { font: 600 .74rem Georgia, serif; letter-spacing: .18em; }.lockscreen-book-fallback small { margin-top: 10px; color: #b5ab98; font-size: .62rem; letter-spacing: .12em; }
+.lockscreen-content { width: 100%; max-width: 420px; }.lockscreen-kicker { display: flex; align-items: center; gap: 8px; color: #c9953c; font-size: .72rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; }.lockscreen-content h1 { margin: 14px 0 10px; color: var(--cream, #efe8da); font: 600 clamp(2rem, 4vw, 3.1rem)/1.08 Georgia, serif; }.lockscreen-content .lockscreen-lead { max-width: 32ch; margin: 0 0 26px; color: var(--grey-soft, #aaa39a); font-size: .98rem; line-height: 1.55; }
+.lockscreen-form { display: grid; gap: 12px; }.lockscreen-field { display: flex; align-items: center; min-height: 56px; padding: 0 7px 0 16px; border: 1px solid rgba(202,151,63,.4); border-radius: 10px; background: rgba(16,16,19,.88); transition: border-color .2s, box-shadow .2s; }.lockscreen-field:focus-within { border-color: #d6a64b; box-shadow: 0 0 0 3px rgba(214,166,75,.12); }.lockscreen-field > svg { flex: 0 0 auto; color: #c9953c; }.lockscreen-field input { min-width: 0; flex: 1; height: 52px; padding: 0 12px; border: 0; outline: 0; background: transparent; color: var(--cream, #efe8da); font: inherit; }.lockscreen-field input::placeholder { color: #77736e; }.lockscreen-field button { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 8px; background: transparent; color: #aaa39a; cursor: pointer; }.lockscreen-field button:hover, .lockscreen-field button:focus-visible { color: #d6a64b; background: rgba(214,166,75,.1); }
+.lockscreen-unlock { width: 100%; min-height: 56px; border: 1px solid #d6a64b; border-radius: 10px; background: #c9953c; color: #17130d; font-weight: 700; }.lockscreen-unlock:hover:not(:disabled) { background: #dfb45e; box-shadow: 0 8px 24px rgba(201,149,60,.18); transform: translateY(-1px); }.lockscreen-unlock:disabled { opacity: .45; cursor: not-allowed; }.lockscreen-caps { margin: -4px 0 0; color: #d5ae68; font-size: .78rem; }.lockscreen-help { min-height: 44px; margin: 12px auto 0; border: 0; background: transparent; color: #b8a98d; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }.lockscreen-security { display: flex; align-items: flex-start; gap: 10px; margin: 28px 0 0; color: #8e897f; font-size: .8rem; }.lockscreen-security > svg { margin-top: 2px; color: #b88b3d; }.lockscreen-security strong, .lockscreen-security small { display: block; }.lockscreen-security strong { color: #bdb5a7; font-weight: 600; }.lockscreen-security small { margin-top: 4px; color: #77736e; }
+.lockscreen-help-dialog { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; padding: 20px; background: rgba(0,0,0,.72); }.lockscreen-help-dialog > div { position: relative; width: min(420px, 100%); padding: 28px; border: 1px solid rgba(202,151,63,.5); border-radius: 14px; background: #17161b; box-shadow: 0 24px 80px rgba(0,0,0,.55); }.lockscreen-help-dialog h2 { margin: 0 0 12px; color: #efe8da; font: 600 1.6rem Georgia, serif; }.lockscreen-help-dialog p { margin: 0 0 22px; color: #aaa39a; line-height: 1.55; }.lockscreen-help-close { position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; border: 0; background: transparent; color: #aaa39a; }.lockscreen-help-dialog .button { min-height: 48px; }.lockscreen-cinematic.is-unlocking .lockscreen-content { animation: lockscreen-open .9s ease both; }.lockscreen-cinematic.is-unlocking .lockscreen-book { transform: scale(1.04) translateY(-8px); transition: transform .9s ease; }
+@keyframes lockscreen-open { 0% { opacity: 1; transform: translateY(0); } 100% { opacity: .2; transform: translateY(-8px); } }
+@media (max-width: 760px) { .lockscreen-cinematic { width: 100%; max-width: 100vw; padding: 22px 20px max(24px, env(safe-area-inset-bottom)); }.lockscreen-brand { width: 100%; margin-bottom: 8px; }.lockscreen-layout { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 8px; min-height: auto; width: 100%; }.lockscreen-book { align-self: center; width: 100%; max-width: 320px; height: 245px; min-height: 210px; overflow: hidden; }.lockscreen-book .cover-mockup-3d { width: 100%; height: 100%; }.lockscreen-content { width: 100%; max-width: none; }.lockscreen-content h1 { margin-top: 12px; font-size: clamp(2rem, 9vw, 2.55rem); }.lockscreen-content .lockscreen-lead { margin-bottom: 20px; }.lockscreen-security { margin-top: 20px; } }
+@media (prefers-reduced-motion: reduce) { .lockscreen-cinematic *, .lockscreen-cinematic::before { animation: none !important; transition: none !important; }.lockscreen-cinematic.is-unlocking .lockscreen-book { transform: none; } }
+
+/* Keep lock-screen foreground text independent from theme token overrides. */
+.lockscreen-cinematic .lockscreen-content h1,
+.lockscreen-cinematic .lockscreen-field input { color: #efe8da; }
+.lockscreen-cinematic .lockscreen-content .lockscreen-lead { color: #aaa39a; }
+.lockscreen-cinematic .lockscreen-field input { color: #efe8da !important; caret-color: #d6a64b; font-size: 1rem; letter-spacing: .01em; }
+.lockscreen-cinematic .lockscreen-field input:focus { color: #fff8eb !important; }
+
+/* Library collection cards: readable hierarchy and generous touch targets. */
+.novel-list { gap: 10px; }
+.novel-list-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  gap: 16px;
+  min-height: 92px;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 14px;
+  background: linear-gradient(115deg, color-mix(in srgb, var(--surface-elev, var(--surface)) 94%, var(--accent) 6%), var(--surface));
+  box-shadow: 0 8px 22px rgba(0,0,0,.08);
+  transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease;
+}
+.novel-list-row:hover, .novel-list-row:focus-visible { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); background: var(--hover-bg); box-shadow: 0 12px 28px rgba(0,0,0,.14); outline: none; }
+.novel-list-cover { width: 54px; height: 68px; border-radius: 6px; box-shadow: 3px 4px 0 rgba(0,0,0,.2), 0 5px 12px rgba(0,0,0,.18); font-size: .9rem; }
+.novel-list-body { display: grid; align-content: center; gap: 7px; }
+.novel-list-title { font-size: 1.05rem; letter-spacing: .01em; }
+.novel-list-row .novel-genres { display: flex; flex-wrap: wrap; gap: 5px; }
+.novel-list-row .novel-genres .tag { padding: 3px 7px; border-radius: 999px; font-size: .68rem; }
+.novel-list-stats { align-self: center; display: grid; grid-template-columns: repeat(3, auto); justify-items: end; gap: 4px 16px; font-size: .74rem; }
+.novel-list-stats .novel-words { color: var(--charcoal); font-weight: 700; }
+.novel-list-progress { grid-column: 1 / -1; justify-content: flex-end; font-size: .68rem; }
+.novel-list-progress .novel-progress-bar { width: 86px; height: 5px; }
+@media (max-width: 700px) {
+  .novel-list { gap: 8px; }
+  .novel-list-row { grid-template-columns: 52px minmax(0, 1fr); gap: 12px; min-height: 88px; padding: 12px; border-radius: 12px; }
+  .novel-list-cover { width: 52px; height: 66px; }
+  .novel-list-title { font-size: .98rem; }
+  .novel-list-stats { grid-column: 2; grid-template-columns: repeat(3, minmax(0, auto)); justify-items: start; justify-content: start; gap: 4px 10px; width: 100%; overflow: hidden; }
+  .novel-list-progress { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
 /* ---------- Toast ---------- */
 .toast-wrap { position: fixed; bottom: var(--space-5); left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: var(--space-2); align-items: center; }
 .toast {
@@ -6902,6 +6973,20 @@ body::after {
   .trash-studio .trash-hero { grid-template-columns: 1fr auto; gap: 12px; padding-bottom: 16px; }
   .trash-studio .trash-meter { grid-column: 1; justify-self: start; }
   .trash-studio .trash-hero > div:last-child { grid-column: 2; justify-self: end; }
+}
+
+/* Mobile Book Studio corrections; desktop Designer remains unchanged. */
+@media (max-width: 900px) {
+  .mobile-studio-stepbar { display: none !important; }
+  .mobile-studio-preview { place-items: center; padding: 0; }
+  .mobile-studio-preview .cover-renderer-shell,
+  .mobile-studio-preview .cover-mockup-3d { width: 100%; max-width: 100%; margin-inline: auto; }
+  .mobile-studio-preview .cover-mockup-3d { display: grid; place-items: center; }
+  .mobile-studio-preview .cover-mockup-3d canvas { margin-inline: auto; }
+  .mobile-studio-sheet .ds-swatch-row { display: flex; flex-wrap: wrap; gap: 12px; overflow: visible; }
+  .mobile-studio-sheet .ds-swatch-color { flex: 0 0 40px !important; width: 40px !important; height: 40px !important; min-width: 40px; border-radius: 50% !important; }
+  .mobile-studio-sheet .ds-color-wheel { width: 44px; height: 44px; border-radius: 50%; }
+  .mobile-studio-sheet .ds-color-wheel::-webkit-color-swatch { border-radius: 50%; }
 }
 @media (max-width: 460px) {
   .trash-studio .trash-hero { grid-template-columns: 1fr; }
