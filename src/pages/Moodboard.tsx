@@ -9,6 +9,7 @@ import Modal from '../components/Modal'
 import { useContextMenu } from '../components/ContextMenu'
 import Icon from '../components/Icon'
 import * as THREE from 'three'
+import { emitSound } from '../utils/sounds'
 
 const NOTE_COLORS = ['#FFF9E8', '#FBE3E3', '#E3EDF7', '#E8F1E8', '#F5EBFA', '#FDF0DB']
 const NOTE_TEXT = '#3d3a36'
@@ -71,6 +72,7 @@ export default function Moodboard({ novelId, embedded }) {
       await createTile(nid, { kind: 'image', x: rand(), y: rand(), image })
       setTiles(await listMoodboard(nid))
       toast('Image pasted onto the board.')
+      emitSound('board.drop')
     }
     window.addEventListener('paste', paste)
     return () => window.removeEventListener('paste', paste)
@@ -102,6 +104,7 @@ export default function Moodboard({ novelId, embedded }) {
     setTiles(await listMoodboard(nid))
     setSelected(tile.id)
     toast('A note to pin.')
+    emitSound('document.place')
   }
 
   const addImage = async (e) => {
@@ -114,6 +117,7 @@ export default function Moodboard({ novelId, embedded }) {
       setTiles(await listMoodboard(nid))
       setSelected(tile.id)
       toast('Pinned to the board.')
+      emitSound('board.drop')
     } catch (err) {
       toast(err.message)
     }
@@ -222,6 +226,7 @@ export default function Moodboard({ novelId, embedded }) {
     if (!st || !st.moved) return
     const moved = tiles.find((t) => t.id === tile.id)
     if (moved) updateTile(tile.id, { x: moved.x, y: moved.y })
+    if (moved) emitSound('board.drop')
   }
 
   const beginConnection = (event, tile) => {

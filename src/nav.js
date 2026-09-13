@@ -2,7 +2,7 @@
 // the SubPageTopbar. Groups let the sidebar show quiet section headers.
 export const NOVEL_NAV = [
   {
-    group: 'World',
+    group: 'Plan',
     items: [
       { to: 'planning', label: 'Planning cockpit', icon: 'fa-solid fa-compass-drafting' },
       { to: 'characters', label: 'Characters', icon: 'fa-solid fa-user' },
@@ -10,28 +10,34 @@ export const NOVEL_NAV = [
       { to: 'family-tree', label: 'Family tree', icon: 'fa-solid fa-people-roof' },
       { to: 'world', label: 'Worldbuilding', icon: 'fa-solid fa-globe' },
       { to: 'glossary', label: 'Glossary', icon: 'fa-solid fa-book-open' },
-      { to: 'moodboard', label: 'Moodboard', icon: 'fa-regular fa-images' },
+      { to: 'timeline', label: 'Timeline', icon: 'fa-solid fa-clock-rotate-left' },
+      { to: 'milestones', label: 'Milestones', icon: 'fa-solid fa-flag-checkered' },
     ]
   },
   {
-    group: 'Craft',
+    group: 'Collect',
     items: [
-      { to: 'design', label: 'Designer', icon: 'fa-solid fa-wand-magic-sparkles' },
+      { to: 'moodboard', label: 'Moodboard', icon: 'fa-regular fa-images' },
       { to: 'media', label: 'Media Library', icon: 'fa-regular fa-images' },
       { to: 'files', label: 'Project files', icon: 'fa-solid fa-folder-tree' },
+      { to: 'writing-journal', label: 'Writing journal', icon: 'fa-solid fa-feather-pointed' },
+    ]
+  },
+  {
+    group: 'Design',
+    items: [
+      { to: 'design', label: 'Designer', icon: 'fa-solid fa-palette' },
+      { to: 'interior-layout', label: 'Interior Layout', icon: 'fa-solid fa-file-lines' },
+    ]
+  },
+  {
+    group: 'Review',
+    items: [
       { to: 'analytics', label: 'Analytics', icon: 'fa-solid fa-chart-line' },
       { to: 'story-memory', label: 'Story Memory', icon: 'fa-solid fa-brain' },
       { to: 'prose-tools', label: 'Prose tools', icon: 'fa-solid fa-spell-check' },
       { to: 'corkboard', label: 'Draft board', icon: 'fa-solid fa-border-all' },
       { to: 'continuity', label: 'Continuity', icon: 'fa-solid fa-circle-check' }
-    ]
-  },
-  {
-    group: 'Journal',
-    items: [
-      { to: 'timeline', label: 'Timeline', icon: 'fa-solid fa-clock-rotate-left' },
-      { to: 'milestones', label: 'Milestones', icon: 'fa-solid fa-flag-checkered' },
-      { to: 'writing-journal', label: 'Writing journal', icon: 'fa-solid fa-feather-pointed' }
     ]
   },
   {

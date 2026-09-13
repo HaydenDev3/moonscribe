@@ -6,7 +6,7 @@ import { getDB, putRecord, removeRecord } from './db'
 // are swept quietly on app boot.
 export const TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 
-export const TRASHABLE = ['chapters', 'characters', 'notes', 'world', 'glossary', 'projectFiles']
+export const TRASHABLE = ['novels', 'chapters', 'characters', 'notes', 'world', 'glossary', 'projectFiles']
 
 // Shared soft-delete used by the per-store `trash*` helpers.
 export async function trashRecord(storeName, id) {
@@ -24,7 +24,9 @@ export async function listTrash(novelId) {
   const db = await getDB()
   const out = []
   for (const store of TRASHABLE) {
-    const all = await db.getAllFromIndex(store, 'by-novel', novelId)
+    const all = store === 'novels'
+      ? (novelId ? [await db.get(store, novelId)].filter(Boolean) : await db.getAll(store))
+      : (novelId ? await db.getAllFromIndex(store, 'by-novel', novelId) : await db.getAll(store))
     for (const rec of all) {
       if (rec.trashedAt) out.push({ store, rec })
     }
@@ -46,6 +48,16 @@ export async function purgeTrashed(store, id) {
   const db = await getDB()
   const rec = await db.get(store, id)
   if (!rec) return
+  if (store === 'novels') {
+    // A novel owns its supporting records. Purge the complete local project,
+    // while leaving normal soft-delete restoration untouched.
+    const childStores = ['chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'projectFiles', 'workspacePreferences', 'glossary', 'annotations', 'branches', 'suggestions']
+    for (const childStore of childStores) {
+      if (!db.objectStoreNames.contains(childStore)) continue
+      const children = await db.getAllFromIndex(childStore, 'by-novel', id).catch(() => [])
+      for (const child of children) await db.delete(childStore, child.id)
+    }
+  }
   await db.delete(store, id)
   await removeRecord(store, id, rec.novelId)
 }

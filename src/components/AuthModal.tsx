@@ -8,6 +8,7 @@ import PolicyConsent from './PolicyConsent'
 import { REQUIRED_SIGNUP_POLICIES } from '../data/policies'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
+import { authProviderLabel, readLastAuthProvider, saveLastAuthProvider, type AuthProvider } from '../utils/authPreference'
 
 const APP_LOGO = '/moonscribelogo.png'
 
@@ -454,6 +455,7 @@ export default function AuthModal({
 
   const [busy, setBusy] = useState(false)
   const [busyProvider, setBusyProvider] = useState(null)
+  const [lastAuthProvider, setLastAuthProvider] = useState<AuthProvider | null>(null)
 
   const [libraryConflict, setLibraryConflict] = useState(false)
 
@@ -509,13 +511,21 @@ export default function AuthModal({
   }, [open, onClose, view])
 
   useEffect(() => {
-    if (!open) {
+    if (open) setLastAuthProvider(readLastAuthProvider())
+    else {
       setView('main')
       setLibraryConflict(false)
       setBusy(false)
       setBusyProvider(null)
     }
   }, [open])
+
+  useEffect(() => {
+    if (authFlow?.state === 'success' && authFlow.provider) {
+      saveLastAuthProvider(authFlow.provider)
+      setLastAuthProvider(authFlow.provider)
+    }
+  }, [authFlow?.provider, authFlow?.state])
 
   // ───────────────────────────────────────────────────────────────────────────
   // Discord
@@ -601,6 +611,9 @@ export default function AuthModal({
         )
       }
 
+      if (result?.profileSetupRequired) app.openProfileSetup?.()
+      saveLastAuthProvider('passkey')
+      setLastAuthProvider('passkey')
       toast?.('Welcome back.')
       onClose?.()
     } catch (error) {
@@ -699,8 +712,11 @@ export default function AuthModal({
       }
 
       if (result.ok) {
+        saveLastAuthProvider('password')
+        setLastAuthProvider('password')
         setLibraryConflict(false)
 
+        if (mode === 'register' && result.profileSetupRequired) app.openProfileSetup?.()
         toast?.(
           mode === 'register'
             ? 'MoonScribe account created.'
@@ -746,6 +762,8 @@ export default function AuthModal({
         code: twoFactorCode.trim(),
         username: twoFactor.username,
       })
+      saveLastAuthProvider('password')
+      setLastAuthProvider('password')
       setTwoFactor(null)
       setTwoFactorCode('')
       toast?.('Welcome back.')
@@ -2116,6 +2134,16 @@ export default function AuthModal({
               </p>
             </div>
           </div>
+
+          {lastAuthProvider && (
+            <span
+              className="mr-2 mt-1 hidden shrink-0 items-center gap-1.5 rounded-full border border-sky-300/20 bg-sky-400/10 px-2.5 py-1.5 text-[9px] font-medium text-sky-200 sm:inline-flex"
+              title={`Last successful sign-in: ${authProviderLabel(lastAuthProvider)}`}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-sky-300 shadow-[0_0_8px_rgba(125,211,252,.7)]" />
+              Last used · {authProviderLabel(lastAuthProvider)}
+            </span>
+          )}
 
           <CloseButton onClick={onClose} />
         </header>

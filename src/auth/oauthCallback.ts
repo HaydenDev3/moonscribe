@@ -4,6 +4,7 @@ export type OAuthCallback = {
   provider: OAuthProvider | null
   exchangeCode: string | null
   error: string | null
+  conflictId: string | null
   linked: boolean
 }
 
@@ -22,7 +23,7 @@ export function readOAuthCallback(search: string): OAuthCallback {
   const candidate = oauthCode || discordCode
   const exchangeCode = candidate && CODE_PATTERN.test(candidate) ? candidate : null
   const error = params.get('discord_error') || params.get('oauth_error')
-  return { provider, exchangeCode, error, linked: params.get('linked') === '1' }
+  return { provider, exchangeCode, error, conflictId: params.get('conflict'), linked: params.get('linked') === '1' }
 }
 
 export function clearOAuthCallback(location: globalThis.Location) {

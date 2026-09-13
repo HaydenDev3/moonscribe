@@ -1,20 +1,48 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, MouseEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 import * as syncEngine from '../sync/engine'
 import Select from '../components/Select'
+import UserInspector from '../components/admin/UserInspector'
 import { useContextMenu } from '../components/ContextMenu'
 import { markdownToAnnouncementHtml, sanitizeAnnouncementHtml } from '../utils/announcementMarkup'
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '../components/ui/sheet'
-import { Button } from '../components/ui/button'
+import {
+  AdminShell,
+  AdminOverview,
+  AdminHealthPanel,
+  AdminUsersPage,
+  AdminAuditPage,
+} from '../components/admin/ControlRoom'
 import '../styles/admin.css'
 import '../styles/admin-audit.css'
 import '../styles/admin-flags.css'
 import '../styles/admin-rich.css'
 
-type AdminUser = { id: string; username: string; email?: string | null; avatarUrl?: string | null; roles: string[]; disabledAt?: number | null; createdAt?: number; emailVerified?: boolean; twoFactorEnabled?: boolean; online?: boolean; lastSeenAt?: number | null }
-type Health = { online?: boolean; emailDelivery?: boolean }
+type AdminUser = {
+  id: string
+  username: string
+  email?: string | null
+  avatarUrl?: string | null
+  bannerUrl?: string | null
+  displayName?: string | null
+  writerName?: string | null
+  profileBio?: string | null
+  roles: string[]
+  disabledAt?: number | null
+  createdAt?: number
+  emailVerified?: boolean
+  twoFactorEnabled?: boolean
+  online?: boolean
+  lastSeenAt?: number | null
+}
+type Health = {
+  online?: boolean
+  emailDelivery?: boolean
+  emailAuth?: boolean
+  database?: string
+  activeSessions?: number
+}
 type FeatureFlag = {
   key: string
   label: string
@@ -30,17 +58,29 @@ type AuditEvent = {
   detail: string
   createdAt: number
 }
-type Announcement = { id: string; title: string; body: string; severity: string; published?: boolean; createdAt: number; created_by?: string }
-type AdminMail = { id: string; direction: 'received' | 'sent'; sender: string; recipients: string; subject: string; text: string; html?: string; status: string; readAt?: number | null; createdAt: number }
+type Announcement = {
+  id: string
+  title: string
+  body: string
+  severity: string
+  published?: boolean
+  createdAt: number
+  created_by?: string
+}
+type AdminMail = {
+  id: string
+  direction: 'received' | 'sent'
+  sender: string
+  recipients: string
+  subject: string
+  text: string
+  html?: string
+  status: string
+  readAt?: number | null
+  createdAt: number
+}
 const roleFor = (roles: string[]) =>
   roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user'
-
-function AdminUserProfile({ user, onClose }: { user: AdminUser; onClose: () => void }) {
-  return <section className="admin-user-profile" aria-label={`Profile for ${user.username}`}>
-    <header><div><span className={`admin-status-dot large ${user.online ? 'online' : 'offline'}`} /><div><h3>{user.username}</h3><p>{user.online ? 'Online now' : user.lastSeenAt ? `Last seen ${new Date(user.lastSeenAt).toLocaleString()}` : 'Offline'}</p></div></div><button type="button" onClick={onClose} aria-label="Close profile">×</button></header>
-    <div className="admin-profile-grid"><div><small>User ID</small><strong>{user.id}</strong></div><div><small>Email</small><strong>{user.email || 'Not attached'}</strong></div><div><small>Role</small><strong>{roleFor(user.roles)}</strong></div><div><small>All roles</small><strong>{user.roles.join(', ')}</strong></div><div><small>Created</small><strong>{user.createdAt ? new Date(user.createdAt).toLocaleString() : 'Unknown'}</strong></div><div><small>Email verification</small><strong>{user.emailVerified ? 'Verified' : 'Not verified'}</strong></div><div><small>Two-factor authentication</small><strong>{user.twoFactorEnabled ? 'Enabled' : 'Disabled'}</strong></div><div><small>Account state</small><strong>{user.disabledAt ? 'Disabled' : 'Active'}</strong></div></div>
-  </section>
-}
 
 export default function AdminDashboard() {
   const app = useApp() as any
@@ -52,7 +92,7 @@ export default function AdminDashboard() {
   const [query, setQuery] = useState('')
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [loading, setLoading] = useState(true)
-  const [message, setMessage] = useState('')
+  const setMessage = (message: string) => app.toast?.(message)
   const isAdmin = Boolean(app.hasRole?.('admin'))
   const { openContextMenu } = useContextMenu()
   const [expandedAudit, setExpandedAudit] = useState<number | null>(null)
@@ -60,33 +100,47 @@ export default function AdminDashboard() {
   const [announcementTitle, setAnnouncementTitle] = useState('')
   const [announcementBody, setAnnouncementBody] = useState('')
   const [announcementMode, setAnnouncementMode] = useState<'visual' | 'markdown' | 'html'>('visual')
+  const announcementEditorRef = useRef<HTMLDivElement | null>(null)
   const [announcementSeverity, setAnnouncementSeverity] = useState('info')
   const [publishingAnnouncement, setPublishingAnnouncement] = useState(false)
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
+  const [announcementSearch, setAnnouncementSearch] = useState('')
   const [mail, setMail] = useState<AdminMail[]>([])
   const [mailTo, setMailTo] = useState('')
   const [mailSubject, setMailSubject] = useState('')
   const [mailBody, setMailBody] = useState('')
   const [selectedMail, setSelectedMail] = useState<AdminMail | null>(null)
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [loadError, setLoadError] = useState('')
+  const [retry, setRetry] = useState(0)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     if (!isAdmin) return
     let cancelled = false
     const load = async () => {
       setLoading(true)
+      setLoadError('')
       try {
         const cfg = await syncEngine.getConfig()
         if (!cfg.server || !cfg.token) throw new Error('No authenticated server session.')
         const base = cfg.server.replace(/\/+$/, '')
-        const [usersResponse, healthResponse, auditResponse, flagsResponse, announcementsResponse, mailResponse] = await Promise.all([
+        const [
+          usersResponse,
+          healthResponse,
+          auditResponse,
+          flagsResponse,
+          announcementsResponse,
+          mailResponse,
+        ] = await Promise.all([
           fetch(`${base}/api/admin/users`, { headers: { Authorization: `Bearer ${cfg.token}` } }),
           fetch(`${base}/api/auth/status`),
           fetch(`${base}/api/admin/audit`, { headers: { Authorization: `Bearer ${cfg.token}` } }),
           fetch(`${base}/api/admin/feature-flags`, {
             headers: { Authorization: `Bearer ${cfg.token}` },
           }),
-          fetch(`${base}/api/admin/announcements`, { headers: { Authorization: `Bearer ${cfg.token}` } }),
+          fetch(`${base}/api/admin/announcements`, {
+            headers: { Authorization: `Bearer ${cfg.token}` },
+          }),
           fetch(`${base}/api/admin/mail`, { headers: { Authorization: `Bearer ${cfg.token}` } }),
         ])
         const userPayload = await usersResponse.json().catch(() => ({}))
@@ -98,25 +152,42 @@ export default function AdminDashboard() {
         if (!usersResponse.ok) throw new Error(userPayload.error || 'Could not load users.')
         if (!cancelled) {
           setUsers(userPayload.users || [])
-          setHealth(healthPayload)
+          setHealth(healthResponse.ok ? healthPayload : { online: false })
+          setLoaded(true)
+          const failures = [
+            [healthResponse, 'API health'],
+            [auditResponse, 'Audit log'],
+            [flagsResponse, 'Feature flags'],
+            [announcementsResponse, 'Announcements'],
+            [mailResponse, 'Email'],
+          ]
+            .filter(([response]) => !(response as { ok: boolean }).ok)
+            .map(([, label]) => label)
+          if (failures.length) setLoadError(`Could not refresh: ${failures.join(', ')}.`)
           setAudit(auditPayload.events || [])
           setFlags(flagsPayload.flags || [])
           setAnnouncements(announcementsPayload.announcements || [])
           setMail(mailPayload.messages || [])
         }
       } catch (error: any) {
-        if (!cancelled) setMessage(error.message || 'Could not load admin data.')
+        if (!cancelled) {
+          setLoadError(error.message || 'Could not load admin data.')
+          setHealth(null)
+          setLoaded(false)
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
     load()
-    const refreshTimer = window.setInterval(() => { void load() }, 15000)
+    const refreshTimer = window.setInterval(() => {
+      void load()
+    }, 15000)
     return () => {
       cancelled = true
       window.clearInterval(refreshTimer)
     }
-  }, [isAdmin])
+  }, [isAdmin, retry])
 
   const filteredUsers = useMemo(
     () =>
@@ -153,37 +224,86 @@ export default function AdminDashboard() {
     setMessage('Role updated.')
   }
   const deleteUser = async (user: AdminUser) => {
-    if (user.roles.includes('admin')) { setMessage('Administrator accounts cannot be deleted.'); return }
-    const confirmation = window.prompt(`Permanently delete ${user.username} and all writing owned by this account?\n\nType ${user.username} to confirm.`)
+    if (user.roles.includes('admin')) {
+      setMessage('Administrator accounts cannot be deleted.')
+      return
+    }
+    const confirmation = window.prompt(
+      `Permanently delete ${user.username} and all writing owned by this account?\n\nType ${user.username} to confirm.`
+    )
     if (confirmation === null) return
-    if (confirmation.trim().toLowerCase() !== user.username.toLowerCase()) { setMessage(`Deletion cancelled: type ${user.username} exactly.`); return }
+    if (confirmation.trim().toLowerCase() !== user.username.toLowerCase()) {
+      setMessage(`Deletion cancelled: type ${user.username} exactly.`)
+      return
+    }
     const cfg = await syncEngine.getConfig()
     if (!cfg.server || !cfg.token) return
-    const response = await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/users/${user.id}/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` }, body: JSON.stringify({ confirmation }) })
+    const response = await fetch(
+      `${cfg.server.replace(/\/+$/, '')}/api/admin/users/${user.id}/delete`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
+        body: JSON.stringify({ confirmation }),
+      }
+    )
     const payload = await response.json().catch(() => ({}))
-    if (!response.ok) { setMessage(payload.error || 'Could not delete the account.'); return }
+    if (!response.ok) {
+      setMessage(payload.error || 'Could not delete the account.')
+      return
+    }
     setUsers((current) => current.filter((item) => item.id !== user.id))
     setMessage(`${user.username} and their owned data were permanently deleted.`)
   }
   const toggleDisabled = async (user: AdminUser) => {
-    if (user.roles.includes('admin')) { setMessage('Administrator accounts cannot be disabled.'); return }
+    if (user.roles.includes('admin')) {
+      setMessage('Administrator accounts cannot be disabled.')
+      return
+    }
     const cfg = await syncEngine.getConfig()
     if (!cfg.server || !cfg.token) return
     const action = user.disabledAt ? 'enable' : 'disable'
-    const response = await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/users/${user.id}/${action}`, { method: 'POST', headers: { Authorization: `Bearer ${cfg.token}` } })
+    const response = await fetch(
+      `${cfg.server.replace(/\/+$/, '')}/api/admin/users/${user.id}/${action}`,
+      { method: 'POST', headers: { Authorization: `Bearer ${cfg.token}` } }
+    )
     const payload = await response.json().catch(() => ({}))
-    if (!response.ok) { setMessage(payload.error || `Could not ${action} the account.`); return }
-    setUsers((current) => current.map((item) => item.id === user.id ? { ...item, disabledAt: action === 'disable' ? Date.now() : null } : item))
+    if (!response.ok) {
+      setMessage(payload.error || `Could not ${action} the account.`)
+      return
+    }
+    setUsers((current) =>
+      current.map((item) =>
+        item.id === user.id
+          ? { ...item, disabledAt: action === 'disable' ? Date.now() : null }
+          : item
+      )
+    )
     setMessage(`${user.username} ${action === 'disable' ? 'disabled' : 'restored'}.`)
   }
 
   const updateFlag = async (flag: FeatureFlag) => {
     const cfg = await syncEngine.getConfig()
     if (!cfg.server || !cfg.token) return
-    const response = await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/feature-flags/${flag.key}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` }, body: JSON.stringify({ enabled: !flag.enabled, rollout: flag.rollout }) })
+    const response = await fetch(
+      `${cfg.server.replace(/\/+$/, '')}/api/admin/feature-flags/${flag.key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
+        body: JSON.stringify({ enabled: !flag.enabled, rollout: flag.rollout }),
+      }
+    )
     const payload = await response.json().catch(() => ({}))
-    if (!response.ok) { setMessage(payload.error || 'Could not update feature flag.'); return }
-    setFlags((current) => current.map((item) => item.key === flag.key ? { ...item, enabled: payload.enabled, rollout: payload.rollout } : item))
+    if (!response.ok) {
+      setMessage(payload.error || 'Could not update feature flag.')
+      return
+    }
+    setFlags((current) =>
+      current.map((item) =>
+        item.key === flag.key
+          ? { ...item, enabled: payload.enabled, rollout: payload.rollout }
+          : item
+      )
+    )
     setMessage(`${flag.label} ${payload.enabled ? 'enabled' : 'disabled'}.`)
   }
   const publishAnnouncement = async (event: FormEvent) => {
@@ -195,12 +315,21 @@ export default function AdminDashboard() {
       const response = await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/announcements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
-        body: JSON.stringify({ title: announcementTitle, body: sanitizeAnnouncementHtml(announcementMode === 'markdown' ? markdownToAnnouncementHtml(announcementBody) : announcementBody), severity: announcementSeverity }),
+        body: JSON.stringify({
+          title: announcementTitle,
+          body: sanitizeAnnouncementHtml(
+            announcementMode === 'markdown'
+              ? markdownToAnnouncementHtml(announcementBody)
+              : announcementBody
+          ),
+          severity: announcementSeverity,
+        }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || 'Could not publish announcement.')
       setAnnouncementTitle('')
       setAnnouncementBody('')
+      if (announcementEditorRef.current) announcementEditorRef.current.innerHTML = ''
       setAnnouncementMode('visual')
       setAnnouncementSeverity('info')
       setMessage('Announcement published.')
@@ -211,12 +340,23 @@ export default function AdminDashboard() {
       setPublishingAnnouncement(false)
     }
   }
+  useEffect(() => {
+    if (announcementMode === 'visual' && announcementEditorRef.current && announcementEditorRef.current.innerHTML !== announcementBody) {
+      announcementEditorRef.current.innerHTML = announcementBody
+    }
+  }, [announcementMode, announcementBody])
   const deleteAnnouncement = async (item: Announcement) => {
     const cfg = await syncEngine.getConfig()
     if (!cfg.server || !cfg.token || !window.confirm(`Delete “${item.title}”?`)) return
-    const response = await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/announcements/${item.id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${cfg.token}` } })
+    const response = await fetch(
+      `${cfg.server.replace(/\/+$/, '')}/api/admin/announcements/${item.id}`,
+      { method: 'DELETE', headers: { Authorization: `Bearer ${cfg.token}` } }
+    )
     const payload = await response.json().catch(() => ({}))
-    if (!response.ok) { setMessage(payload.error || 'Could not delete announcement.'); return }
+    if (!response.ok) {
+      setMessage(payload.error || 'Could not delete announcement.')
+      return
+    }
     setAnnouncements((current) => current.filter((announcement) => announcement.id !== item.id))
     setMessage('Announcement deleted.')
   }
@@ -224,26 +364,63 @@ export default function AdminDashboard() {
     event.preventDefault()
     const cfg = await syncEngine.getConfig()
     if (!cfg.server || !cfg.token) return
-    const response = await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/mail/send`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` }, body: JSON.stringify({ to: mailTo, subject: mailSubject, text: mailBody }) })
+    const response = await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/mail/send`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
+      body: JSON.stringify({ to: mailTo, subject: mailSubject, text: mailBody }),
+    })
     const payload = await response.json().catch(() => ({}))
-    if (!response.ok) { setMessage(payload.error || 'Could not send email.'); return }
-    setMailTo(''); setMailSubject(''); setMailBody(''); setMessage('Email sent.')
+    if (!response.ok) {
+      setMessage(payload.error || 'Could not send email.')
+      return
+    }
+    setMailTo('')
+    setMailSubject('')
+    setMailBody('')
+    setMessage('Email sent.')
     setSection('Email')
   }
   const markMailRead = async (item: AdminMail) => {
-    setSelectedMail(item); if (item.readAt) return
-    const cfg = await syncEngine.getConfig(); if (!cfg.server || !cfg.token) return
-    await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/mail/${item.id}/read`, { method: 'POST', headers: { Authorization: `Bearer ${cfg.token}` } })
-    setMail((current) => current.map((mailItem) => mailItem.id === item.id ? { ...mailItem, readAt: Date.now() } : mailItem))
+    setSelectedMail(item)
+    if (item.readAt) return
+    const cfg = await syncEngine.getConfig()
+    if (!cfg.server || !cfg.token) return
+    await fetch(`${cfg.server.replace(/\/+$/, '')}/api/admin/mail/${item.id}/read`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    })
+    setMail((current) =>
+      current.map((mailItem) =>
+        mailItem.id === item.id ? { ...mailItem, readAt: Date.now() } : mailItem
+      )
+    )
   }
-  const visibleAudit = audit.filter((event) => auditFilter === 'all' || event.action === auditFilter)
+  const visibleAudit = audit.filter(
+    (event) => auditFilter === 'all' || event.action === auditFilter
+  )
   const auditActions = [...new Set(audit.map((event) => event.action))]
-  const auditMenu = (event: MouseEvent, item: AuditEvent) => openContextMenu(event, [
-    { label: expandedAudit === item.id ? 'Collapse details' : 'Show details', icon: 'fa-solid fa-chevron-down', onClick: () => setExpandedAudit((current) => current === item.id ? null : item.id) },
-    { label: 'Copy event detail', icon: 'fa-solid fa-copy', onClick: () => navigator.clipboard?.writeText(`${item.actor} ${item.detail} · ${new Date(item.createdAt).toISOString()}`) },
-    'divider',
-    { label: 'Filter to this action', icon: 'fa-solid fa-filter', onClick: () => setAuditFilter(item.action) },
-  ])
+  const auditMenu = (event: MouseEvent, item: AuditEvent) =>
+    openContextMenu(event, [
+      {
+        label: expandedAudit === item.id ? 'Collapse details' : 'Show details',
+        icon: 'fa-solid fa-chevron-down',
+        onClick: () => setExpandedAudit((current) => (current === item.id ? null : item.id)),
+      },
+      {
+        label: 'Copy event detail',
+        icon: 'fa-solid fa-copy',
+        onClick: () =>
+          navigator.clipboard?.writeText(
+            `${item.actor} ${item.detail} · ${new Date(item.createdAt).toISOString()}`
+          ),
+      },
+      'divider',
+      {
+        label: 'Filter to this action',
+        icon: 'fa-solid fa-filter',
+        onClick: () => setAuditFilter(item.action),
+      },
+    ])
 
   if (!isAdmin)
     return (
@@ -264,292 +441,329 @@ export default function AdminDashboard() {
       </main>
     )
 
-  const nav = [
-    ['Dashboard', 'Overview', 'fa-solid fa-house'],
-    ['Users', 'People', 'fa-solid fa-users'],
-    ['Health', 'System', 'fa-solid fa-heart-pulse'],
-    ['Audit log', 'System', 'fa-solid fa-list-check'],
-    ['Feature flags', 'Releases', 'fa-solid fa-flag'],
-    ['Announcements', 'Releases', 'fa-solid fa-bullhorn'],
-    ['Email', 'Releases', 'fa-solid fa-envelope'],
-  ]
-  const healthy = health?.online !== false
   return (
-    <main className="admin-console">
-      <aside className="admin-sidebar">
-        <Link to="/dashboard" className="admin-brand">
-          MoonScribe <span>Admin</span>
-        </Link>
-        {['Overview', 'People', 'System', 'Releases'].map((group) => (
-          <div className="admin-nav-group" key={group}>
-            <small>{group}</small>
-            {nav
-              .filter(([, sectionName]) => sectionName === group)
-              .map(([label, , icon]) => (
-                <button
-                  key={label}
-                  className={section === label ? 'active' : ''}
-                  onClick={() => setSection(label)}
-                >
-                  <><i className={icon} aria-hidden="true" /> <span>{label}</span></>
-                </button>
-              ))}
-          </div>
-        ))}
-        <Link className="admin-back-link" to="/dashboard">
-          ← Return to studio
-        </Link>
-      </aside>
-      <section className="admin-main">
-        <header className="admin-topbar">
-          <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetTrigger asChild><Button className="admin-mobile-menu" variant="outline" size="icon" aria-label="Open admin navigation"><i className="fa-solid fa-bars" /></Button></SheetTrigger><SheetContent side="left"><SheetTitle>MoonScribe Admin</SheetTitle><nav className="admin-mobile-nav">{nav.map(([label,,icon]) => <Button key={label} variant={section === label ? 'secondary' : 'ghost'} className="justify-start" onClick={() => { setSection(label); setMobileNavOpen(false) }}><i className={icon} />{label}</Button>)}</nav></SheetContent></Sheet>
-          <div>
-            <span className="admin-kicker">MoonScribe control room</span>
-            <h1>{section}</h1>
-          </div>
-          <div className="admin-environment">
-            <span className={`admin-env-dot ${/moonscribe\.cc$/i.test(app.syncServer || '') ? 'production' : ''}`} />
-            {/moonscribe\.cc$/i.test(app.syncServer || '') ? 'PRODUCTION' : 'LOCAL / STAGING'} <b>Admin verified</b>
-          </div>
-        </header>
-        {message && <div className="admin-notice">{message}</div>}
-        {section === 'Dashboard' && (
-          <>
-            <div className="admin-welcome" onContextMenu={(event) => openContextMenu(event, [
-              { label: 'Refresh admin data', icon: 'fa-solid fa-rotate', onClick: () => window.location.reload() },
-              { label: 'Open audit log', icon: 'fa-solid fa-list-check', onClick: () => setSection('Audit log') },
-            ])}>
-              <div>
-                <h2>Good evening, {app.syncUsername || 'Admin'}</h2>
-                <p>MoonScribe service overview based on the connected server.</p>
-              </div>
-              <span className={`admin-health-dot ${healthy ? 'healthy' : 'critical'}`}>
-                {healthy ? 'System healthy' : 'System unavailable'}
-              </span>
-            </div>
-            <div className="admin-metric-grid">
-              <div>
-                <small>Total users</small>
-                <strong>{loading ? '—' : users.length}</strong>
-              </div>
-              <div>
-                <small>Admins</small>
-                <strong>
-                  {loading ? '—' : users.filter((u) => u.roles.includes('admin')).length}
-                </strong>
-              </div>
-              <div>
-                <small>API</small>
-                <strong>{health ? (health.online ? 'Healthy' : 'Offline') : '—'}</strong>
-              </div>
-              <div>
-                <small>Resend</small>
-                <strong>
-                  {health ? (health.emailDelivery ? 'Configured' : 'Not configured') : '—'}
-                </strong>
-              </div>
-            </div>
-            <div className="admin-commandbar">
-              <div><span>OPERATIONS SNAPSHOT</span><strong>{users.length ? `${users.filter((user) => user.online).length} active writers online` : 'Loading account activity'}</strong></div>
-              <div className="admin-mini-bars" aria-label="User activity visualisation">{[28, 46, 38, 62, 52, 78, 66, 88, 74, 94].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}</div>
-              <button className="button button-quiet" onClick={() => setSection('Users')}>Manage people <span>→</span></button>
-            </div>
-            <div className="admin-panel-grid">
-              <article className="admin-panel" onContextMenu={(event) => openContextMenu(event, [{ label: 'Open Health', icon: 'fa-solid fa-heart-pulse', onClick: () => setSection('Health') }])}>
-                <h3>System health</h3>
-                <p>Live checks from the account service.</p>
-                <div className="health-list">
-                  <span>
-                    API <b>{health?.online ? 'Healthy' : 'Unknown'}</b>
-                  </span>
-                  <span>
-                    Authentication <b>{health?.online ? 'Healthy' : 'Unknown'}</b>
-                  </span>
-                  <span>
-                    Resend <b>{health?.emailDelivery ? 'Configured' : 'Not configured'}</b>
-                  </span>
+    <AdminShell
+      section={section}
+      onNavigate={setSection}
+      username={app.syncUsername || 'Admin'}
+      server={app.syncServer || ''}
+      avatarUrl={app.profileAvatar || app.syncDiscordAvatar || null}
+      onAccountCentre={app.openAccountCentre}
+      onSettings={app.openSettings}
+      onSync={() => void app.syncNow?.()}
+      onSignOut={() => void app.disconnectSync?.()}
+    >
+      {loadError && (
+        <div
+          role="alert"
+          className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-400/25 bg-red-400/5 p-4 text-sm text-red-200"
+        >
+          <span>{loadError} Current information may be unavailable.</span>
+          <button
+            className="min-h-11 rounded-lg border border-white/10 px-4"
+            onClick={() => setRetry((value) => value + 1)}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {section === 'Dashboard' && (
+        <AdminOverview
+          users={loaded ? users : null}
+          health={health}
+          audit={audit}
+          flags={loaded ? flags : null}
+          announcements={announcements}
+          loading={loading && !loaded}
+          unavailable={!loaded && !loading}
+          username={app.syncUsername || 'Admin'}
+          server={app.syncServer || ''}
+          onNavigate={setSection}
+        />
+      )}
+      {section === 'Users' && (
+        <>
+          <AdminUsersPage
+            users={users}
+            loading={loading}
+            query={query}
+            onQuery={setQuery}
+            onNavigate={setSection}
+            onProfile={setSelectedUser}
+            selectedUserId={selectedUser?.id}
+            onRole={(user, value) => void updateRole(user.id, value)}
+            onDisable={(user) => void toggleDisabled(user)}
+            onDelete={(user) => void deleteUser(user)}
+          />
+          {selectedUser &&
+            users.find((user) => user.id === selectedUser.id) &&
+            (() => {
+              const user = users.find((user) => user.id === selectedUser.id)!
+              return (
+                <UserInspector
+                  key={user.id}
+                  user={user}
+                  onClose={() => setSelectedUser(null)}
+                  onRole={(value) => updateRole(user.id, value)}
+                  onDisable={() => toggleDisabled(user)}
+                  onDelete={() => deleteUser(user)}
+                />
+              )
+            })()}
+        </>
+      )}
+      {section === 'Audit log' && (
+        <AdminAuditPage events={audit} users={users} loading={loading} />
+      )}
+      {section === 'Feature flags' && (
+        <article className="admin-panel admin-placeholder">
+          <span className="admin-kicker">Feature flags</span>
+          <h2>Feature flags</h2>
+          <p>Live flags stored by the account service. Changes are audited.</p>
+          <div className="admin-flag-list">
+            {flags.map((flag) => (
+              <div
+                className="admin-flag-row"
+                key={flag.key}
+                onContextMenu={(event) =>
+                  openContextMenu(event, [
+                    {
+                      label: flag.enabled ? 'Disable flag' : 'Enable flag',
+                      icon: 'fa-solid fa-toggle-on',
+                      onClick: () => void updateFlag(flag),
+                    },
+                    {
+                      label: 'Copy flag key',
+                      icon: 'fa-solid fa-copy',
+                      onClick: () => navigator.clipboard?.writeText(flag.key),
+                    },
+                  ])
+                }
+              >
+                <div>
+                  <strong>{flag.label}</strong>
+                  <small>
+                    {flag.key} · rollout {flag.rollout}%
+                  </small>
                 </div>
-              </article>
-              <article className="admin-panel" onContextMenu={(event) => openContextMenu(event, [{ label: 'Open full audit log', icon: 'fa-solid fa-list-check', onClick: () => setSection('Audit log') }])}>
-                <h3>Recent activity</h3>
-                <div className="admin-audit-list">
-                  {audit.length ? (
-                    audit.slice(0, 6).map((event) => (
-                      <div className="admin-audit-item" key={event.id}>
-                        <span className="admin-audit-icon">
-                          <i className="fa-solid fa-users-gear" />
-                        </span>
-                        <div>
-                          <strong>
-                            {event.actor} {event.detail.toLowerCase()}
-                          </strong>
-                          <small>{new Date(event.createdAt).toLocaleString()}</small>
-                        </div>
-                        <b>›</b>
-                      </div>
-                    ))
-                  ) : (
-                    <span className="admin-muted">No recorded admin activity yet.</span>
-                  )}
-                </div>
-              </article>
-            </div>
-          </>
-        )}
-        {section === 'Users' && (
-          <article className="admin-panel admin-users">
-            <div className="admin-panel-heading">
-              <div>
-                <h2>Users</h2>
-                <p>Manage server accounts and roles.</p>
+                <Select
+                  value={flag.enabled ? 'on' : 'off'}
+                  onChange={() => updateFlag(flag)}
+                  ariaLabel={`Toggle ${flag.label}`}
+                  width={150}
+                  options={[
+                    { value: 'on', label: 'Enabled' },
+                    { value: 'off', label: 'Disabled' },
+                  ]}
+                />
               </div>
+            ))}
+          </div>
+        </article>
+      )}
+      {section === 'Announcements' && (
+        <article className="admin-announcement-modern">
+          <div className="announcement-hero" style={{ backgroundImage: "url('/assets/moonscribebackground.png')" }}>
+            <div className="announcement-hero-overlay" />
+            <div className="relative z-10"><span className="admin-kicker">MoonScribe control room / Announcements</span><h2>Announcements</h2><p>Share important updates with the MoonScribe writing community.</p></div>
+          </div>
+          <section className="announcement-composer">
+            <div className="announcement-composer-heading"><div><h3><i className="fa-solid fa-bullhorn" /> Create announcement</h3><p>Post a server-backed message for signed-in MoonScribe writers.</p></div></div>
+          <form className="admin-announcement-form" onSubmit={publishAnnouncement}>
+            <label>
+              Title
               <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search users…"
-                aria-label="Search users"
+                value={announcementTitle}
+                onChange={(event) => setAnnouncementTitle(event.target.value)}
+                maxLength={160}
+                required
+                placeholder="A short, clear title for your announcement..."
               />
-            </div>
-            <div className="admin-table">
-              <div className="admin-table-head">
-                <span>User</span>
-                <span>Role</span>
-                <span>Account</span>
-                <span>Actions</span>
+            </label>
+            <div className="admin-rich-editor">
+              <div className="admin-rich-tabs" role="tablist" aria-label="Announcement editor mode">
+                {(['visual', 'markdown', 'html'] as const).map((mode) => (
+                  <button
+                    type="button"
+                    key={mode}
+                    className={announcementMode === mode ? 'active' : ''}
+                    onClick={() => setAnnouncementMode(mode)}
+                  >
+                    {mode === 'visual' ? 'Visual' : mode === 'markdown' ? 'Markdown' : 'HTML'}
+                  </button>
+                ))}
               </div>
-              {loading ? (
-                <p className="admin-muted">Loading users…</p>
+              {announcementMode === 'visual' ? (
+                <>
+                  <div className="admin-rich-toolbar" aria-label="Formatting tools">
+                    {['bold','italic','underline','strikeThrough','insertUnorderedList','insertOrderedList','justifyLeft','justifyCenter','createLink'].map((command) => <button key={command} type="button" aria-label={command} onMouseDown={(event) => event.preventDefault()} onClick={() => { const value = command === 'createLink' ? window.prompt('Link URL', 'https://') : null; document.execCommand(command, false, value || undefined) }}><i className={`fa-solid fa-${command === 'strikeThrough' ? 'strikethrough' : command === 'insertUnorderedList' ? 'list' : command === 'insertOrderedList' ? 'list-ol' : command === 'createLink' ? 'link' : command === 'justifyLeft' ? 'align-left' : command === 'justifyCenter' ? 'align-center' : command}`} /></button>)}
+                    <button type="button" aria-label="Clear formatting" onMouseDown={(event) => event.preventDefault()} onClick={() => document.execCommand('removeFormat')}><i className="fa-solid fa-eraser" /></button>
+                  </div>
+                  <div
+                    ref={announcementEditorRef}
+                    className="admin-rich-surface"
+                    contentEditable
+                    suppressContentEditableWarning
+                    onInput={(event) => setAnnouncementBody(event.currentTarget.innerHTML)}
+                    data-placeholder="Write your announcement…"
+                  />
+                </>
               ) : (
-                filteredUsers.map((user) => (
-                  <div key={user.id}>
-                  <div className="admin-table-row" onContextMenu={(event) => openContextMenu(event, [
-                    { label: 'Copy username', icon: 'fa-solid fa-copy', onClick: () => navigator.clipboard?.writeText(user.username) },
-                    { label: 'Set as Beta Tester', icon: 'fa-solid fa-flask', onClick: () => void updateRole(user.id, 'beta_tester') },
-                    { label: 'Set as Admin', icon: 'fa-solid fa-shield-halved', onClick: () => void updateRole(user.id, 'admin') },
-                    ...(!user.roles.includes('admin') ? [{ label: user.disabledAt ? 'Restore account' : 'Disable account', icon: user.disabledAt ? 'fa-solid fa-unlock' : 'fa-solid fa-ban', onClick: () => void toggleDisabled(user) }] : []),
-                    ...(!user.roles.includes('admin') ? ['divider' as const, { label: 'Delete user permanently', icon: 'fa-solid fa-trash', danger: true, onClick: () => void deleteUser(user) }] : []),
-                  ])}>
-                    <span className="admin-user-identity">
-                      <button type="button" className="admin-profile-trigger" onClick={() => setSelectedUser(user)}>
-                        {user.avatarUrl ? <img className="admin-user-avatar" src={user.avatarUrl} alt="" /> : <span className="admin-user-avatar admin-user-avatar-fallback" aria-hidden="true">{user.username.slice(0, 1).toUpperCase()}</span>}
-                        <strong>{user.username}</strong>
-                      </button>
-                      <small>{user.email || 'No email attached'}</small>
-                    </span>
-                    <span className={`admin-role role-${roleFor(user.roles)}`}>
-                      {roleFor(user.roles)}
-                    </span>
-                    <span className={user.disabledAt ? 'admin-disabled-status' : ''}>{user.disabledAt ? 'Disabled' : 'Connected'}</span>
-                    <div className="admin-user-actions"><Select
-                      value={roleFor(user.roles)}
-                      onChange={(value) => updateRole(user.id, value)}
-                      ariaLabel={`Role for ${user.username}`}
-                      width={150}
-                      options={[
-                        { value: 'user', label: 'User' },
-                        { value: 'developer', label: 'Developer' },
-                        { value: 'beta_tester', label: 'Beta Tester' },
-                        { value: 'admin', label: 'Admin' },
-                      ]}
-                      popClassName="admin-role-menu"
-                    />{!user.roles.includes('admin') && <><button type="button" className="admin-disable-user" onClick={() => void toggleDisabled(user)} aria-label={`${user.disabledAt ? 'Restore' : 'Disable'} ${user.username}`} title={`${user.disabledAt ? 'Restore' : 'Disable'} account`}><i className={`fa-solid ${user.disabledAt ? 'fa-unlock' : 'fa-ban'}`} /></button><button type="button" className="admin-delete-user" onClick={() => void deleteUser(user)} aria-label={`Delete ${user.username}`} title="Delete user permanently"><i className="fa-solid fa-trash" /></button></>}</div>
-                  </div>
-                  {selectedUser?.id === user.id && <AdminUserProfile user={selectedUser} onClose={() => setSelectedUser(null)} />}
-                  </div>
-                ))
+                <textarea
+                  value={announcementBody}
+                  onChange={(event) => setAnnouncementBody(event.target.value)}
+                  maxLength={4000}
+                  required
+                  rows={8}
+                  placeholder={
+                    announcementMode === 'markdown'
+                      ? '# What changed?\n\nUse **bold**, *italic*, and headings.'
+                      : '<p>Write your announcement in HTML</p>'
+                  }
+                />
               )}
-            </div>
-          </article>
-        )}
-        {section === 'Audit log' && (
-          <article className="admin-panel admin-audit-page">
-            <div className="admin-panel-heading">
-              <div>
-                <h2>Audit log</h2>
-                <p>Persisted administrative actions from the account service.</p>
+              <div className="admin-rich-preview">
+                <span><i className="fa-solid fa-eye" /> Live preview</span>
+                <small>This is how it will appear to writers.</small>
+                <div
+                  dangerouslySetInnerHTML={{
+                    __html: sanitizeAnnouncementHtml(
+                      announcementMode === 'markdown'
+                        ? markdownToAnnouncementHtml(announcementBody)
+                        : announcementBody
+                    ),
+                  }}
+                />
+                <footer><i className="fa-regular fa-clock" /> Posted just now</footer>
               </div>
             </div>
-            <div className="admin-audit-filters">
-              <Select value={auditFilter} onChange={setAuditFilter} ariaLabel="Filter audit actions" width={210} options={[{ value: 'all', label: 'All actions' }, ...auditActions.map((action) => ({ value: action, label: action }))]} />
-              {auditFilter !== 'all' && <button className="button button-quiet" onClick={() => setAuditFilter('all')}>Clear filter</button>}
-            </div>
-            {visibleAudit.length ? (
-              visibleAudit.map((event) => (
-                <div className={`admin-audit-item ${expandedAudit === event.id ? 'expanded' : ''}`} key={event.id} onClick={() => setExpandedAudit((current) => current === event.id ? null : event.id)} onContextMenu={(e) => auditMenu(e, event)}>
-                  <span className="admin-audit-icon">
-                    <i className="fa-solid fa-shield-halved" />
-                  </span>
+            <fieldset className="announcement-severity"><legend>Severity</legend>{[['info','Information','General updates','circle-info'],['warning','Important','Notable changes','star'],['critical','Critical','Urgent / requires attention','triangle-exclamation']].map(([value,title,note,ic]) => <label key={value} className={announcementSeverity === value ? 'selected' : ''}><input type="radio" name="announcement-severity" value={value} checked={announcementSeverity === value} onChange={(e) => setAnnouncementSeverity(e.target.value)} /><i className={`fa-solid fa-${ic}`} /><span><b>{title}</b><small>{note}</small></span></label>)}</fieldset>
+            <button className="button button-primary announcement-publish" disabled={publishingAnnouncement}>
+              <i className="fa-solid fa-paper-plane" />
+              {publishingAnnouncement ? 'Publishing…' : 'Publish announcement'}
+            </button>
+          </form>
+          </section>
+          <section className="announcement-history">
+            <div className="announcement-history-heading"><div><h3>Published announcements</h3><p>Manage and view all published announcements.</p></div><label className="announcement-search"><i className="fa-solid fa-magnifying-glass" /><input value={announcementSearch} onChange={(e) => setAnnouncementSearch(e.target.value)} placeholder="Search announcements..." /></label></div>
+            {announcements.filter((item) => !announcementSearch || `${item.title} ${item.body}`.toLowerCase().includes(announcementSearch.toLowerCase())).length ? (
+              announcements.filter((item) => !announcementSearch || `${item.title} ${item.body}`.toLowerCase().includes(announcementSearch.toLowerCase())).map((item) => (
+                <div
+                  className="announcement-row"
+                  key={item.id}
+                  onContextMenu={(event) =>
+                    openContextMenu(event, [
+                      {
+                        label: 'Delete announcement',
+                        icon: 'fa-solid fa-trash',
+                        onClick: () => void deleteAnnouncement(item),
+                      },
+                    ])
+                  }
+                >
                   <div>
-                    <strong>
-                      {event.actor} {event.detail.toLowerCase()}
-                    </strong>
-                    <small>{new Date(event.createdAt).toLocaleString()}</small>
+                    <strong>{item.title}</strong>
+                    <small>{item.body.replace(/<[^>]+>/g, '').slice(0, 110)}</small>
                   </div>
-                  <b>{expandedAudit === event.id ? '⌄' : '›'}</b>
-                  {expandedAudit === event.id && <div className="admin-audit-details"><span><b>Action</b> {event.action}</span><span><b>Actor</b> {event.actor}</span><span><b>Target</b> {event.target || '—'}</span><span><b>Recorded</b> {new Date(event.createdAt).toISOString()}</span><span><b>Detail</b> {event.detail}</span></div>}
+                  <div className="announcement-row-meta"><span className={`announcement-badge severity-${item.severity}`}>{item.severity}</span><time>{new Date(item.createdAt).toLocaleString()}</time><small>By {item.created_by || 'Administrator'}</small></div><button
+                    className="button button-quiet announcement-delete"
+                    onClick={() => void deleteAnnouncement(item)}
+                    aria-label={`Delete ${item.title}`}
+                  >
+                    •••
+                  </button>
                 </div>
               ))
             ) : (
-              <span className="admin-muted">No recorded admin activity yet.</span>
+              <span className="admin-muted">No announcements have been published.</span>
             )}
-          </article>
-        )}
-        {section === 'Feature flags' && (
-          <article className="admin-panel admin-placeholder">
-            <span className="admin-kicker">Feature flags</span>
-            <h2>Feature flags</h2>
-            <p>Live flags stored by the account service. Changes are audited.</p>
-            <div className="admin-flag-list">{flags.map((flag) => <div className="admin-flag-row" key={flag.key} onContextMenu={(event) => openContextMenu(event, [{ label: flag.enabled ? 'Disable flag' : 'Enable flag', icon: 'fa-solid fa-toggle-on', onClick: () => void updateFlag(flag) }, { label: 'Copy flag key', icon: 'fa-solid fa-copy', onClick: () => navigator.clipboard?.writeText(flag.key) }])}><div><strong>{flag.label}</strong><small>{flag.key} · rollout {flag.rollout}%</small></div><Select value={flag.enabled ? 'on' : 'off'} onChange={() => updateFlag(flag)} ariaLabel={`Toggle ${flag.label}`} width={150} options={[{ value: 'on', label: 'Enabled' }, { value: 'off', label: 'Disabled' }]} /></div>)}</div>
-          </article>
-        )}
-        {section === 'Announcements' && (
-          <article className="admin-panel admin-announcement-panel">
-            <span className="admin-kicker">Communications</span>
-            <h2>Publish announcement</h2>
-            <p>Post a server-backed message for signed-in MoonScribe writers.</p>
-            <form className="admin-announcement-form" onSubmit={publishAnnouncement}>
-              <label>Title<input value={announcementTitle} onChange={(event) => setAnnouncementTitle(event.target.value)} maxLength={160} required placeholder="A short update for writers" /></label>
-              <div className="admin-rich-editor">
-                <div className="admin-rich-tabs" role="tablist" aria-label="Announcement editor mode">
-                  {(['visual', 'markdown', 'html'] as const).map((mode) => <button type="button" key={mode} className={announcementMode === mode ? 'active' : ''} onClick={() => setAnnouncementMode(mode)}>{mode === 'visual' ? 'Visual' : mode === 'markdown' ? 'Markdown' : 'HTML'}</button>)}
-                </div>
-                {announcementMode === 'visual' ? <>
-                  <div className="admin-rich-toolbar" aria-label="Formatting tools">
-                    <button type="button" onClick={() => setAnnouncementBody((value) => `${value}<strong>Bold text</strong>`)}><b>B</b></button>
-                    <button type="button" onClick={() => setAnnouncementBody((value) => `${value}<em>Italic text</em>`)}><i>I</i></button>
-                    <button type="button" onClick={() => setAnnouncementBody((value) => `${value}<h2>Heading</h2>`)}>H2</button>
-                    <button type="button" onClick={() => setAnnouncementBody((value) => `${value}<p>New paragraph</p>`)}>¶</button>
-                  </div>
-                  <div className="admin-rich-surface" contentEditable suppressContentEditableWarning onInput={(event) => setAnnouncementBody(event.currentTarget.innerHTML)} dangerouslySetInnerHTML={{ __html: announcementBody }} data-placeholder="Write your announcement…" />
-                </> : <textarea value={announcementBody} onChange={(event) => setAnnouncementBody(event.target.value)} maxLength={4000} required rows={8} placeholder={announcementMode === 'markdown' ? '# What changed?\n\nUse **bold**, *italic*, and headings.' : '<p>Write your announcement in HTML</p>'} />}
-                <div className="admin-rich-preview"><span>Live preview</span><div dangerouslySetInnerHTML={{ __html: sanitizeAnnouncementHtml(announcementMode === 'markdown' ? markdownToAnnouncementHtml(announcementBody) : announcementBody) }} /></div>
-              </div>
-              <label>Severity<Select value={announcementSeverity} onChange={setAnnouncementSeverity} ariaLabel="Announcement severity" width={190} options={[{ value: 'info', label: 'Information' }, { value: 'success', label: 'Success' }, { value: 'warning', label: 'Warning' }, { value: 'critical', label: 'Critical' }]} /></label>
-              <button className="button button-primary" disabled={publishingAnnouncement}>{publishingAnnouncement ? 'Publishing…' : 'Publish announcement'}</button>
-            </form>
-            <div className="admin-announcement-history"><h3>Published announcements</h3>{announcements.length ? announcements.map((item) => <div className="admin-announcement-item" key={item.id} onContextMenu={(event) => openContextMenu(event, [{ label: 'Delete announcement', icon: 'fa-solid fa-trash', onClick: () => void deleteAnnouncement(item) }])}><div><strong>{item.title}</strong><small>{item.severity} · {new Date(item.createdAt).toLocaleString()}</small><p>{item.body}</p></div><button className="button button-quiet" onClick={() => void deleteAnnouncement(item)} aria-label={`Delete ${item.title}`}><i className="fa-solid fa-trash" /></button></div>) : <span className="admin-muted">No announcements have been published.</span>}</div>
-          </article>
-        )}
-        {section === 'Email' && (
-          <article className="admin-panel admin-mail-panel">
-            <div className="admin-panel-heading"><div><span className="admin-kicker">Mailbox</span><h2>Email</h2><p>Receive inbound messages and send mail from the MoonScribe account service.</p></div><span className="admin-mail-count">{mail.filter((item) => item.direction === 'received' && !item.readAt).length} unread</span></div>
-            <div className="admin-mail-layout"><div className="admin-mail-list">{mail.length ? mail.map((item) => <button type="button" className={`admin-mail-row ${item.readAt ? '' : 'unread'}`} key={item.id} onClick={() => void markMailRead(item)}><span className="admin-mail-direction">{item.direction === 'received' ? 'IN' : 'OUT'}</span><span><strong>{item.subject}</strong><small>{item.direction === 'received' ? item.sender : `To ${item.recipients}`} · {new Date(item.createdAt).toLocaleString()}</small></span></button>) : <span className="admin-muted">No messages yet. Configure the inbound webhook to receive mail.</span>}</div><div className="admin-mail-reader">{selectedMail ? <><small>{selectedMail.direction === 'received' ? `From ${selectedMail.sender}` : `To ${selectedMail.recipients}`}</small><h3>{selectedMail.subject}</h3><time>{new Date(selectedMail.createdAt).toLocaleString()}</time><pre>{selectedMail.text || 'No plain-text body.'}</pre></> : <span className="admin-muted">Select a message to read it.</span>}</div></div>
-            <form className="admin-mail-compose" onSubmit={sendMail}><h3>Compose</h3><input type="email" required value={mailTo} onChange={(event) => setMailTo(event.target.value)} placeholder="Recipient email" /><input required value={mailSubject} onChange={(event) => setMailSubject(event.target.value)} placeholder="Subject" /><textarea required rows={5} value={mailBody} onChange={(event) => setMailBody(event.target.value)} placeholder="Write your message…" /><button className="button button-primary">Send email</button></form>
-          </article>
-        )}
-        {section === 'Health' && (
-          <article className="admin-panel admin-placeholder">
-            <span className="admin-kicker">{section}</span>
-            <h2>{section}</h2>
-            <p>
-              {section === 'Health'
-                ? 'Live API and email delivery checks are available on the Overview.'
-                : 'This area is reserved for the next server-backed admin capability.'}
-            </p>
-            <span className="admin-muted">No placeholder data is being presented as real.</span>
-          </article>
-        )}
-      </section>
-    </main>
+          </section>
+        </article>
+      )}
+      {section === 'Email' && (
+        <article className="admin-panel admin-mail-panel">
+          <div className="admin-panel-heading">
+            <div>
+              <span className="admin-kicker">Mailbox</span>
+              <h2>Email</h2>
+              <p>Receive inbound messages and send mail from the MoonScribe account service.</p>
+            </div>
+            <span className="admin-mail-count">
+              {mail.filter((item) => item.direction === 'received' && !item.readAt).length} unread
+            </span>
+          </div>
+          <div className="admin-mail-layout">
+            <div className="admin-mail-list">
+              {mail.length ? (
+                mail.map((item) => (
+                  <button
+                    type="button"
+                    className={`admin-mail-row ${item.readAt ? '' : 'unread'}`}
+                    key={item.id}
+                    onClick={() => void markMailRead(item)}
+                  >
+                    <span className="admin-mail-direction">
+                      {item.direction === 'received' ? 'IN' : 'OUT'}
+                    </span>
+                    <span>
+                      <strong>{item.subject}</strong>
+                      <small>
+                        {item.direction === 'received' ? item.sender : `To ${item.recipients}`} ·{' '}
+                        {new Date(item.createdAt).toLocaleString()}
+                      </small>
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <span className="admin-muted">
+                  No messages yet. Configure the inbound webhook to receive mail.
+                </span>
+              )}
+            </div>
+            <div className="admin-mail-reader">
+              {selectedMail ? (
+                <>
+                  <small>
+                    {selectedMail.direction === 'received'
+                      ? `From ${selectedMail.sender}`
+                      : `To ${selectedMail.recipients}`}
+                  </small>
+                  <h3>{selectedMail.subject}</h3>
+                  <time>{new Date(selectedMail.createdAt).toLocaleString()}</time>
+                  <pre>{selectedMail.text || 'No plain-text body.'}</pre>
+                </>
+              ) : (
+                <span className="admin-muted">Select a message to read it.</span>
+              )}
+            </div>
+          </div>
+          <form className="admin-mail-compose" onSubmit={sendMail}>
+            <h3>Compose</h3>
+            <input
+              type="email"
+              required
+              value={mailTo}
+              onChange={(event) => setMailTo(event.target.value)}
+              placeholder="Recipient email"
+            />
+            <input
+              required
+              value={mailSubject}
+              onChange={(event) => setMailSubject(event.target.value)}
+              placeholder="Subject"
+            />
+            <textarea
+              required
+              rows={5}
+              value={mailBody}
+              onChange={(event) => setMailBody(event.target.value)}
+              placeholder="Write your message…"
+            />
+            <button className="button button-primary">Send email</button>
+          </form>
+        </article>
+      )}
+      {section === 'Health' && <AdminHealthPanel health={health} loading={loading} />}
+    </AdminShell>
   )
 }

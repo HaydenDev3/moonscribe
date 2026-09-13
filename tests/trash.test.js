@@ -2,7 +2,7 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import 'fake-indexeddb/auto'
 import { getDB } from '../src/db/db'
-import { createNovel } from '../src/db/novels'
+import { createNovel, listNovels, trashNovel } from '../src/db/novels'
 import { createChapter, listChapters, mergeChapters, wordsAndChapters, trashChapter } from '../src/db/chapters'
 import { createCharacter, listCharacters, trashCharacter } from '../src/db/characters'
 import { createNote, listNotes, trashNote } from '../src/db/notes'
@@ -22,6 +22,18 @@ beforeEach(async () => {
 })
 
 describe('trash', () => {
+  it('moves a complete novel off the library while keeping it recoverable', async () => {
+    const n = await createNovel({ title: 'A Whole Story' })
+    await trashNovel(n.id)
+
+    expect((await listNovels()).map((novel) => novel.id)).not.toContain(n.id)
+    const trash = await listTrash()
+    expect(trash.some((item) => item.store === 'novels' && item.rec.id === n.id)).toBe(true)
+
+    await restoreTrashed('novels', n.id)
+    expect((await listNovels()).map((novel) => novel.id)).toContain(n.id)
+  })
+
   it('soft-deletes a chapter and hides it from the chapter list', async () => {
     const n = await createNovel({ title: 'T' })
     const c = await createChapter(n.id, { title: 'The Lighthouse', content: '<p>Storm rising.</p>' })

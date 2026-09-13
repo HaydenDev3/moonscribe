@@ -10,6 +10,7 @@ import { mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import WebSocket from 'ws'
+import * as Y from 'yjs'
 import { createMoonScribeServer } from '../server/index.js'
 
 let db = null
@@ -99,6 +100,24 @@ describe('author website API', () => {
   })
 })
 
+describe('sync CORS', () => {
+  it('allows browser sync headers during preflight', async () => {
+    await startServer({ rateLimit: false })
+    const response = await fetch(`${base}/api/sync/push`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:5173',
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization,content-type,idempotency-key,x-device-id,x-device-name',
+      },
+    })
+    expect(response.status).toBe(204)
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
+    expect(response.headers.get('access-control-allow-headers')).toContain('Idempotency-Key')
+    expect(response.headers.get('access-control-allow-headers')).toContain('X-Device-Id')
+  })
+})
+
 function nextSocketMessage(socket, predicate = () => true) {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('Timed out waiting for WebSocket message')), 2_000)
@@ -138,7 +157,7 @@ describe('accounts', () => {
     expect((await exchanged.json()).token).toBeTruthy()
 
     const replay = await post('/api/auth/discord/exchange', { code })
-    expect(replay.status).toBe(400)
+    expect(replay.status).toBe(409)
   })
 
   it('keeps OAuth sessions for 30 days and rotates them without signing out', async () => {
@@ -153,6 +172,27 @@ describe('accounts', () => {
     expect(refreshedBody.expiresAt - Date.now()).toBeGreaterThan(29 * 24 * 60 * 60 * 1000)
     expect((await get('/api/auth/me', refreshedBody.token)).status).toBe(200)
     expect((await get('/api/auth/me', account.body.token)).status).toBe(200)
+  })
+
+  it('keeps the primary connector as the identity and avatar source', async () => {
+    const account = await register('primary-connector-writer')
+    db.prepare('UPDATE users SET discord_id = ?, discord_avatar = ?, discord_username = ?, primary_provider = ? WHERE id = ?')
+      .run('123456789012345678', 'avatar-hash', 'linked-discord', 'email', account.body.accountId)
+    const profile = await (await get('/api/auth/me', account.body.token)).json()
+    expect(profile.account).toMatchObject({ provider: 'email', avatarUrl: null, linkedProviders: { discord: true } })
+
+    const disconnected = await post('/api/auth/unlink-provider', { provider: 'discord' }, account.body.token)
+    expect(disconnected.status).toBe(200)
+    expect(db.prepare('SELECT discord_id FROM users WHERE id = ?').get(account.body.accountId).discord_id).toBeNull()
+  })
+
+  it('normalizes a primary Discord avatar into a CDN URL', async () => {
+    const account = await register('discord-avatar-writer')
+    db.prepare('UPDATE users SET discord_id = ?, discord_avatar = ?, primary_provider = ? WHERE id = ?')
+      .run('123456789012345678', 'avatar-hash', 'discord', account.body.accountId)
+    const profile = await (await get('/api/auth/me', account.body.token)).json()
+    expect(profile.account.provider).toBe('discord')
+    expect(profile.account.avatarUrl).toBe('https://cdn.discordapp.com/avatars/123456789012345678/avatar-hash.png?size=128')
   })
 
   it('reports which authentication providers are configured', async () => {
@@ -251,6 +291,12 @@ describe('accounts', () => {
     const me = await (await get('/api/auth/me', first.body.token)).json()
     expect(me.account.id).toBe(first.body.accountId)
     expect(me.account.username).toBe('profile-owner')
+    expect(me.account.profile).toMatchObject({ setupCompleted: false, timezone: 'UTC', language: 'en-AU' })
+    const profileUpdate = await post('/api/auth/update-account', {
+      displayName: 'Profile Owner', writerName: 'The Owner', profileBio: 'Writes quietly.', timezone: 'Australia/Brisbane', language: 'en-AU', profileGenres: ['Fantasy', 'Fantasy'], profileSetupCompleted: true
+    }, first.body.token)
+    expect(profileUpdate.status).toBe(200)
+    expect((await profileUpdate.json()).profile).toMatchObject({ displayName: 'Profile Owner', writerName: 'The Owner', setupCompleted: true, profileGenres: ['Fantasy'] })
 
     const sessions = await (await get('/api/auth/sessions', first.body.token)).json()
     const other = sessions.sessions.find((session) => !session.current)
@@ -380,6 +426,30 @@ describe('production health and realtime', () => {
     secondSocket.close()
   })
 
+  it('merges and relays chapter CRDT updates between live sessions', async () => {
+    const account = await register('crdt-writer')
+    await post('/api/sync/push', { records: [
+      { store: 'novels', id: 'crdt-novel', novelId: 'crdt-novel', updatedAt: 1, deleted: false, payload: { title: 'CRDT novel' } }
+    ] }, account.body.token)
+    const firstSocket = await openSocket(`/ws/presence?novelId=crdt-novel&token=${encodeURIComponent(account.body.token)}`)
+    const secondSocket = await openSocket(`/ws/presence?novelId=crdt-novel&token=${encodeURIComponent(account.body.token)}`)
+    const syncFirst = nextSocketMessage(firstSocket, (message) => message.type === 'crdt.sync')
+    const syncSecond = nextSocketMessage(secondSocket, (message) => message.type === 'crdt.sync')
+    firstSocket.send(JSON.stringify({ type: 'crdt.sync', novelId: 'crdt-novel', chapterId: 'crdt-chapter' }))
+    secondSocket.send(JSON.stringify({ type: 'crdt.sync', novelId: 'crdt-novel', chapterId: 'crdt-chapter' }))
+    expect((await syncFirst).chapterId).toBe('crdt-chapter')
+    expect((await syncSecond).chapterId).toBe('crdt-chapter')
+
+    const doc = new Y.Doc()
+    doc.getText('prosemirror').insert(0, 'Concurrent chapter text')
+    const update = Buffer.from(Y.encodeStateAsUpdate(doc)).toString('base64')
+    const received = nextSocketMessage(secondSocket, (message) => message.type === 'crdt:update')
+    firstSocket.send(JSON.stringify({ type: 'crdt:update', novelId: 'crdt-novel', chapterId: 'crdt-chapter', update }))
+    expect((await received).update).toBe(update)
+    firstSocket.close()
+    secondSocket.close()
+  })
+
   it('delivers account notifications to the signed-in user in realtime', async () => {
     const admin = await register('realtime-admin')
     const target = await register('realtime-target')
@@ -469,10 +539,33 @@ describe('sync', () => {
     db.prepare('UPDATE share_presence SET last_seen_at = ? WHERE novel_id = ? AND user_id = ?')
       .run(Date.now() - 60_000, 'shared-novel', owner.accountId)
     const closedRoom = await post('/api/shares/presence', { novelId: 'shared-novel', chapterId: 'shared-chapter' }, editor.token)
-    expect(closedRoom.status).toBe(423)
-    expect((await get('/api/shares/bootstrap?novelId=shared-novel', editor.token)).status).toBe(423)
+    expect(closedRoom.status).toBe(200)
+    expect((await closedRoom.json()).room).toMatchObject({ state: 'owner-away', readOnly: true })
+    const membersAway = await get('/api/shares?novelId=shared-novel', editor.token)
+    expect(membersAway.status).toBe(200)
+    expect((await membersAway.json()).room).toMatchObject({ state: 'owner-away', readOnly: true })
+    const offlineBootstrap = await get('/api/shares/bootstrap?novelId=shared-novel', editor.token)
+    expect(offlineBootstrap.status).toBe(200)
+    expect((await offlineBootstrap.json()).room).toMatchObject({ state: 'owner-away', readOnly: true })
     const offlinePull = await (await get('/api/sync/pull?since=0', editor.token)).json()
-    expect(offlinePull.records.some((record) => record.id === 'shared-novel')).toBe(false)
+    expect(offlinePull.records.some((record) => record.id === 'shared-novel')).toBe(true)
+    expect(offlinePull.records.find((record) => record.id === 'shared-novel').payload.sharedReadOnly).toBe(true)
+  })
+
+  it('returns a stable code for expired invitations', async () => {
+    await startServer()
+    const owner = (await register('expired-share-owner')).body
+    const member = (await register('expired-share-member')).body
+    db.prepare("UPDATE users SET role = 'beta_tester', roles = 'user,beta_tester' WHERE username = 'expired-share-member'").run()
+    await post('/api/sync/push', { records: [
+      { store: 'novels', id: 'expired-novel', novelId: 'expired-novel', updatedAt: 1, deleted: false, payload: { title: 'Expired' } }
+    ] }, owner.token)
+    await post('/api/shares/presence', { novelId: 'expired-novel' }, owner.token)
+    const invite = await (await post('/api/shares/invite', { novelId: 'expired-novel', role: 'viewer' }, owner.token)).json()
+    db.prepare('UPDATE share_invites SET expires_at = ? WHERE code = ?').run(Date.now() - 1, invite.code)
+    const response = await post('/api/shares/accept', { code: invite.code }, member.token)
+    expect(response.status).toBe(404)
+    expect(await response.json()).toMatchObject({ code: 'INVITE_EXPIRED' })
   })
 
   it('pushes and pulls records with last-writer-wins', async () => {

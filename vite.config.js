@@ -8,6 +8,7 @@ export default defineConfig({
     tailwindcss(),
     react(),
     VitePWA({
+      devOptions: { enabled: false },
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
@@ -27,6 +28,11 @@ export default defineConfig({
         ]
       },
       workbox: {
+        // Take over already-open tabs so a newly deployed editor is rendered
+        // consistently across browsers instead of waiting for a second visit.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,svg,png,woff,woff2}'],
         // WOFF2 is the browser-preferred format and is already included above.
         // Omitting legacy WOFF files keeps the precache manifest smaller while
@@ -38,6 +44,9 @@ export default defineConfig({
   ],
   server: {
     port: 5173,
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
     watch: {
       // Rust/installer outputs are large, frequently replaced, and can be
       // exclusively locked by the Windows linker. They are never web inputs.
@@ -74,6 +83,11 @@ export default defineConfig({
         }
       }
     }
+  },
+  preview: {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
   },
   build: {
     chunkSizeWarningLimit: 900

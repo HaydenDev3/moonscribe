@@ -26,6 +26,7 @@ function characterAppears(character, text) {
 // { severity, kind, title, detail, chapterId? }.
 export async function continuityReport(novelId) {
   const db = await getDB()
+  const novel = await db.get('novels', novelId)
   const chapters = (await db.getAllFromIndex('chapters', 'by-novel', novelId))
     .filter((c) => !c.trashedAt)
     .sort((a, b) => a.order - b.order)
@@ -35,6 +36,13 @@ export async function continuityReport(novelId) {
   const issues = []
   const withWords = chapters.filter((c) => strip(c.content))
   const texts = chapters.map((c) => ({ c, text: strip(c.content) }))
+
+  // Design metadata is part of the finished book too. Keep these checks in
+  // continuity so a manuscript can be reviewed before it reaches print.
+  const layout = novel?.layout || {}
+  if (!layout.editorDesign) issues.push({ severity: SEVERITY.hint, kind: 'design', title: 'No page design is selected', detail: 'Choose a page design from the Designs palette so the manuscript has a deliberate reading style.' })
+  if (!layout.pageSize) issues.push({ severity: SEVERITY.hint, kind: 'design', title: 'Page size is using the default', detail: 'Confirm the intended trim size in Designer before export.' })
+  if (!layout.coverDesign) issues.push({ severity: SEVERITY.watch, kind: 'design', title: 'Cover design is not assigned', detail: 'Choose a cover design in Designer so cover and interior production settings stay connected.' })
 
   // Missing scene context is still a continuity concern. Previously a sparse
   // binder produced an empty report, which made the checker look broken.

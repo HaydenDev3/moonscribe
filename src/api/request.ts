@@ -6,14 +6,16 @@ export class ApiRequestError extends Error {
   code: ApiErrorCode
   retryable: boolean
   requestId?: string
+  serverCode?: string
 
-  constructor(message: string, status = 0, code: ApiErrorCode = 'UNKNOWN', requestId?: string) {
+  constructor(message: string, status = 0, code: ApiErrorCode = 'UNKNOWN', requestId?: string, serverCode?: string) {
     super(message)
     this.name = 'ApiRequestError'
     this.status = status
     this.code = code
     this.retryable = status === 408 || status === 429 || status >= 500 || code === 'OFFLINE' || code === 'TIMEOUT'
     this.requestId = requestId
+    this.serverCode = serverCode
   }
 }
 
@@ -47,7 +49,7 @@ export async function requestJson<T>(url: string, init: RequestInit = {}, option
       const response = await fetch(url, { ...init, headers, signal: controller.signal })
       const data = await response.json().catch(() => ({})) as T & ApiErrorShape
       if (!response.ok) {
-        const error = new ApiRequestError(data.error || `Request failed (${response.status})`, response.status, errorCode(response.status, data), data.requestId)
+        const error = new ApiRequestError(data.error || `Request failed (${response.status})`, response.status, errorCode(response.status, data), data.requestId, data.code)
         if (!error.retryable || attempt === retries) throw error
         lastError = error
       } else return data as T

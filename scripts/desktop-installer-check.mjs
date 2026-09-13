@@ -12,7 +12,9 @@ const installers = fs.existsSync(nsisDir)
 const failures = []
 if (!config.bundle?.active) failures.push('Desktop bundling is disabled.')
 if (!config.bundle?.targets?.includes('nsis')) failures.push('The NSIS Windows target is not configured.')
-if (!config.bundle?.targets?.includes('msi')) failures.push('The MSI Windows target is not configured.')
+if (!config.bundle?.targets?.includes('dmg')) failures.push('The macOS DMG target is not configured.')
+if (!config.bundle?.targets?.includes('appimage')) failures.push('The Linux AppImage target is not configured.')
+if (!config.bundle?.targets?.includes('deb')) failures.push('The Linux deb target is not configured.')
 if (!installers.length) failures.push('No NSIS installer found. Run npm run tauri:build first.')
 if (installers.length && !installers.some((name) => name.includes(String(config.version)))) {
   failures.push(`Installer version does not match Tauri version ${config.version}. Rebuild the installer before release.`)

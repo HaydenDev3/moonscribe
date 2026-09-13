@@ -45,6 +45,22 @@ function loadTextureImage(src, map, draw, onError) {
 function drawComponents(ctx, components = [], w, h, color = '#fff') {
   components.forEach((item) => { const x = w * (Number(item.x) || 50) / 100; const y = h * (Number(item.y) || 50) / 100; const size = Math.max(18, Math.min(110, 42 * (Number(item.scale) || 1))); ctx.save(); ctx.fillStyle = item.color || color; ctx.globalAlpha = .9; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `${size}px Georgia, serif`; ctx.fillText(item.glyph || '', x, y); ctx.restore() })
 }
+function drawImageLayers(ctx, layers = [], w, h, map) {
+  layers.filter((item) => item?.src).forEach((item) => {
+    const image = new Image()
+    image.decoding = 'async'
+    if (/^https?:/i.test(item.src)) image.crossOrigin = 'anonymous'
+    image.onload = () => {
+      const width = w * Math.max(0.06, Math.min(0.9, Number(item.width) || 30)) / 100
+      const height = h * Math.max(0.06, Math.min(0.9, Number(item.height) || 24)) / 100
+      const x = w * (Number(item.x) || 50) / 100 - width / 2
+      const y = h * (Number(item.y) || 50) / 100 - height / 2
+      ctx.save(); ctx.translate(x + width / 2, y + height / 2); ctx.rotate((Number(item.rotation) || 0) * Math.PI / 180)
+      ctx.globalAlpha = 0.94; ctx.drawImage(image, -width / 2, -height / 2, width, height); ctx.restore(); map.needsUpdate = true
+    }
+    image.src = item.src
+  })
+}
 function frontTexture(settings: any) {
   const colors = palette(settings.coverStyle, settings.gradient)
   return texture((ctx, w, h, map) => {
@@ -61,7 +77,7 @@ function frontTexture(settings: any) {
       const lineHeight = size * 1.2; const top = h * .48 - (lines.length - 1) * lineHeight / 2; lines.forEach((entry, index) => ctx.fillText(entry, w / 2, top + index * lineHeight)); ctx.shadowBlur = 0
       if (settings.subtitle) { ctx.globalAlpha = .78; ctx.font = `30px ${FONT_MAP.cormorant}`; ctx.fillText(settings.subtitle, w / 2, top + lines.length * lineHeight + 18); ctx.globalAlpha = 1 }
       if (settings.ornament) { ctx.globalAlpha = .68; ctx.font = `42px ${typeface}`; ctx.fillText(settings.ornament, w / 2, top + lines.length * lineHeight + 38); ctx.globalAlpha = 1 }
-      ctx.globalAlpha = .78; ctx.font = `italic 27px ${FONT_MAP.cormorant}`; ctx.fillText(settings.byline || 'for Storm Tattersall', w / 2, h - 118); ctx.globalAlpha = 1; drawComponents(ctx, settings.frontComponents, w, h, settings.titleColor || '#fff')
+      ctx.globalAlpha = .78; ctx.font = `italic 27px ${FONT_MAP.cormorant}`; ctx.fillText(settings.byline || 'for Storm Tattersall', w / 2, h - 118); ctx.globalAlpha = 1; drawComponents(ctx, settings.frontComponents, w, h, settings.titleColor || '#fff'); drawImageLayers(ctx, settings.frontLayers, w, h, map)
     }
     loadTextureImage(settings.coverImage, map, draw, settings.onTextureError)
   })
@@ -219,9 +235,43 @@ export default function CoverMockup3D(props) {
     const draw = now => { const elapsed = now - previous; previous = now; if (!document.hidden && !down && propsRef.current.autoSpin && !propsRef.current.reducedMotion) yaw += elapsed * .00032; book.rotation.set(pitch, yaw, 0); renderer.render(scene, camera); frame = requestAnimationFrame(draw) }; frame = requestAnimationFrame(draw); reportStatus('ready')
     return () => { viewStateRef.current = { yaw, pitch, zoom: zoomLevel }; cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('blur', onBlur); mount.removeEventListener('pointerdown', onDown); mount.removeEventListener('pointermove', onMove); mount.removeEventListener('pointerup', onUp); mount.removeEventListener('pointercancel', onUp); mount.removeEventListener('wheel', onWheel); mount.removeEventListener('moonscribe:designer-zoom-step', onZoomStep); mount.removeEventListener('dblclick', onDouble); mount.removeEventListener('contextmenu', onContext); renderer.domElement.removeEventListener('webglcontextlost', onContextLost); renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored); mount.replaceChildren(); renderer.dispose(); pages.dispose(); board.dispose(); block.geometry.dispose(); boardGeometry.dispose(); frontMaterials.forEach((entry) => entry.dispose()); backMaterials.forEach((entry) => entry.dispose()); spine.geometry.dispose(); spineMaterials.forEach((entry) => entry.dispose()); headband.geometry.dispose(); floor.geometry.dispose() }
   }, [props.trimWidthMm, props.trimHeightMm, props.spineMm, props.quality, props.reducedMotion, reportStatus])
-  useEffect(() => { sceneRef.current?.refresh() }, [props.title, props.subtitle, props.byline, props.coverStyle, props.gradient, props.coverImage, props.frontCrop, props.backImage, props.backCrop, props.spineImage, props.spineCrop, props.ornament, props.titleColor, props.titleFont, props.titleSize, props.titleWeight, props.titleSpacing, props.titleTransform, props.showText, props.showBackText, props.showSpineText])
+  useEffect(() => { sceneRef.current?.refresh() }, [props.title, props.subtitle, props.byline, props.coverStyle, props.gradient, props.coverImage, props.frontCrop, props.backImage, props.backCrop, props.spineImage, props.spineCrop, props.ornament, props.titleColor, props.titleFont, props.titleSize, props.titleWeight, props.titleSpacing, props.titleTransform, props.showText, props.showBackText, props.showSpineText, props.frontLayers, props.backLayers, props.spineLayers])
   useEffect(() => { sceneRef.current?.focusSurface(props.activeSurface) }, [props.activeSurface])
   useEffect(() => { sceneRef.current?.applyEnvironment() }, [props.environment])
   const stepZoom = (amount: number) => mountRef.current?.dispatchEvent(new CustomEvent('moonscribe:designer-zoom-step', { detail: amount }))
-  return <div ref={mountRef} className={`cover-mockup-3d cover-mockup-webgl environment-${props.environment || 'studio'}`} style={{ cursor: 'grab' }}><div className="cover-mockup-zoom" aria-label="Designer zoom controls"><button type="button" onClick={() => stepZoom(.1)} aria-label="Zoom in">+</button><button type="button" onClick={() => stepZoom(-.1)} aria-label="Zoom out">−</button><button type="button" onClick={() => { sceneRef.current?.focusSurface(props.activeSurface || 'front') }} aria-label="Reset rotation">↺</button></div><span className="cover-mockup-3d-hint">drag to inspect · pinch or wheel to zoom · double-click to reset</span></div>
+  const layers = props.activeSurface === 'front' ? (props.frontLayers || []) : props.activeSurface === 'back' ? (props.backLayers || []) : (props.spineLayers || [])
+  return <div className={`cover-mockup-3d cover-mockup-webgl environment-${props.environment || 'studio'}`} style={{ cursor: 'grab' }}>
+    <div ref={mountRef} className="cover-mockup-render-surface" />
+    {props.activeSurface === 'front' && <CoverEditOverlay title={props.title} titleFontFamily={props.titleFontFamily} titleColor={props.titleColor} layers={layers} onSelectText={props.onSelectText} onUpdateLayers={props.onUpdateLayers} />}
+    <div className="cover-mockup-zoom" aria-label="Designer zoom controls"><button type="button" onClick={() => stepZoom(.1)} aria-label="Zoom in">+</button><button type="button" onClick={() => stepZoom(-.1)} aria-label="Zoom out">−</button><button type="button" onClick={() => { sceneRef.current?.focusSurface(props.activeSurface || 'front') }} aria-label="Reset rotation">↺</button></div><span className="cover-mockup-3d-hint">drag to inspect · pinch or wheel to zoom · double-click to reset</span>
+  </div>
+}
+
+function CoverEditOverlay({ title, titleFontFamily, titleColor, layers, onSelectText, onUpdateLayers }) {
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const dragRef = useRef<any>(null)
+  const begin = (event, id, mode = 'move') => {
+    event.stopPropagation(); event.preventDefault()
+    const root = rootRef.current; if (!root) return
+    const rect = root.getBoundingClientRect(); const layer = layers.find((item) => item.id === id); if (!layer) return
+    dragRef.current = { id, mode, startX: event.clientX, startY: event.clientY, rect, layer }
+    const move = (moveEvent) => {
+      const state = dragRef.current; if (!state) return
+      const dx = ((moveEvent.clientX - state.startX) / state.rect.width) * 100
+      const dy = ((moveEvent.clientY - state.startY) / state.rect.height) * 100
+      const next = layers.map((item) => item.id !== state.id ? item : state.mode === 'resize'
+        ? { ...item, width: Math.max(8, Math.min(90, state.layer.width + dx)), height: Math.max(8, Math.min(90, state.layer.height + dy)) }
+        : { ...item, x: Math.max(5, Math.min(95, state.layer.x + dx)), y: Math.max(5, Math.min(95, state.layer.y + dy)) })
+      onUpdateLayers?.(next)
+    }
+    const end = () => { dragRef.current = null; window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', end) }
+    window.addEventListener('pointermove', move); window.addEventListener('pointerup', end, { once: true })
+  }
+  return <div ref={rootRef} className="cover-edit-overlay" aria-label="Cover layer editor">
+    <button type="button" className="cover-edit-title" style={{ fontFamily: titleFontFamily, color: titleColor }} onClick={(event) => { event.stopPropagation(); onSelectText?.() }} title="Select title to change its font">{title || 'Untitled'}<span>select title · choose a font</span></button>
+    {layers.map((layer) => <div key={layer.id} className="cover-edit-layer" style={{ left: `${layer.x}%`, top: `${layer.y}%`, width: `${layer.width}%`, height: `${layer.height}%`, transform: `translate(-50%, -50%) rotate(${layer.rotation || 0}deg)` }} onPointerDown={(event) => begin(event, layer.id)}>
+      <img src={layer.src} alt="Placed cover artwork" draggable={false} />
+      <button type="button" className="cover-edit-resize" aria-label="Resize image" onPointerDown={(event) => begin(event, layer.id, 'resize')} />
+    </div>)}
+  </div>
 }

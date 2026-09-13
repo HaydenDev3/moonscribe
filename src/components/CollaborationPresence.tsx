@@ -1,8 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { clearPresence, getConfig, getPresenceSessionId, listPresence, subscribePresence, updatePresence } from '../sync/engine'
+import {
+  clearPresence,
+  getConfig,
+  getPresenceSessionId,
+  listPresence,
+  subscribePresence,
+  updatePresence,
+} from '../sync/engine'
 import { subscribeSupabasePresence } from '../sync/supabaseCollaboration'
 import ProfileAvatar from './ProfileAvatar'
 import Icon from './Icon'
+import UserPresenceAvatar from './UserPresenceAvatar'
 
 const STATUS = {
   online: { label: 'Online', color: '#62c887' },
@@ -11,15 +19,40 @@ const STATUS = {
   offline: { label: 'Offline', color: '#747986' },
 }
 
+function deviceIcon(person) {
+  const value = String(person?.deviceType || person?.device || person?.platform || '').toLowerCase()
+  if (
+    value.includes('phone') ||
+    value.includes('mobile') ||
+    value.includes('android') ||
+    value.includes('iphone')
+  )
+    return 'fa-solid fa-mobile-screen-button'
+  if (value.includes('tablet') || value.includes('ipad')) return 'fa-solid fa-tablet-screen-button'
+  return 'fa-solid fa-display'
+}
+
+function currentDeviceType() {
+  const ua = navigator.userAgent.toLowerCase()
+  if (/ipad|tablet/.test(ua)) return 'Tablet'
+  if (/mobile|iphone|android/.test(ua)) return 'Phone'
+  return 'Desktop'
+}
+
 function cursorContext() {
   const selection = window.getSelection?.()
   const node = selection?.anchorNode
-  const element = node instanceof Element ? node : node?.parentElement ?? null
+  const element = node instanceof Element ? node : (node?.parentElement ?? null)
   const root = element?.closest('.prose[contenteditable="true"], .ProseMirror') ?? null
-  if (!root || !selection?.rangeCount) return { activity: 'viewing', lineNumber: null, cursorOffset: null }
+  if (!root || !selection?.rangeCount)
+    return { activity: 'viewing', lineNumber: null, cursorOffset: null }
   const before = document.createRange()
   before.selectNodeContents(root)
-  try { before.setEnd(selection.anchorNode, selection.anchorOffset) } catch { return { activity: 'viewing', lineNumber: null, cursorOffset: null } }
+  try {
+    before.setEnd(selection.anchorNode, selection.anchorOffset)
+  } catch {
+    return { activity: 'viewing', lineNumber: null, cursorOffset: null }
+  }
   const text = before.toString()
   const blocks = root.querySelectorAll('p,h1,h2,h3,li,blockquote')
   let lineNumber = 1
@@ -27,17 +60,37 @@ function cursorContext() {
     if (element.contains(selection.anchorNode)) break
     lineNumber += Math.max(1, Math.ceil((element.textContent?.length || 0) / 72))
   }
-  return { activity: root === document.activeElement || root.contains(document.activeElement) ? 'writing' : 'viewing', lineNumber, cursorOffset: text.length }
+  return {
+    activity:
+      root === document.activeElement || root.contains(document.activeElement)
+        ? 'writing'
+        : 'viewing',
+    lineNumber,
+    cursorOffset: text.length,
+  }
 }
 
-export default function CollaborationPresence({ novelId, chapterId, chapterTitle, workspace = 'manuscript', onPresenceChange, onRecord }) {
+export default function CollaborationPresence({
+  novelId,
+  chapterId,
+  chapterTitle,
+  workspace = 'manuscript',
+  onPresenceChange,
+  onRecord,
+}) {
   const [people, setPeople] = useState([])
   const accountIdRef = useRef(null)
+  const accountNameRef = useRef('')
   const sessionIdRef = useRef(getPresenceSessionId())
   const allPeopleRef = useRef([])
   const [open, setOpen] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
-  const presenceMetaRef = useRef({ novelId: null, chapterId: null, chapterTitle: '', workspace: 'manuscript' })
+  const presenceMetaRef = useRef({
+    novelId: null,
+    chapterId: null,
+    chapterTitle: '',
+    workspace: 'manuscript',
+  })
   const [manualStatus, setManualStatus] = useState(() => {
     try {
       return globalThis.localStorage?.getItem('moonscribe.presence') || 'online'
@@ -47,18 +100,37 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
   })
   const lastAction = useRef(Date.now())
 
-  const applyPeople = useCallback((next) => {
-    allPeopleRef.current = next || []
-    const visible = allPeopleRef.current.filter((person) => person?.id && person.sessionId !== sessionIdRef.current)
-    setPeople(visible)
-    onPresenceChange?.(visible)
-  }, [onPresenceChange])
+  const applyPeople = useCallback(
+    (next) => {
+      allPeopleRef.current = next || []
+      const visible = allPeopleRef.current.filter((person) => {
+        if (!person?.id || person.sessionId === sessionIdRef.current) return false
+        const sameAccount =
+          accountIdRef.current &&
+          String(person.userId || person.accountId || '') === String(accountIdRef.current)
+        const sameName =
+          accountNameRef.current &&
+          String(person.username || person.name || '')
+            .trim()
+            .toLowerCase() === accountNameRef.current
+        return !sameAccount && !sameName
+      })
+      setPeople(visible)
+      onPresenceChange?.(visible)
+    },
+    [onPresenceChange]
+  )
 
   useEffect(() => {
-    const active = () => { lastAction.current = Date.now() }
+    const active = () => {
+      lastAction.current = Date.now()
+    }
     window.addEventListener('pointerdown', active, { passive: true })
     window.addEventListener('keydown', active)
-    return () => { window.removeEventListener('pointerdown', active); window.removeEventListener('keydown', active) }
+    return () => {
+      window.removeEventListener('pointerdown', active)
+      window.removeEventListener('keydown', active)
+    }
   }, [])
 
   useEffect(() => {
@@ -71,13 +143,47 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
     let supabaseLive = false
     const heartbeat = async () => {
       try {
-        const inferred = manualStatus === 'dnd' ? 'dnd' : manualStatus === 'idle' ? 'idle' : (document.hidden || Date.now() - lastAction.current > 5 * 60_000 ? 'idle' : 'online')
-        const context = { status: inferred, workspace, tabName: chapterTitle || workspace, tabId: chapterId, ...cursorContext() }
+        const inferred =
+          manualStatus === 'dnd'
+            ? 'dnd'
+            : manualStatus === 'idle'
+              ? 'idle'
+              : document.hidden || Date.now() - lastAction.current > 5 * 60_000
+                ? 'idle'
+                : 'online'
+        const context = {
+          status: inferred,
+          deviceType: currentDeviceType(),
+          workspace,
+          tabName: chapterTitle || workspace,
+          tabId: chapterId,
+          ...cursorContext(),
+        }
         globalThis.__moonscribeLatestPresence = { novelId, context }
-        window.dispatchEvent(new CustomEvent('moonscribe:presence-update', { detail: { novelId, context } }))
-        publishSupabase({ sessionId: getPresenceSessionId(), userId: String(accountIdRef.current || ''), chapterId, tabId: chapterId, tabName: chapterTitle || workspace, workspace, ...context, lastSeenAt: Date.now() })
+        window.dispatchEvent(
+          new CustomEvent('moonscribe:presence-update', { detail: { novelId, context } })
+        )
+        publishSupabase({
+          sessionId: getPresenceSessionId(),
+          userId: String(accountIdRef.current || ''),
+          chapterId,
+          tabId: chapterId,
+          tabName: chapterTitle || workspace,
+          workspace,
+          ...context,
+          lastSeenAt: Date.now(),
+        })
         await updatePresence(novelId, chapterId, context)
         const result = await listPresence(novelId)
+        window.dispatchEvent(
+          new CustomEvent('moonscribe:collaboration', {
+            detail: {
+              status: result.room?.state === 'owner-away' ? 'host_offline' : 'connected',
+              novelId,
+              room: result.room,
+            },
+          })
+        )
         if (live) {
           applyPeople(result.people || [])
         }
@@ -88,35 +194,60 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
         }
       }
     }
-    const selectionChanged = () => { clearTimeout(selectionTimer); selectionTimer = setTimeout(heartbeat, 350) }
-    getConfig().then((config) => {
-      accountIdRef.current = config.accountId || null
-      applyPeople(allPeopleRef.current)
-    }).catch(() => {})
-    subscribeSupabasePresence(novelId, {
-      sessionId: getPresenceSessionId(),
-      userId: String(accountIdRef.current || ''),
-      chapterId,
-      tabId: chapterId,
-      tabName: chapterTitle || workspace,
-      workspace,
-      activity: 'viewing',
-      status: manualStatus === 'dnd' ? 'dnd' : manualStatus === 'idle' ? 'idle' : 'online',
-    }, {
-      onPeople: (next) => { if (live) applyPeople(next) },
-      onStatus: (status, detail) => window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status, detail, novelId } }))
-    }).then((connection) => {
-      if (connection) { supabaseLive = true; closeSupabase = connection.close; publishSupabase = connection.publish }
-    }).catch(() => {})
+    const selectionChanged = () => {
+      clearTimeout(selectionTimer)
+      selectionTimer = setTimeout(heartbeat, 350)
+    }
+    getConfig()
+      .then((config) => {
+        accountIdRef.current = config.accountId || null
+        accountNameRef.current = String(config.username || '')
+          .trim()
+          .toLowerCase()
+        applyPeople(allPeopleRef.current)
+      })
+      .catch(() => {})
+    subscribeSupabasePresence(
+      novelId,
+      {
+        sessionId: getPresenceSessionId(),
+        userId: String(accountIdRef.current || ''),
+        chapterId,
+        tabId: chapterId,
+        tabName: chapterTitle || workspace,
+        workspace,
+        activity: 'viewing',
+        status: manualStatus === 'dnd' ? 'dnd' : manualStatus === 'idle' ? 'idle' : 'online',
+      },
+      {
+        onPeople: (next) => {
+          if (live) applyPeople(next)
+        },
+        onStatus: (status, detail) =>
+          window.dispatchEvent(
+            new CustomEvent('moonscribe:collaboration', { detail: { status, detail, novelId } })
+          ),
+      }
+    )
+      .then((connection) => {
+        if (connection) {
+          supabaseLive = true
+          closeSupabase = connection.close
+          publishSupabase = connection.publish
+        }
+      })
+      .catch(() => {})
     subscribePresence(novelId, {
       onMessage: (next) => {
         if (!live || supabaseLive) return
         applyPeople(next)
       },
-      onRecord
-    }).then((cleanup) => {
-      unsubscribe = cleanup
-    }).catch(() => {})
+      onRecord,
+    })
+      .then((cleanup) => {
+        unsubscribe = cleanup
+      })
+      .catch(() => {})
     heartbeat()
     const timer = setInterval(heartbeat, 10_000)
     document.addEventListener('selectionchange', selectionChanged)
@@ -131,12 +262,29 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
       unsubscribe()
       closeSupabase()
     }
-  }, [novelId, chapterId, chapterTitle, workspace, manualStatus, onPresenceChange, onRecord, applyPeople])
+  }, [
+    novelId,
+    chapterId,
+    chapterTitle,
+    workspace,
+    manualStatus,
+    onPresenceChange,
+    onRecord,
+    applyPeople,
+  ])
 
   useEffect(() => {
     const leavePresence = () => {
-      const { novelId: currentNovelId, chapterId: currentChapterId, chapterTitle: currentChapterTitle, workspace: currentWorkspace } = presenceMetaRef.current
-      clearPresence(currentNovelId, currentChapterId, { workspace: currentWorkspace, tabName: currentChapterTitle || currentWorkspace }).catch(() => {})
+      const {
+        novelId: currentNovelId,
+        chapterId: currentChapterId,
+        chapterTitle: currentChapterTitle,
+        workspace: currentWorkspace,
+      } = presenceMetaRef.current
+      clearPresence(currentNovelId, currentChapterId, {
+        workspace: currentWorkspace,
+        tabName: currentChapterTitle || currentWorkspace,
+      }).catch(() => {})
     }
     window.addEventListener('pagehide', leavePresence, { passive: true })
     window.addEventListener('beforeunload', leavePresence, { passive: true })
@@ -156,15 +304,94 @@ export default function CollaborationPresence({ novelId, chapterId, chapterTitle
     setManualStatus(status)
   }
   const currentStatus = STATUS[manualStatus] || STATUS.online
-  return <div className="collab-presence-wrap">
-    <button className="collab-presence" onClick={() => setOpen((value) => !value)} aria-label={`${people.length} active writer${people.length === 1 ? '' : 's'}`} aria-expanded={open}>
-      {people.slice(0, 4).map((person) => <span key={person.id} className={person.chapterId === chapterId ? 'same-chapter' : ''}><ProfileAvatar src={person.avatar} name={person.username} /><i style={{ background: STATUS[person.status]?.color }} /></span>)}
-      <b>{people.length || 'Live'}</b>
-    </button>
-    {open && <div className="collab-presence-panel">
-      <header><div><small>LIVE WORKSPACE</small><strong>{people.length} collaborator{people.length === 1 ? '' : 's'} active</strong></div><Icon icon="fa-solid fa-wave-square" /></header>
-      <div className="collab-status-control"><button className="collab-status-current" onClick={() => setStatusOpen((value) => !value)} aria-expanded={statusOpen}><i style={{ background: currentStatus.color }} />{currentStatus.label}<Icon icon="fa-solid fa-chevron-down" /></button>{statusOpen && <div className="collab-status-menu">{['online','idle','dnd'].map((status) => <button key={status} className={manualStatus === status ? 'active' : ''} onClick={() => { chooseStatus(status); setStatusOpen(false) }}><i style={{ background: STATUS[status].color }} /><span>{STATUS[status].label}</span>{manualStatus === status && <Icon icon="fa-solid fa-check" />}</button>)}</div>}</div>
-      {people.length ? <div className="collab-live-list">{people.map((person) => <article key={person.sessionId || `${person.id}-${person.tabId || person.chapterId || 'room'}`}><span><ProfileAvatar src={person.avatar} name={person.username} /><i style={{ background: STATUS[person.status]?.color }} /></span><div><strong>{person.username}</strong><small>{person.activity === 'writing' ? 'Writing' : 'Viewing'} · {person.tabName || person.workspace}</small>{person.lineNumber && <em>Line {person.lineNumber} · cursor {person.cursorOffset}</em>}</div><b>{STATUS[person.status]?.label || 'Online'}</b></article>)}</div> : <div className="collab-empty">You are the only collaborator here.</div>}
-    </div>}
-  </div>
+  if (!people.length) return null
+  return (
+    <div className="collab-presence-wrap">
+      <button
+        className="collab-presence"
+        onClick={() => setOpen((value) => !value)}
+        aria-label={`${people.length} active writer${people.length === 1 ? '' : 's'}`}
+        aria-expanded={open}
+      >
+        <UserPresenceAvatar people={people} chapterId={chapterId} maxVisible={4} />
+        <b>{people.length || 'Live'}</b>
+      </button>
+      {open && (
+        <div className="collab-presence-panel">
+          <header>
+            <div>
+              <small>LIVE WORKSPACE</small>
+              <strong>
+                {people.length} collaborator{people.length === 1 ? '' : 's'} active
+              </strong>
+            </div>
+            <Icon icon="fa-solid fa-wave-square" />
+          </header>
+          <div className="collab-status-control">
+            <button
+              className="collab-status-current"
+              onClick={() => setStatusOpen((value) => !value)}
+              aria-expanded={statusOpen}
+            >
+              <i style={{ background: currentStatus.color }} />
+              {currentStatus.label}
+              <Icon icon="fa-solid fa-chevron-down" />
+            </button>
+            {statusOpen && (
+              <div className="collab-status-menu">
+                {['online', 'idle', 'dnd'].map((status) => (
+                  <button
+                    key={status}
+                    className={manualStatus === status ? 'active' : ''}
+                    onClick={() => {
+                      chooseStatus(status)
+                      setStatusOpen(false)
+                    }}
+                  >
+                    <i style={{ background: STATUS[status].color }} />
+                    <span>{STATUS[status].label}</span>
+                    {manualStatus === status && <Icon icon="fa-solid fa-check" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {people.length ? (
+            <div className="collab-live-list">
+              {people.map((person) => (
+                <article
+                  key={
+                    person.sessionId || `${person.id}-${person.tabId || person.chapterId || 'room'}`
+                  }
+                >
+                  <span>
+                    <ProfileAvatar src={person.avatar} name={person.username} />
+                    <i style={{ background: STATUS[person.status]?.color }} />
+                    <em>
+                      <Icon icon={deviceIcon(person)} />
+                    </em>
+                  </span>
+                  <div>
+                    <strong>{person.username}</strong>
+                    <small>
+                      {person.activity === 'writing' ? 'Writing' : 'Viewing'} ·{' '}
+                      {person.tabName || person.workspace}
+                    </small>
+                    {person.lineNumber && (
+                      <em>
+                        Line {person.lineNumber} · cursor {person.cursorOffset}
+                      </em>
+                    )}
+                  </div>
+                  <b>{STATUS[person.status]?.label || 'Online'}</b>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="collab-empty">You are the only collaborator here.</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }

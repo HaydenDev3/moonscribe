@@ -23,10 +23,12 @@ import {
 const AppContext = createContext(null)
 
 const THEMES = ['light', 'dark', 'amoled', 'ember', 'moss', 'sandstone', 'midnight', 'custom']
+const CUSTOM_THEME_DEFAULTS = { background: '#111018', surface: '#1d1a24', accent: '#d8ab5c', secondary: '#8ea2c0', text: '#eee7dc', angle: 135, intensity: 65, atmosphere: 'balanced' }
 const DEFAULT_SETTINGS = {
   customGradientStart: '',
   customGradientEnd: '',
   customTextColor: '',
+  customTheme: null,
   paperTexture: false,
   theme: 'light',
   reduceMotion: false,
@@ -39,6 +41,7 @@ const DEFAULT_SETTINGS = {
   largeTargets: false,
   colorVision: 'default',
   simplifiedDecorations: false,
+  performanceMode: false,
   lockOnBackground: false,
   // Editor preferences
   editorFontSize: 'md',        // 'sm' | 'md' | 'lg' | 'xl'
@@ -128,8 +131,21 @@ const DEFAULT_SETTINGS = {
   discordRichPresence: false,
 }
 
+function themeHex(value, fallback) {
+  const raw = String(value || '').trim()
+  if (/^#[0-9a-f]{6}$/i.test(raw)) return raw
+  if (/^#[0-9a-f]{3}$/i.test(raw)) return `#${raw.slice(1).split('').map((char) => char + char).join('')}`
+  return fallback
+}
+
+function blendThemeColour(base, custom, amount) {
+  const parse = (value) => { const hex = themeHex(value, base).slice(1); return [0, 2, 4].map((index) => parseInt(hex.slice(index, index + 2), 16)) }
+  const [br, bg, bb] = parse(base); const [cr, cg, cb] = parse(custom)
+  return `#${[br, bg, bb].map((channel, index) => Math.round(channel + ([cr, cg, cb][index] - channel) * amount).toString(16).padStart(2, '0')).join('')}`
+}
+
 const DEFAULT_SYNC = { server: null, username: null, status: 'offline', discordAvatar: null, provider: null }
-const DEFAULT_ACCOUNT = { id: null, username: null, roles: ['user'], role: 'user', isAdmin: false, isDeveloper: false }
+const DEFAULT_ACCOUNT = { id: null, username: null, avatarUrl: null, bannerUrl: null, roles: ['user'], role: 'user', isAdmin: false, isDeveloper: false }
 
 function desktopOAuthRedirect(path = '/dashboard', search = '') {
   return isDesktopRuntime() ? `${window.location.origin}/#${path}${search}` : `${path}${search}`
@@ -157,7 +173,7 @@ export function AppProvider({ children }) {
   const [sync, setSync] = useState(DEFAULT_SYNC)
   const [account, setAccount] = useState(DEFAULT_ACCOUNT)
   const [accountReady, setAccountReady] = useState(false)
-  const [authFlow, setAuthFlow] = useState({ state: 'idle', provider: null, error: null })
+  const [authFlow, setAuthFlow] = useState({ state: 'idle', provider: null, error: null, conflictId: null })
   const oauthCallbackInFlight = useRef(false)
   const [guestMode, setGuestMode] = useState(false)
   const [appLock, setAppLockState] = useState(undefined) // undefined = loading, null = none
@@ -167,6 +183,7 @@ export function AppProvider({ children }) {
   const [systemFonts, setSystemFonts] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [accountCentreOpen, setAccountCentreOpen] = useState(false)
+  const [profileSetupOpen, setProfileSetupOpen] = useState(false)
   const [conflicts, setConflicts] = useState([])
   const toastId = useRef(0)
   const idleTimer = useRef(null)
@@ -184,6 +201,8 @@ export function AppProvider({ children }) {
       }))
     }
   }, [settings.soundEnabled, settings.notificationSounds, settings.soundVolume, settings.notificationSoundVolume])
+
+  const dismissToast = useCallback((id) => setToasts((items) => items.filter((item) => item.id !== id)), [])
 
   const refreshNovels = useCallback(async () => {
     const all = await listNovels()
@@ -246,7 +265,10 @@ export function AppProvider({ children }) {
           role: roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user',
           isAdmin: roles.includes('admin'),
           isDeveloper: roles.includes('developer'),
+          avatarUrl: parsedProfile.avatarUrl || parsedProfile.discordAvatar || null,
+          bannerUrl: parsedProfile.bannerUrl || null,
         })
+        if (parsedProfile.profile && !parsedProfile.profile.setupCompleted) setProfileSetupOpen(true)
       } else {
         setAccount(DEFAULT_ACCOUNT)
       }
@@ -257,14 +279,14 @@ export function AppProvider({ children }) {
       // A device-local avatar cache can be missing or stale on a newly opened
       // browser, which previously made the same account render initials on
       // one device and its real profile image on another.
-      const canonicalAvatar = cfg.token
-        ? (parsedProfile?.discordAvatar || discordAvatar || null)
+       const canonicalAvatar = cfg.token
+         ? (parsedProfile?.avatarUrl || parsedProfile?.discordAvatar || discordAvatar || null)
         : null
       const canonicalProvider = cfg.token
         ? (parsedProfile?.provider || authProvider || null)
         : null
-      if (cfg.token && parsedProfile?.discordAvatar && parsedProfile.discordAvatar !== discordAvatar) {
-        await setMeta('discordAvatar', parsedProfile.discordAvatar)
+       if (cfg.token && canonicalAvatar !== discordAvatar) {
+         await setMeta('discordAvatar', canonicalAvatar)
       }
       setSync({
         server: cfg.server,
@@ -292,17 +314,18 @@ export function AppProvider({ children }) {
       const dError = callbackQuery.includes('discord_error') ? callback.error : null
       const oauthError = callbackQuery.includes('oauth_error') ? callback.error : null
       if (magicToken) {
-        setAuthFlow({ state: 'processing', provider: 'magic', error: null })
+        setAuthFlow({ state: 'processing', provider: 'magic', error: null, conflictId: null })
         try {
           const magicServer = discordServer()
           const response = await fetch(`${magicServer}/api/auth/magic-link/consume`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: magicToken }) })
           const account = await response.json()
           if (!response.ok) throw new Error(account.error || 'This sign-in link has expired. Please request another.')
           await setMeta('authProvider', 'magic')
-          const res = await syncEngine.connectWithToken({ server: account.server || magicServer, token: account.token, username: account.username })
-          if (res.ok) {
-            clearOAuthCallback(window.location)
-            setAuthFlow({ state: 'success', provider: 'magic', error: null })
+            const res = await syncEngine.connectWithToken({ server: account.server || magicServer, token: account.token, username: account.username })
+            if (res.ok) {
+             if (res.profileSetupRequired) setProfileSetupOpen(true)
+              clearOAuthCallback(window.location)
+            setAuthFlow({ state: 'success', provider: 'magic', error: null, conflictId: null })
             setSync({ server: account.server || magicServer, username: account.username, status: 'synced', discordAvatar: null, provider: 'magic' })
             window.location.replace('/dashboard')
             return
@@ -311,7 +334,7 @@ export function AppProvider({ children }) {
       } else if (exchangeCode) {
         if (oauthCallbackInFlight.current) return
         oauthCallbackInFlight.current = true
-        setAuthFlow({ state: 'processing', provider: callback.provider, error: null })
+        setAuthFlow({ state: 'processing', provider: callback.provider, error: null, conflictId: callback.conflictId })
         try {
           const withTimeout = (promise, label, ms = 12000) => Promise.race([
             promise,
@@ -348,7 +371,7 @@ export function AppProvider({ children }) {
           await setMeta('discordUsername', account.username)
           await setMeta('authProvider', account.provider || oauthProvider || 'discord')
           const existing = await syncEngine.getConfig()
-          const res = await withTimeout(syncEngine.connectWithToken({ server: account.server || oauthServer, token: account.linked && existing.token ? existing.token : account.token, username: account.username }), 'Saving your account session')
+            const res = await withTimeout(syncEngine.connectWithToken({ server: account.server || oauthServer, token: account.linked && existing.token ? existing.token : account.token, username: account.username }), 'Saving your account session')
           if (!res?.ok) throw new Error(res?.error || 'MoonScribe could not save the account session.')
           if (res.ok) {
             const profile = await withTimeout(syncEngine.validateSession(), 'Loading your account profile').catch(() => null)
@@ -360,12 +383,15 @@ export function AppProvider({ children }) {
                 roles,
                 role: roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user',
                 isAdmin: roles.includes('admin'),
-                isDeveloper: roles.includes('developer'),
+           isDeveloper: roles.includes('developer'),
+           avatarUrl: profile.avatarUrl || profile.discordAvatar || null,
+           bannerUrl: profile.bannerUrl || null,
               })
+              if (profile.profile && !profile.profile.setupCompleted && !account.linked) setProfileSetupOpen(true)
             }
             setSync({ server: account.server || oauthServer, username: account.username, status: 'synced', discordAvatar: account.avatar || null, provider: account.provider || oauthProvider || 'discord' })
             clearOAuthCallback(window.location)
-            setAuthFlow({ state: 'success', provider: account.provider || oauthProvider || 'discord', error: null })
+            setAuthFlow({ state: 'success', provider: account.provider || oauthProvider || 'discord', error: null, conflictId: null })
             // OAuth should always finish in the signed-in library. This also
             // heals bookmarks or older callback URLs that still land on `/`.
             if (isDesktopRuntime()) {
@@ -379,14 +405,18 @@ export function AppProvider({ children }) {
           }
         } catch (err) {
           console.error('[Discord OAuth]', err)
-          setAuthFlow({ state: 'error', provider: callback.provider, error: err.message || 'Could not finish sign-in.' })
+          setAuthFlow({ state: 'error', provider: callback.provider, error: err.message || 'Could not finish sign-in.', conflictId: callback.conflictId })
           toast(err.message || 'Sign-in completed, but MoonScribe could not open the account session.')
         }
       } else if (dError || oauthError) {
         const reason = dError || oauthError
         console.error('[OAuth]', reason)
         clearOAuthCallback(window.location)
-        setAuthFlow({ state: 'error', provider: callback.provider, error: reason })
+        const conflictMessage = reason === 'account_link_conflict'
+          ? 'This provider is already linked to another MoonScribe account. Review the merge before confirming.'
+          : reason
+        setAuthFlow({ state: 'error', provider: callback.provider, error: conflictMessage, conflictId: sp.get('conflict') })
+        const providerAccountConflict = reason === 'discord_account_already_linked' || reason === 'google_account_already_linked'
         const providerCredentialError = reason === 'discord_credentials_invalid' || reason === 'google_credentials_invalid'
         toast(reason === 'oauth_state_expired'
           ? 'That sign-in attempt expired. Please start again.'
@@ -394,13 +424,17 @@ export function AppProvider({ children }) {
             ? 'MoonScribe’s account service cannot reach the identity provider right now. Check the server network connection and try again.'
           : providerCredentialError
             ? 'The provider credentials or callback URL are not configured correctly on the MoonScribe server.'
+          : reason === 'account_link_conflict'
+            ? 'This provider is already linked to another MoonScribe account. Open Account Centre to review and confirm a guided merge, or cancel it.'
+          : providerAccountConflict
+            ? `That ${callback.provider} account is already linked to another MoonScribe account. Sign in with it first, or use a different account.`
           : reason === 'discord_profile_failed' || reason === 'google_profile_failed'
               ? 'The provider approved sign-in but did not return a usable profile. Please try again.'
               : reason === 'google_sign_in_failed'
                 ? 'Google sign-in could not be completed. Check the Google OAuth callback URL and server credentials, then try again.'
               : 'The provider approved sign-in, but MoonScribe could not finish the secure account connection. Please try again.')
       }
-    })().finally(() => setAccountReady(true))
+    })().finally(() => { if (typeof window !== 'undefined') setAccountReady(true) })
     syncEngine.listConflicts().then(setConflicts)
   }, [refreshNovels, toast])
 
@@ -444,14 +478,48 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     const root = document.documentElement
-    const start = settings.customGradientStart || ''
-    const end = settings.customGradientEnd || ''
-    root.style.setProperty('--custom-app-gradient', start && end ? `linear-gradient(135deg, ${start}, ${end})` : '')
+    const saved = settings.customTheme || {}
+    const start = themeHex(saved.stops?.[0]?.color || saved.background || settings.customGradientStart, '#111018')
+    const end = themeHex(saved.stops?.at?.(-1)?.color || saved.surface || settings.customGradientEnd, '#1d1a24')
+    const customMode = saved.mode === 'light' ? 'light' : 'dark'
+    const intensity = Math.max(0, Math.min(100, Number(saved.intensity ?? 65))) / 100
+    const base = customMode === 'light'
+      ? { background: '#ebe7df', surface: '#f3efe7', text: '#201f1d', accent: '#b68235', secondary: '#7d7979' }
+      : { background: '#16151a', surface: '#1d1c22', text: '#ece7de', accent: '#d8ab5c', secondary: '#9c968b' }
+    const background = blendThemeColour(base.background, saved.background || start, intensity)
+    const surface = blendThemeColour(base.surface, saved.surface || end, intensity)
+    const text = blendThemeColour(base.text, saved.text || settings.customTextColor || '#eee7dc', Math.min(1, intensity * .78))
+    const accent = blendThemeColour(base.accent, saved.accent || base.accent, intensity)
+    const secondary = blendThemeColour(base.secondary, saved.secondary || base.secondary, intensity)
+    const stops = Array.isArray(saved.stops) && saved.stops.length > 1 ? saved.stops.map((stop) => themeHex(stop.color, start)) : [start, end]
+    const atmosphere = saved.atmosphere === 'subtle' ? .72 : saved.atmosphere === 'vivid' ? 1.14 : 1
+    root.style.setProperty('--custom-app-gradient', `linear-gradient(${Number(saved.angle ?? 135)}deg, ${stops.join(', ')})`)
     root.style.setProperty('--custom-app-start', start)
     root.style.setProperty('--custom-app-end', end)
-    root.style.setProperty('--custom-app-text', settings.customTextColor || '')
-    root.dataset.customGradient = start && end ? 'true' : 'false'
-  }, [settings.customGradientStart, settings.customGradientEnd, settings.customTextColor])
+    root.style.setProperty('--custom-app-text', text)
+    if (resolvedTheme === 'custom') {
+      root.style.setProperty('--bg', background)
+      root.style.setProperty('--cream', background)
+      root.style.setProperty('--surface', surface)
+      root.style.setProperty('--ivory', surface)
+      root.style.setProperty('--surface-elev', blendThemeColour(surface, text, .06))
+      root.style.setProperty('--charcoal', text)
+      root.style.setProperty('--twilight', text)
+      root.style.setProperty('--grey', blendThemeColour(text, background, .44))
+      root.style.setProperty('--grey-soft', blendThemeColour(text, background, .62))
+      root.style.setProperty('--accent', accent)
+      root.style.setProperty('--moon', accent)
+      root.style.setProperty('--accent-deep', accent)
+      root.style.setProperty('--accent-fill', blendThemeColour(surface, accent, .18 * atmosphere))
+      root.style.setProperty('--accent-fg', text)
+      root.style.setProperty('--border', `color-mix(in srgb, ${text} 15%, transparent)`)
+      root.style.setProperty('--border-soft', `color-mix(in srgb, ${text} 8%, transparent)`)
+      root.style.setProperty('--state-info', secondary)
+    } else {
+      ;['--bg','--cream','--surface','--ivory','--surface-elev','--charcoal','--twilight','--grey','--grey-soft','--accent','--moon','--accent-deep','--accent-fill','--accent-fg','--border','--border-soft','--state-info'].forEach((name) => root.style.removeProperty(name))
+    }
+    root.dataset.customGradient = resolvedTheme === 'custom' ? 'true' : 'false'
+  }, [resolvedTheme, settings.customTheme, settings.customGradientStart, settings.customGradientEnd, settings.customTextColor])
 
   useEffect(() => {
     document.documentElement.classList.toggle('paper-texture', settings.paperTexture)
@@ -531,14 +599,51 @@ export function AppProvider({ children }) {
     root.classList.toggle('underline-links', !!settings.underlineLinks)
     root.classList.toggle('large-targets', !!settings.largeTargets)
     root.classList.toggle('simplified-decorations', !!settings.simplifiedDecorations)
-  }, [settings.interfaceScale, settings.interfaceDensity, settings.cornerStyle, settings.colorVision, settings.appLayout, settings.paperStrength, settings.reduceTransparency, settings.underlineLinks, settings.largeTargets, settings.simplifiedDecorations])
+    root.classList.toggle('performance-mode', !!settings.performanceMode)
+  }, [settings.interfaceScale, settings.interfaceDensity, settings.cornerStyle, settings.colorVision, settings.appLayout, settings.paperStrength, settings.reduceTransparency, settings.underlineLinks, settings.largeTargets, settings.simplifiedDecorations, settings.performanceMode])
+
+  // Hydrate the canonical OAuth avatar after the session is ready. This keeps
+  // the profile image used by the studio and Share in sync with the account
+  // service instead of relying on an old device-local initials fallback.
+  useEffect(() => {
+    if (!accountReady || !sync.server) return
+    let active = true
+    void syncEngine.validateSession().then((profile) => {
+      if (!active || !profile) return
+      const avatar = profile.avatarUrl || profile.discordAvatar || null
+      setAccount((current) => ({ ...current, avatarUrl: avatar }))
+      setSync((current) => ({ ...current, discordAvatar: avatar }))
+    }).catch(() => {})
+    return () => { active = false }
+  }, [accountReady, sync.server])
+
+  useEffect(() => {
+    const onSound = (event) => {
+      const name = event.detail?.event
+      if (!name || !settings.soundEnabled || settings.reduceMotion || settings.simplifiedDecorations) return
+      const notificationEvent = name === 'ui.warning' || name === 'action.softError' || name === 'action.success'
+      const channelEnabled = notificationEvent ? settings.notificationSounds !== false : settings.clickSounds !== false
+      const channelVolume = notificationEvent ? settings.notificationSoundVolume : settings.interfaceSoundVolume
+      if (!channelEnabled) return
+      import('../utils/sounds').then(({ playFeedback }) => playFeedback(name, {
+        masterEnabled: settings.soundEnabled,
+        channelEnabled,
+        masterVolume: settings.soundVolume,
+        channelVolume,
+      }))
+    }
+    window.addEventListener('moonscribe:sound', onSound)
+    return () => window.removeEventListener('moonscribe:sound', onSound)
+  }, [settings.soundEnabled, settings.reduceMotion, settings.simplifiedDecorations, settings.clickSounds, settings.notificationSounds, settings.soundVolume, settings.interfaceSoundVolume, settings.notificationSoundVolume])
 
   useEffect(() => {
     if (!settings.soundEnabled) return undefined
     let lastTyped = 0
     const click = (event) => {
-      if (!settings.clickSounds || !event.target.closest('button, a, [role="button"], [role="menuitem"], [role="option"]')) return
-      import('../utils/sounds').then(({ playFeedback }) => playFeedback('ui.click', {
+      const target = event.target.closest('button, a, [role="button"], [role="menuitem"], [role="option"]')
+      if (!settings.clickSounds || !target) return
+      const sound = target.dataset.sound || 'ui.click'
+      import('../utils/sounds').then(({ playFeedback }) => playFeedback(sound, {
         masterEnabled: settings.soundEnabled,
         channelEnabled: settings.clickSounds,
         masterVolume: settings.soundVolume,
@@ -621,8 +726,9 @@ export function AppProvider({ children }) {
     r.style.setProperty('--accent-fg', darkTheme ? '#f7f3ed' : c.fg)
   }, [settings.accentColor, resolvedTheme])
 
-  const openSettings = useCallback(() => setSettingsOpen(true), [])
+  const openSettings = useCallback(() => { setAccountCentreOpen(false); setSettingsOpen(true) }, [])
   const closeSettings = useCallback(() => setSettingsOpen(false), [])
+  const openAccountCentre = useCallback(() => { setSettingsOpen(false); setAccountCentreOpen(true) }, [])
 
   const finishOnboarding = useCallback(async () => {
     await setMeta('onboardingDone', true)
@@ -638,6 +744,23 @@ export function AppProvider({ children }) {
       return next
     })
   }, [])
+
+  const saveProfile = useCallback(async (profile) => {
+    const cfg = await syncEngine.getConfig()
+    if (!cfg.server || !cfg.token) throw new Error('Sign in first.')
+    const response = await fetch(`${cfg.server.replace(/\/+$/, '')}/api/auth/update-account`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` },
+      body: JSON.stringify(profile),
+    })
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(result.error || 'Your profile could not be saved.')
+    const saved = result.profile || profile
+    await updateSettings({ displayName: saved.displayName || '', writerName: saved.writerName || '', profileBio: saved.profileBio || '', timezone: saved.timezone || 'UTC', language: saved.language || 'en-AU' })
+    setProfileSetupOpen(!saved.setupCompleted)
+    window.dispatchEvent(new CustomEvent('moonscribe:account-updated'))
+    return saved
+  }, [updateSettings])
 
   const installCustomFont = useCallback(async ({ file, familyName }) => {
     const entry = await installCustomFontFromFile(file, familyName)
@@ -746,14 +869,17 @@ export function AppProvider({ children }) {
         void syncEngine.validateSession().then((profile) => {
           if (!profile) return
           const roles = normalizeRoles(profile.roles || profile.role || 'user')
-          setAccount({
-            id: profile.id || null,
-            username: profile.username || null,
+           setAccount({
+             id: profile.id || null,
+             username: profile.username || null,
             roles,
             role: roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user',
             isAdmin: roles.includes('admin'),
-            isDeveloper: roles.includes('developer'),
-          })
+             isDeveloper: roles.includes('developer'),
+             avatarUrl: profile.avatarUrl || profile.discordAvatar || null,
+             bannerUrl: profile.bannerUrl || null,
+           })
+           setSync((current) => ({ ...current, discordAvatar: profile.avatarUrl || profile.discordAvatar || null, username: profile.username || current.username }))
         }).catch(() => {})
       }
       markPerformance('account-ready')
@@ -795,7 +921,7 @@ export function AppProvider({ children }) {
 
   const connectDiscord = useCallback(async () => {
     const server = discordServer()
-    setAuthFlow({ state: 'redirecting', provider: 'discord', error: null })
+    setAuthFlow({ state: 'redirecting', provider: 'discord', error: null, conflictId: null })
     try {
       const current = await syncEngine.getConfig()
       if (current.token) {
@@ -812,14 +938,14 @@ export function AppProvider({ children }) {
       const params = new URLSearchParams({ redirect_to: authReturnUrl(), client: authReturnUrl().startsWith('moonscribe:') ? 'desktop' : 'web' })
       await openExternalUrl(`${server}/auth/discord?${params}`)
     } catch (error) {
-      setAuthFlow({ state: 'error', provider: 'discord', error: error.message || 'Could not reach MoonScribe’s account service.' })
+      setAuthFlow({ state: 'error', provider: 'discord', error: error.message || 'Could not reach MoonScribe’s account service.', conflictId: null })
       toast(error.message || 'Could not reach MoonScribe’s account service.')
     }
   }, [toast])
 
   const connectGoogle = useCallback(async () => {
     const server = discordServer()
-    setAuthFlow({ state: 'redirecting', provider: 'google', error: null })
+    setAuthFlow({ state: 'redirecting', provider: 'google', error: null, conflictId: null })
     try {
       const current = await syncEngine.getConfig()
       if (current.token) {
@@ -836,24 +962,59 @@ export function AppProvider({ children }) {
       const params = new URLSearchParams({ redirect_to: authReturnUrl(), client: authReturnUrl().startsWith('moonscribe:') ? 'desktop' : 'web' })
       await openExternalUrl(`${server}/auth/google?${params}`)
     } catch (error) {
-      setAuthFlow({ state: 'error', provider: 'google', error: error.message || 'Could not start Google sign-in.' })
+      setAuthFlow({ state: 'error', provider: 'google', error: error.message || 'Could not start Google sign-in.', conflictId: null })
       toast(error.message || 'Could not start Google sign-in.')
     }
   }, [toast])
+
+  const previewAccountMerge = useCallback(async (conflictId) => {
+    const cfg = await syncEngine.getConfig()
+    const response = await fetch(`${cfg.server}/api/auth/link/preview`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` }, body: JSON.stringify({ conflictId }) })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.error || 'Could not load the merge preview.')
+    return payload
+  }, [])
+
+  const confirmAccountMerge = useCallback(async (conflictId) => {
+    const cfg = await syncEngine.getConfig()
+    const response = await fetch(`${cfg.server}/api/auth/link/merge`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` }, body: JSON.stringify({ conflictId, confirm: true }) })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.error || 'Could not merge the accounts.')
+    // Pull the canonical account's merged records immediately so novels,
+    // media, and profile surfaces update without a reload.
+    await syncEngine.sync().catch(() => {})
+    await refreshNovels()
+    await refreshAccount()
+    window.dispatchEvent(new CustomEvent('moonscribe:profile-updated'))
+    setAuthFlow({ state: 'success', provider: null, error: null, conflictId: null })
+    return payload
+  // refreshAccount is declared below this callback; it is stable for the
+  // provider lifetime and is intentionally resolved when the action runs.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const cancelAccountMerge = useCallback(async (conflictId) => {
+    const cfg = await syncEngine.getConfig()
+    await fetch(`${cfg.server}/api/auth/link/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.token}` }, body: JSON.stringify({ conflictId }) })
+    setAuthFlow((flow) => ({ ...flow, conflictId: null }))
+  }, [])
 
   const refreshAccount = useCallback(async () => {
     try {
       const profile = await syncEngine.validateSession()
       if (!profile) return null
       const roles = normalizeRoles(profile.roles || profile.role || 'user')
-      setAccount({
-        id: profile.id || null,
-        username: profile.username || null,
+       setAccount({
+         id: profile.id || null,
+         username: profile.username || null,
         roles,
         role: roles.includes('admin') ? 'admin' : roles.includes('developer') ? 'developer' : 'user',
         isAdmin: roles.includes('admin'),
         isDeveloper: roles.includes('developer'),
-      })
+        avatarUrl: profile.avatarUrl || profile.discordAvatar || null,
+        bannerUrl: profile.bannerUrl || null,
+       })
+       setSync((current) => ({ ...current, discordAvatar: profile.avatarUrl || profile.discordAvatar || null, username: profile.username || current.username }))
       return profile
     } catch {
       return null
@@ -887,7 +1048,7 @@ export function AppProvider({ children }) {
     if (!connected.ok) throw new Error(connected.error || 'MoonScribe could not save the account session.')
     await setMeta('authProvider', 'passkey')
     setSync({ server: account.server || server, username: connected.username || account.username, status: 'synced', discordAvatar: null, provider: 'passkey' })
-    return { ok: true, username: connected.username || account.username }
+    return { ok: true, username: connected.username || account.username, profileSetupRequired: Boolean(connected.profileSetupRequired) }
   }, [])
 
   const sendMagicLink = useCallback(async (email) => {
@@ -926,11 +1087,13 @@ export function AppProvider({ children }) {
 
   const disconnectSync = useCallback(async () => {
     await syncEngine.disconnect()
+    // Signed-out UI must never continue reading an authenticated account's
+    // local repository.
+    await switchDatabaseProfile('local')
     if (guestMode) {
       // Guest mode is a local profile, not a sync session. Return to the
       // normal signed-out profile so the guest identity can actually exit
       // without deleting its local writing.
-      await switchDatabaseProfile('local')
       await setMeta('guestMode', false)
       setGuestMode(false)
       await refreshNovels()
@@ -988,9 +1151,11 @@ export function AppProvider({ children }) {
       // Online edits should enter the cloud sync queue immediately. The
       // IndexedDB write remains the safety net, but displaying "Saved locally"
       // for several seconds made healthy cloud sync look permanently offline.
-      setSync((current) => ({ ...current, status: 'syncing' }))
+      setSync((current) => current.status === 'syncing' ? current : { ...current, status: 'syncing' })
       if (batchTimer) clearTimeout(batchTimer)
-      batchTimer = setTimeout(runSync, 250)
+      // Coalesce autosave bursts so typing does not produce a cloud request
+      // (and a visible status transition) every few hundred milliseconds.
+      batchTimer = setTimeout(runSync, 1200)
     }
     const reconcileNow = () => {
       failureCount = 0
@@ -1002,7 +1167,8 @@ export function AppProvider({ children }) {
 
     window.addEventListener('moonscribe:record-written', scheduleBatch)
     window.addEventListener('online', reconcileNow)
-    window.addEventListener('focus', reconcileNow)
+    // Some browsers emit window focus during ordinary pointer interaction.
+    // Reconcile on actual visibility and network transitions instead of clicks.
     document.addEventListener('visibilitychange', onVisible)
     reconcileNow()
     return () => {
@@ -1010,7 +1176,6 @@ export function AppProvider({ children }) {
       clearTimers()
       window.removeEventListener('moonscribe:record-written', scheduleBatch)
       window.removeEventListener('online', reconcileNow)
-      window.removeEventListener('focus', reconcileNow)
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [sync.server])
@@ -1031,6 +1196,7 @@ export function AppProvider({ children }) {
       focusMode,
       setFocusMode,
       toast,
+      dismissToast,
       toasts,
       appLock,
       locked,
@@ -1046,7 +1212,11 @@ export function AppProvider({ children }) {
       openSettings,
       closeSettings,
       accountCentreOpen,
-      openAccountCentre: () => setAccountCentreOpen(true),
+      profileSetupOpen,
+      openProfileSetup: () => setProfileSetupOpen(true),
+      closeProfileSetup: () => setProfileSetupOpen(false),
+      saveProfile,
+      openAccountCentre,
       closeAccountCentre: () => setAccountCentreOpen(false),
       conflicts,
       resolveConflict,
@@ -1055,7 +1225,9 @@ export function AppProvider({ children }) {
       guestMode,
       continueAsGuest,
       syncStatus: sync.status,
-      syncDiscordAvatar: sync.discordAvatar,
+      syncDiscordAvatar: sync.discordAvatar || account.avatarUrl || null,
+      profileAvatar: account.avatarUrl || sync.discordAvatar || null,
+      profileBanner: account.bannerUrl || null,
       syncProvider: sync.provider,
       authFlow,
       accountReady,
@@ -1069,6 +1241,9 @@ export function AppProvider({ children }) {
       connectSync,
       connectDiscord,
       connectGoogle,
+      previewAccountMerge,
+      confirmAccountMerge,
+      cancelAccountMerge,
       signInWithPasskey,
       sendMagicLink,
       completeTwoFactorSignIn,
@@ -1080,7 +1255,7 @@ export function AppProvider({ children }) {
       deleteCustomFont,
       refreshSystemFonts,
     }),
-    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, resolvedTheme, focusMode, toast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, accountCentreOpen, conflicts, resolveConflict, sync, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, refreshAccount, connectSync, connectDiscord, connectGoogle, signInWithPasskey, sendMagicLink, completeTwoFactorSignIn, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, authFlow]
+    [novels, refreshNovels, onboardingDone, finishOnboarding, settings, updateSettings, saveProfile, resolvedTheme, focusMode, toast, dismissToast, toasts, appLock, locked, unlockApp, lockNow, enableAppLock, updateAppLock, disableAppLock, isNovelUnlocked, unlockNovel, forgetNovelUnlock, settingsOpen, openSettings, closeSettings, accountCentreOpen, openAccountCentre, profileSetupOpen, conflicts, resolveConflict, sync, account, guestMode, continueAsGuest, accountReady, accountRoles, userRoleLabel, hasRole, syncNow, refreshAccount, connectSync, connectDiscord, connectGoogle, previewAccountMerge, confirmAccountMerge, cancelAccountMerge, signInWithPasskey, sendMagicLink, completeTwoFactorSignIn, disconnectSync, signOutOtherDevices, customFonts, systemFonts, installCustomFont, deleteCustomFont, refreshSystemFonts, authFlow]
   )
 
   return (

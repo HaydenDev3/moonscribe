@@ -1,5 +1,7 @@
 # Security model
 
+> Current release: **1.1.6**. Security behavior documented here reflects the current identity, sync, import, and recovery surfaces.
+
 ## Trust boundaries
 
 The browser client is untrusted from the server's perspective. Every private server operation must derive the user from a valid session and enforce ownership or membership. Client-side hiding is not authorization.
@@ -16,7 +18,7 @@ Synchronized records are keyed by user, store, and stable record ID. Collaborati
 
 ## Sessions and recovery
 
-Users can list sessions and revoke other sessions. Sensitive identity/provider/passkey/email changes must require recent reauthentication. A provider may not be silently transferred between accounts, and the final recovery method may not be removed.
+Users can list sessions and revoke other sessions. Sensitive identity/provider/passkey/email changes must require recent reauthentication. A provider may not be silently transferred between accounts, linking must not merge accounts implicitly, and the final recovery method may not be removed. The primary sign-in connector remains authoritative for profile identity and avatar data; linked providers cannot replace it.
 
 ## Secrets
 

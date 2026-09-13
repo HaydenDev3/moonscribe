@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'v*'
+      - 'v1.1.6'
 
 jobs:
   publish-tauri:
@@ -16,8 +16,24 @@ jobs:
         include:
           - platform: windows-latest
             args: --target x86_64-pc-windows-msvc
+            rust_target: x86_64-pc-windows-msvc
+            bundles: nsis
+            secret_check: windows
           - platform: macos-latest
             args: --target aarch64-apple-darwin
+            rust_target: aarch64-apple-darwin
+            bundles: dmg
+            secret_check: macos
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin
+            rust_target: x86_64-apple-darwin
+            bundles: dmg
+            secret_check: macos
+          - platform: ubuntu-22.04
+            args: --target x86_64-unknown-linux-gnu
+            rust_target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+            secret_check: linux
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -35,6 +51,9 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Install Rust target
+        run: rustup target add ${{ matrix.rust_target }}
+
       - name: Install Windows build tools
         if: runner.os == 'Windows'
         shell: powershell
@@ -42,8 +61,22 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Write-Host 'Using the Windows runner’s native C++ toolchain for Tauri packaging.'
 
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential curl wget file libssl-dev libxdo-dev \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Require a version tag
+        shell: bash
+        run: |
+          test "$GITHUB_REF_TYPE" = "tag" || { echo "Desktop publishing must run from a version tag."; exit 1; }
+          test "$GITHUB_REF_NAME" = "v1.1.6" || { echo "This workflow publishes the 1.1.6 release only; expected tag v1.1.6."; exit 1; }
 
       - name: Verify release gates
         run: npm run lint && npm run typecheck && npm test && npm run build
@@ -60,15 +93,85 @@ jobs:
           test -n "$TAURI_PUBLIC_KEY" || { echo "Missing TAURI_PUBLIC_KEY"; exit 1; }
           node -e "const fs=require('fs'); const p='src-tauri/tauri.conf.json'; const c=JSON.parse(fs.readFileSync(p,'utf8')); c.plugins.updater.pubkey=process.env.TAURI_PUBLIC_KEY; fs.writeFileSync(p, JSON.stringify(c,null,2)+'\\n')"
 
+      - name: Verify desktop release configuration
+        run: npm run desktop:release-check
+
+      - name: Verify platform signing secrets
+        if: matrix.secret_check != 'linux'
+        shell: bash
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ "${{ matrix.secret_check }}" = "windows" ]; then
+            test -n "$WINDOWS_CERTIFICATE" || { echo "Missing WINDOWS_CERTIFICATE"; exit 1; }
+            test -n "$WINDOWS_CERTIFICATE_PASSWORD" || { echo "Missing WINDOWS_CERTIFICATE_PASSWORD"; exit 1; }
+          fi
+          if [ "${{ matrix.secret_check }}" = "macos" ]; then
+            test -n "$APPLE_CERTIFICATE" || { echo "Missing APPLE_CERTIFICATE"; exit 1; }
+            test -n "$APPLE_CERTIFICATE_PASSWORD" || { echo "Missing APPLE_CERTIFICATE_PASSWORD"; exit 1; }
+            test -n "$APPLE_ID" || { echo "Missing APPLE_ID"; exit 1; }
+            test -n "$APPLE_PASSWORD" || { echo "Missing APPLE_PASSWORD"; exit 1; }
+            test -n "$APPLE_TEAM_ID" || { echo "Missing APPLE_TEAM_ID"; exit 1; }
+          fi
+
+      - name: Import Windows signing certificate
+        if: matrix.secret_check == 'windows'
+        shell: powershell
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path certificate | Out-Null
+          [System.IO.File]::WriteAllText('certificate/certificate.txt', $env:WINDOWS_CERTIFICATE)
+          certutil -decode certificate/certificate.txt certificate/certificate.pfx
+          Remove-Item certificate/certificate.txt
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath certificate/certificate.pfx -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          "TAURI_WINDOWS_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Configure Windows code signing
+        if: matrix.secret_check == 'windows'
+        shell: bash
+        run: |
+          test -n "$TAURI_WINDOWS_CERTIFICATE_THUMBPRINT" || { echo "Windows certificate thumbprint was not detected"; exit 1; }
+          node -e "const fs=require('fs'); const p='src-tauri/tauri.conf.json'; const c=JSON.parse(fs.readFileSync(p,'utf8')); c.bundle.windows={certificateThumbprint:process.env.TAURI_WINDOWS_CERTIFICATE_THUMBPRINT,digestAlgorithm:'sha256',timestampUrl:'http://timestamp.sectigo.com'}; fs.writeFileSync(p, JSON.stringify(c,null,2)+'\\n')"
+
       - name: Build app and package desktop installer
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          NO_STRIP: ${{ matrix.secret_check == 'linux' && '1' || '' }}
         with:
-          tagName: ${{ github.ref_name || 'v1.1.0' }}
-          releaseName: 'MoonScribe ${{ github.ref_name || "v1.1.0" }}'
-          releaseBody: 'MoonScribe 1.1.0 desktop release.'
+          tagName: ${{ github.ref_name }}
+          releaseName: 'MoonScribe ${{ github.ref_name }}'
+          releaseBody: 'MoonScribe 1.1.6 desktop release. See docs/release-1.1.6.md for the feature inventory and desktop release boundaries.'
           includeUpdaterJson: true
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --bundles ${{ matrix.bundles }}
+
+      - name: Verify generated desktop artifacts
+        shell: bash
+        env:
+          DESKTOP_BUNDLES: ${{ matrix.bundles }}
+        run: npm run desktop:artifact-check > "checksums-${{ matrix.secret_check }}.txt"
+
+      - name: Upload artifact checksums
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" "checksums-${{ matrix.secret_check }}.txt" --clobber

@@ -10,6 +10,7 @@ import { keybindFromEvent } from '../utils/keybinds'
 // Results are grouped by Chapters, Characters, Notes, Worldbuilding,
 // Relationships and Novels; fully keyboard-navigable.
 const GROUPS = [
+  { key: 'actions', label: 'Quick actions', icon: 'fa-solid fa-bolt' },
   { key: 'chapters', label: 'Chapters', icon: 'fa-solid fa-pen-nib' },
   { key: 'characters', label: 'Characters', icon: 'fa-solid fa-user' },
   { key: 'notes', label: 'Notes', icon: 'fa-regular fa-note-sticky' },
@@ -20,6 +21,13 @@ const GROUPS = [
   ,{ key: 'media', label: 'Media', icon: 'fa-regular fa-images' }
   ,{ key: 'website', label: 'Author Website', icon: 'fa-solid fa-globe' }
   ,{ key: 'settings', label: 'Settings', icon: 'fa-solid fa-sliders' }
+]
+const ACTIONS = [
+  { id: 'dashboard', title: 'Open dashboard', subtitle: 'Return to your novel library', keywords: 'home library' },
+  { id: 'quick-capture', title: 'Quick capture', subtitle: 'Save an idea without leaving your current workspace', keywords: 'idea note inbox' },
+  { id: 'start-session', title: 'Start writing session', subtitle: 'Reset the session timer and begin a focused writing block', keywords: 'sprint focus timer words' },
+  { id: 'sync', title: 'Sync now', subtitle: 'Push local changes and pull cloud updates', keywords: 'cloud refresh' },
+  { id: 'settings', title: 'Open settings', subtitle: 'Configure your writing environment', keywords: 'preferences account' },
 ]
 const SETTING_RESULTS = [
   ['themes','Themes and colour','Parchment, Midnight, AMOLED and accent colours'],['layout','App layout','Writer Studio, Visual Library or Compact'],['paper','Paper texture','Paper grain and intensity'],['font','Editor typography','Font size, line height and reading width'],['motion','Motion and animation','Reduce motion and interface effects'],['security','Lock & security','App lock, sessions and account security'],['sync','Sync','Cloud library, Discord and signed-in devices'],['keybinds','Keyboard shortcuts','View all MoonScribe keybinds'],['quick-capture','Quick capture','Save a note to a novel without leaving your current workspace'],['find-replace','Find and replace','Search and replace text in the active chapter']
@@ -35,7 +43,7 @@ export default function CommandPalette() {
   const [active, setActive] = useState(0)
   const inputRef = useRef(null)
   const navigate = useNavigate()
-  const { openSettings, settings } = useApp()
+  const { openSettings, settings, syncNow } = useApp()
 
   // Global shortcuts: Ctrl+K / Ctrl+Shift+P toggles, Esc closes.
   useEffect(() => {
@@ -55,8 +63,8 @@ export default function CommandPalette() {
   useEffect(() => {
     if (!open) return
     setQuery('')
-    setResults(null)
-    setFlat([])
+     setResults({ actions: ACTIONS })
+     setFlat(ACTIONS.map((r) => ({ group: 'actions', r })))
     setActive(0)
     const t = setTimeout(() => inputRef.current?.focus(), 20)
     return () => clearTimeout(t)
@@ -68,11 +76,12 @@ export default function CommandPalette() {
     let cancelled = false
     const t = setTimeout(async () => {
       if (!query.trim()) {
-        setResults(null)
-        setFlat([])
+        setResults({ actions: ACTIONS })
+        setFlat(ACTIONS.map((r) => ({ group: 'actions', r })))
         return
       }
       const res = await searchAll(query)
+      res.actions = ACTIONS.filter((item) => `${item.title} ${item.subtitle} ${item.keywords}`.toLowerCase().includes(query.trim().toLowerCase()))
       res.settings = SETTING_RESULTS.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(query.trim().toLowerCase()))
       res.website = 'author website'.includes(query.trim().toLowerCase()) ? [{ id: 'author-website', title: 'Author Website', subtitle: 'Design and publish your public author profile' }] : []
       if (cancelled) return
@@ -93,10 +102,18 @@ export default function CommandPalette() {
   const go = useCallback(
     (group, r) => {
       setOpen(false)
-      if (group === 'novels') {
+       if (group === 'novels') {
         navigate(`/novel/${r.id}`)
         return
-      }
+       }
+       if (group === 'actions') {
+         if (r.id === 'dashboard') navigate('/dashboard')
+         else if (r.id === 'quick-capture') window.dispatchEvent(new CustomEvent('moonscribe:quick-capture-open'))
+         else if (r.id === 'start-session') window.dispatchEvent(new CustomEvent('moonscribe:writing-session-start'))
+         else if (r.id === 'sync') void syncNow?.()
+         else openSettings()
+         return
+       }
       if (group === 'settings') {
         if (r.id === 'quick-capture') window.dispatchEvent(new CustomEvent('moonscribe:quick-capture-open'))
         else if (r.id === 'find-replace') window.dispatchEvent(new CustomEvent('moonscribe:find-replace-open'))
@@ -114,7 +131,7 @@ export default function CommandPalette() {
       if (group === 'website') { navigate('/author-website'); return }
       navigate(`/novel/${r.novelId}/${SECTION_FOR[group]}`)
     },
-    [navigate, openSettings]
+    [navigate, openSettings, syncNow]
   )
 
   const onKeyDown = (e) => {
@@ -136,47 +153,44 @@ export default function CommandPalette() {
   const hasQuery = query.trim().length > 0
 
   return createPortal(
-    <div className="palette-overlay" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label="Search everything" onKeyDown={onKeyDown}>
-        <div className="palette-input-row">
-          <Icon icon="fa-solid fa-magnifying-glass" />
+    <div className="palette-overlay !items-start !bg-slate-950/70 !px-4 !pt-[12vh] backdrop-blur-md" onMouseDown={(e) => e.target === e.currentTarget && setOpen(false)}>
+      <div className="palette !w-full !max-w-2xl !overflow-hidden !rounded-2xl !border !border-white/10 !bg-[#15151b]/95 !shadow-[0_28px_100px_rgba(0,0,0,.55)]" role="dialog" aria-modal="true" aria-label="Search everything" onKeyDown={onKeyDown}>
+        <div className="palette-input-row !h-16 !gap-3 !border-b !border-white/10 !px-5 !py-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-300/10 text-amber-300"><Icon icon="fa-solid fa-wand-magic-sparkles" /></span>
           <input
             ref={inputRef}
-            className="palette-input"
+            className="palette-input !h-10 !border-0 !bg-transparent !px-0 !text-base !text-stone-100 !shadow-none focus:!ring-0"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search chapters, characters, notes, worldbuilding…"
             aria-label="Search everything"
           />
-          <kbd className="palette-kbd">Esc</kbd>
+          <kbd className="palette-kbd !rounded-md !border !border-white/10 !bg-white/5 !px-2 !py-1 !text-[10px] !text-stone-400">Esc</kbd>
         </div>
-        <div className="palette-body">
-          {!hasQuery ? (
-            <div className="palette-hint">
-              Type to search across every novel. <kbd>↑</kbd><kbd>↓</kbd> to move, <kbd>Enter</kbd> to open.
-            </div>
-          ) : total === 0 ? (
-            <div className="palette-hint">Nothing found for “{query}”.</div>
-          ) : (
+        <div className="palette-body !max-h-[min(62vh,560px)] !space-y-4 !p-3">
+           {!hasQuery && <div className="palette-hint !rounded-xl !border !border-amber-300/10 !bg-amber-300/[.04] !px-4 !py-3 !text-xs !text-stone-400"><Icon icon="fa-solid fa-lightbulb" className="mr-2 text-amber-300" /> Search your stories or choose an action. <kbd>↑</kbd><kbd>↓</kbd> to move, <kbd>Enter</kbd> to open.</div>}
+           {hasQuery && total === 0 ? (
+             <div className="palette-hint !rounded-xl !border !border-white/10 !bg-white/[.03] !px-4 !py-10 !text-center !text-sm !text-stone-400"><Icon icon="fa-solid fa-moon" className="mb-3 text-2xl text-amber-300/70" /><br />Nothing found for “{query}”.</div>
+           ) : (
             <div className="palette-groups">
               {GROUPS.map((g) => {
                 const groupItems = results?.[g.key] || []
                 if (!groupItems.length) return null
                 return (
-                  <div className="palette-group" key={g.key}>
-                    <div className="palette-group-label">
-                      <Icon icon={g.icon} /> {g.label}
+                  <div className="palette-group !space-y-1" key={g.key}>
+                    <div className="palette-group-label !px-3 !pb-1 !text-[10px] !font-semibold !uppercase !tracking-[.16em] !text-stone-500">
+                      <Icon icon={g.icon} className="mr-2 !text-amber-300/80" /> {g.label}
                     </div>
                     {groupItems.map((r) => {
                       const index = flat.findIndex((f) => f.group === g.key && f.r.id === r.id)
                       return (
                         <button
                           key={`${g.key}:${r.id}`}
-                          className={`palette-item ${index === active ? 'active' : ''}`}
+                          className={`palette-item !rounded-xl !border !border-transparent !px-3 !py-3 !transition-colors ${index === active ? 'active !border-amber-300/20 !bg-amber-300/[.08]' : 'hover:!border-white/10 hover:!bg-white/[.04]'}`}
                           onMouseEnter={() => setActive(index)}
                           onClick={() => go(g.key, r)}
                         >
-                          <span className="palette-item-title">{highlight(r.title || 'Untitled', r.match || query)}</span>
+                          <span className="palette-item-title !text-sm !font-medium !text-stone-100">{highlight(r.title || 'Untitled', r.match || query)}</span>
                           {r.subtitle && <span className="palette-item-sub">{r.subtitle}</span>}
                           {r.preview && <span className="palette-item-preview">{highlight(r.preview, r.match || query)}</span>}
                         </button>
@@ -187,6 +201,10 @@ export default function CommandPalette() {
               })}
             </div>
           )}
+        </div>
+        <div className="flex items-center justify-between border-t border-white/10 px-5 py-2.5 text-[10px] uppercase tracking-[.12em] text-stone-500">
+          <span><Icon icon="fa-solid fa-sparkles" className="mr-2 text-amber-300/70" />MoonScribe command centre</span>
+          <span><kbd className="mr-1 rounded border border-white/10 px-1.5 py-0.5">↑↓</kbd> navigate <kbd className="ml-2 mr-1 rounded border border-white/10 px-1.5 py-0.5">↵</kbd> open</span>
         </div>
       </div>
     </div>,

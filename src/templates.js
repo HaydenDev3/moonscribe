@@ -1,13 +1,13 @@
 // Starter structures for a new novel. Each template seeds a handful of
 // chapters so the skeleton is ready before the first sentence is written.
-// The `blank` template is the implicit default (a single quiet chapter).
+// The `blank` template intentionally contains no outline nodes.
 
 export const NOVEL_TEMPLATES = [
   {
     key: 'blank',
     label: 'Blank page',
-    blurb: 'One quiet chapter, nothing assumed.',
-    chapters: [{ kind: 'chapter', title: 'Chapter One', content: '' }]
+    blurb: 'A completely empty manuscript, ready when you are.',
+    chapters: []
   },
   {
     key: 'three-act',

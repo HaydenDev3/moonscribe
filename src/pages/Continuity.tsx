@@ -56,6 +56,7 @@ export default function Continuity({ novelId, embedded }) {
             <span className="stat">{counts.chapters} chapters</span>
             <span className="stat">{counts.characters} characters</span>
             <span className="stat">{counts.places} places</span>
+            <span className="stat">{(report?.issues || []).filter((i) => i.kind === 'design').length} design checks</span>
           </div>
         )}
 

@@ -1,6 +1,6 @@
 [package]
 name = "moonscribe"
-version = "1.1.2"
+version = "1.1.6"
 description = "MoonScribe desktop app"
 authors = ["MoonScribe"]
 license = "MIT"

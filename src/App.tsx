@@ -15,6 +15,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Novel = lazy(() => import('./pages/Novel'))
 const Settings = lazy(() => import('./components/Settings'))
 const AccountCentre = lazy(() => import('./components/AccountCentre'))
+const ProfileSetupWizard = lazy(() => import('./components/ProfileSetupWizard'))
 import Onboarding from './pages/Onboarding'
 import ErrorBoundary from './components/ErrorBoundary'
 import FeatureGuard, { clearFeatureStatus } from './components/FeatureGuard'
@@ -22,6 +23,7 @@ import NotFound from './pages/NotFound'
 import LockScreen from './components/LockScreen'
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 const PublicPage = lazy(() => import('./pages/PublicPage'))
+const Trash = lazy(() => import('./pages/Trash'))
 import { purgeExpired } from './db/trash'
 import './styles/beta.css'
 import './styles/notifications.css'
@@ -31,11 +33,12 @@ import './styles/responsive.css'
 import AnnouncementBanner from './components/AnnouncementBanner'
 import StartupDigest from './components/StartupDigest'
 import Icon from './components/Icon'
+import Select from './components/Select'
 import { createNote } from './db/notes'
 import { updateDiscordPresence, clearDiscordPresence } from './platform/discordPresence'
 
 const PrintView = lazy(() => import('./pages/PrintView'))
-const AuthorWebsite = lazy(() => import('./pages/AuthorWebsite'))
+const AuthorWebsite = lazy(() => import('./pages/AuthorWebsiteBuilder'))
 const PublicAuthorWebsite = lazy(() => import('./pages/PublicAuthorWebsite'))
 
 function Loading() {
@@ -106,13 +109,14 @@ export default function App() {
     accountReady?: boolean
     accountCentreOpen?: boolean
     closeAccountCentre?: () => void
+    profileSetupOpen?: boolean
     guestMode?: boolean
     sync?: { status?: string }
     hasRole?: (role: string) => boolean
     novels?: Array<{ id: string; title: string }>
     toast?: (message: string) => void
   }
-  const { onboardingDone, appLock, locked, unlockApp, syncUsername, accountReady, guestMode, hasRole, accountCentreOpen, closeAccountCentre } = appState
+  const { onboardingDone, appLock, locked, unlockApp, syncUsername, accountReady, guestMode, hasRole, accountCentreOpen, closeAccountCentre, profileSetupOpen } = appState
   const hasNovel = (appState.novels || []).length > 0
   const initialLibrarySync = !!syncUsername && ['connecting', 'syncing'].includes(appState.sync?.status)
 
@@ -193,6 +197,7 @@ export default function App() {
           <Route path="/community" element={<PublicPage page="community" />} />
           <Route path="/contact" element={<PublicPage page="contact" />} />
           <Route path="/dashboard" element={enterStudio(<FeatureGuard featureName="dashboard" title="Dashboard unavailable"><Dashboard /></FeatureGuard>)} />
+          <Route path="/trash" element={enterStudio(<Trash />)} />
           <Route path="/author-website" element={enterStudio(<AuthorWebsite />)} />
           <Route path="/@:username" element={<PublicAuthorWebsite />} />
           <Route path="/@:username/about" element={<PublicAuthorWebsite />} />
@@ -218,6 +223,7 @@ export default function App() {
         <CommandPalette />
         <Settings />
         {accountCentreOpen && <Suspense fallback={null}><AccountCentre onClose={closeAccountCentre} /></Suspense>}
+        {profileSetupOpen && <Suspense fallback={null}><ProfileSetupWizard /></Suspense>}
         <Toasts />
       </ErrorBoundary>
     </Router>
@@ -299,5 +305,5 @@ function GlobalQuickCapture({ novels, toast }) {
     toast?.(`Saved to ${novel.title}.`)
     close()
   }
-  return <div className="quick-capture-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><section className="quick-capture-modal" role="dialog" aria-modal="true" aria-labelledby="quick-capture-title"><header><div><span className="settings-panel-kicker">Capture</span><h2 id="quick-capture-title">Quick capture</h2></div><button className="button button-quiet" type="button" onClick={close} aria-label="Close quick capture"><Icon icon="fa-solid fa-xmark" /></button></header><div className="quick-capture-templates" role="group" aria-label="Capture templates">{Object.entries(templates).map(([id, item]) => <button key={id} type="button" className={template === id ? 'active' : ''} onClick={() => chooseTemplate(id)}>{item.label}</button>)}</div><textarea autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="A line, scene idea, or detail before it disappears…" aria-label="Quick capture note" rows={6} /><label>Save to<select value={novelId} onChange={(event) => setNovelId(event.target.value)}>{novels.map((novel) => <option key={novel.id} value={novel.id}>{novel.title}</option>)}</select></label><footer><span>Ctrl/Cmd + Shift + K anytime</span><button className="button button-primary" type="button" disabled={!value.trim() || !novelId} onClick={() => void save()}>Save capture</button></footer></section></div>
+  return <div className="quick-capture-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><section className="quick-capture-modal" role="dialog" aria-modal="true" aria-labelledby="quick-capture-title"><header><div><span className="settings-panel-kicker">Capture</span><h2 id="quick-capture-title">Quick capture</h2></div><button className="button button-quiet" type="button" onClick={close} aria-label="Close quick capture"><Icon icon="fa-solid fa-xmark" /></button></header><div className="quick-capture-templates" role="group" aria-label="Capture templates">{Object.entries(templates).map(([id, item]) => <button key={id} type="button" className={template === id ? 'active' : ''} onClick={() => chooseTemplate(id)}>{item.label}</button>)}</div><textarea autoFocus value={value} onChange={(event) => setValue(event.target.value)} placeholder="A line, scene idea, or detail before it disappears…" aria-label="Quick capture note" rows={6} /><label>Save to<Select ariaLabel="Save capture to novel" width="100%" value={novelId} onChange={setNovelId} options={novels.map((novel) => ({ value: novel.id, label: novel.title }))} /></label><footer><span>Ctrl/Cmd + Shift + K anytime</span><button className="button button-primary" type="button" disabled={!value.trim() || !novelId} onClick={() => void save()}>Save capture</button></footer></section></div>
 }

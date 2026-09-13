@@ -1,16 +1,18 @@
 # Tauri desktop application
 
+> Current release: **1.1.6**.
+
 ## Current status
 
 MoonScribe uses Tauri 2 to package the shared React/Vite frontend. Desktop uses native SQLite as its authoritative repository, with WAL settings, versioned migrations, profile-scoped records, backups, OS keyring credential commands, deep-link plumbing, window-size/position persistence, tray access, native notifications, and backup-before-update hooks. On first launch after the migration, existing IndexedDB and earlier native-mirror records are merged into profile-scoped SQLite records; subsequent desktop reads and writes use SQLite only. Web/PWA builds continue to use IndexedDB.
 
-Release configuration still required includes the GitHub secrets `TAURI_PUBLIC_KEY`, `TAURI_SIGNING_PRIVATE_KEY`, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, plus full packaged-app QA. Quick Capture is available by Ctrl/Cmd+Shift+K even when the desktop window is unfocused, and from the command palette. The release workflow now refuses to package without the signing secrets and injects the public key into the updater configuration for the build. The installer registers Markdown, DOCX, EPUB, and JSON backup associations; OS-opened Markdown, plain-text, RTF, DOCX, and EPUB files route into the active novel’s chapter importer. JSON backup restore remains available through the dedicated recovery flow.
+Release configuration still requires the GitHub secrets `TAURI_PUBLIC_KEY`, `TAURI_SIGNING_PRIVATE_KEY`, and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, plus platform signing credentials and full packaged-app QA. The release workflow refuses to package without updater signing secrets and injects the public key into the build configuration without committing it. Windows produces a signed NSIS installer, macOS produces a signed/notarized DMG, and Linux produces AppImage and `.deb` packages. Quick Capture is available by Ctrl/Cmd+Shift+K even when the desktop window is unfocused, and from the command palette. The installer registers Markdown, DOCX, EPUB, and JSON backup associations; OS-opened Markdown, plain-text, RTF, DOCX, and EPUB files route into the active novel’s chapter importer. JSON backup restore remains available through the dedicated recovery flow.
 
 Discord Rich Presence is opt-in and desktop-only. The bundled Discord Application ID is `1537750421458780170`; `MOONSCRIBE_DISCORD_CLIENT_ID` may override it for development or a future application. The app publishes only generic workspace activity and silently disables the integration when Discord is not available.
 
 ## Windows toolchain
 
-Install Rust stable, Node/npm, WebView2, and Visual Studio Build Tools with the Desktop development with C++ workload and Windows SDK. `npm run tauri:build` produces the Windows NSIS installer; MSI packaging is intentionally omitted because the release path is NSIS.
+Install Rust stable and Node/npm. Windows additionally requires WebView2 and Visual Studio Build Tools with the Desktop development with C++ workload and Windows SDK. `npm run tauri:build` produces the native bundles configured for the current host; CI selects Windows NSIS, macOS DMG, or Linux AppImage/DEB explicitly. MSI packaging is intentionally omitted.
 
 ## Local development without port collisions
 

@@ -4,7 +4,11 @@ import { defaultWorkspacePreferences } from '../workspaces/registry'
 export async function getWorkspacePreferences(novelId) {
   const db = await getDB()
   const record = await db.get('workspacePreferences', novelId)
-  return { id: novelId, novelId, ...defaultWorkspacePreferences(), ...(record || {}), names: { ...(record?.names || {}) }, panels: { ...(record?.panels || {}) } }
+  const defaults = defaultWorkspacePreferences()
+  // Add newly introduced default-visible workspaces to existing novels while
+  // preserving any deliberate visibility choices for older workspaces.
+  const enabled = record?.enabled ? [...new Set([...record.enabled, 'interior-layout'])] : defaults.enabled
+  return { id: novelId, novelId, ...defaults, ...(record || {}), enabled, names: { ...(record?.names || {}) }, panels: { ...(record?.panels || {}) } }
 }
 
 export async function updateWorkspacePreferences(novelId, patch) {

@@ -1,5 +1,7 @@
 # Architecture
 
+> Current release: **1.1.6**. This document describes implemented boundaries, not planned mockups.
+
 ## System overview
 
 MoonScribe has four cooperating layers:
@@ -29,7 +31,7 @@ Local writes must complete before the interface reports a manuscript as saved. C
 
 ## Server
 
-`server/index.js` creates a Node HTTP/WebSocket server and a SQLite schema. It implements password/Google/Discord account paths, hashed bearer sessions, email verification and 2FA codes, per-user synchronized records, invitations, membership, presence, and collaboration access checks.
+`server/index.js` creates a Node HTTP/WebSocket server and a SQLite schema. It implements password/Google/Discord account paths, hashed bearer sessions, email verification and 2FA codes, per-user synchronized records, invitations, membership, presence, and collaboration access checks. Each account records a primary connector; linked provider IDs are secondary identities, and the primary connector determines the public profile avatar.
 
 The current user schema stores provider identifiers on `users`. The production target is a stable internal user ID plus normalized `auth_identities` and `passkeys` tables. That migration must preserve existing user IDs and record ownership.
 
@@ -53,3 +55,15 @@ Vite builds static assets and `vite-plugin-pwa` generates a service worker. Font
 - **Session-only:** open modal, current settings page, transient search, focus session, and toasts.
 
 New settings must declare a scope and migration/default behavior before being added.
+
+## 1.1.6 presentation architecture
+
+The Designer and Interior Layout are deliberately stateful production workspaces rather than static previews:
+
+- `BookDesigner.tsx` owns the novel-specific cover state, palette/template actions, typography controls, surface selection, and live preview composition.
+- `CoverMockup3D.tsx` receives the current surface state and remounts when palette or artwork identity changes, keeping the rendered cover in step with the selected controls.
+- Interior Layout derives preview pages from canonical chapter content and applies chapter-level presentation settings, including drop caps, without mutating the manuscript.
+- Shared custom selectors and Tailwind v4 utility styling keep controls visually consistent across the Designer, Interior Layout, and author-site builder.
+- The Author Website builder keeps editable content and responsive preview state in the application model; Follow is intentionally local-persistent until a social graph backend exists.
+
+This separation keeps book-production choices novel-scoped while preserving the local-first repository and the editor's manuscript content as the source material.

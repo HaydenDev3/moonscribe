@@ -12,6 +12,27 @@ export async function listMoodboard(novelId) {
   return all.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
 }
 
+// The binder only needs a count and a handful of thumbnails. Avoid retaining
+// every large image data URL in the editor route while keeping the full list
+// available to the Media Library.
+export async function listMoodboardSidebar(novelId, thumbnailLimit = 5) {
+  const db = await getDB()
+  const summaries = []
+  let cursor = await db.transaction('moodboard').objectStore('moodboard').index('by-novel').openCursor(novelId)
+  while (cursor) {
+    const { image, ...summary } = cursor.value
+    summaries.push({ ...summary, image: null })
+    cursor = await cursor.continue()
+  }
+  summaries.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+  const thumbnails = summaries.filter((item) => item.kind === 'image').slice(0, thumbnailLimit)
+  await Promise.all(thumbnails.map(async (summary) => {
+    const full = await db.get('moodboard', summary.id)
+    summary.image = full?.image || null
+  }))
+  return summaries
+}
+
 export async function createTile(novelId, data) {
   const now = Date.now()
   const kind = data.kind || 'note' // 'image' | 'note' | 'link' | 'palette'

@@ -23,19 +23,32 @@ export type CollaborationPresence = {
 }
 
 let realtimeUnavailableUntil = 0
+let realtimeUnavailableRequest: Promise<any> | null = null
 
 async function realtimeToken(novelId: string) {
   if (Date.now() < realtimeUnavailableUntil) return null
   const cfg = await getConfig()
-  const response = await fetch(`${cfg.server}/api/shares/realtime-token?novelId=${encodeURIComponent(novelId)}`, { headers: { Authorization: `Bearer ${cfg.token}` } })
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    const error = new Error(data.error || 'Realtime collaboration is unavailable.') as Error & { status?: number }
-    error.status = response.status
-    if (response.status === 503) realtimeUnavailableUntil = Date.now() + 60_000
-    throw error
-  }
-  return data
+  if (!cfg.server || !cfg.token) return null
+  if (realtimeUnavailableRequest) return realtimeUnavailableRequest
+  realtimeUnavailableRequest = (async () => {
+    try {
+      const response = await fetch(`${cfg.server}/api/shares/realtime-token?novelId=${encodeURIComponent(novelId)}`, { headers: { Authorization: `Bearer ${cfg.token}` } })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        if (response.status === 503) {
+          realtimeUnavailableUntil = Date.now() + 60_000
+          return null
+        }
+        const error = new Error(data.error || 'Realtime collaboration is unavailable.') as Error & { status?: number }
+        error.status = response.status
+        throw error
+      }
+      return data
+    } finally {
+      realtimeUnavailableRequest = null
+    }
+  })()
+  return realtimeUnavailableRequest
 }
 
 export async function subscribeSupabasePresence(novelId: string, presence: CollaborationPresence, handlers: {

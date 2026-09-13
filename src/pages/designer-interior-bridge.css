@@ -1,0 +1,198 @@
+.designer-interior-mode{display:block!important;overflow:auto!important;padding-top:78px!important}
+.designer-interior-mode>.designer-left-panel,.designer-interior-mode>.ds-stage,.designer-interior-mode>.designer-inspector{display:none!important}
+.designer-interior-tab{display:block;height:100%;min-height:0}
+.designer-interior-tab .interior-layout{min-height:100%;padding:22px 24px 28px}
+@media(max-width:900px){.designer-interior-tab .interior-layout{padding:16px 14px 86px}}
+
+/* Desktop Designer: the tool rail is a compact tab strip, not a second
+   navigation column. The preview remains the flexible, dominant surface. */
+@media (min-width:901px) {
+  .cover-studio.ds-layout {
+    height:100%;
+    max-height:100%;
+    min-height:0;
+    overflow:hidden;
+  }
+  .cover-studio .designer-left-panel {
+    width:100%;
+    min-height:0;
+    overflow:hidden;
+  }
+  .cover-studio .designer-left-panel > .ds-icons { display:none!important; }
+  .cover-studio .designer-tool-tabs {
+    display:flex!important;
+    flex:0 0 auto;
+    align-items:center;
+    gap:3px;
+    min-height:44px;
+    padding:5px 7px;
+    overflow-x:auto;
+    overflow-y:hidden;
+    scrollbar-width:none;
+    border-bottom:1px solid rgba(255,255,255,.09);
+    background:#15161c;
+  }
+  .cover-studio .designer-tool-tabs::-webkit-scrollbar { display:none; }
+  .cover-studio .designer-tool-tabs button {
+    flex:1 0 auto;
+    min-height:32px;
+    padding:0 9px;
+    border:1px solid transparent;
+    border-radius:6px;
+    color:#92949c;
+    background:transparent;
+    font-size:.64rem;
+    white-space:nowrap;
+  }
+  .cover-studio .designer-tool-tabs button.active {
+    color:#f2d28f;
+    border-color:rgba(199,155,83,.45);
+    background:rgba(199,155,83,.14);
+  }
+  .cover-studio .ds-panel,
+  .cover-studio .ds-panel.open {
+    display:flex;
+    flex:1 1 auto;
+    width:100%;
+    min-width:0;
+    min-height:0;
+    overflow:hidden;
+    position:relative;
+  }
+  .cover-studio .ds-panel-head { flex:0 0 auto; min-height:42px; padding:8px 12px; }
+  .cover-studio .ds-panel-body {
+    min-width:0;
+    min-height:0;
+    height:auto;
+    flex:1 1 auto;
+    overflow:hidden;
+    padding:10px 12px 12px;
+  }
+  .cover-studio .ds-panel-body > .ds-hint { margin-bottom:7px; line-height:1.3; }
+  .cover-studio .ds-field { margin-bottom:7px; }
+  .cover-studio .ds-field input,
+  .cover-studio .ds-field select { min-height:32px; }
+  .cover-studio .ds-divider { margin:7px 0 6px; padding-top:7px; }
+  .cover-studio .designer-add-text-grid { gap:5px; margin:2px 0 8px; }
+  .cover-studio .designer-add-text-grid button {
+    min-height:38px;
+    padding:5px 7px;
+    grid-template-columns:18px minmax(0,1fr);
+    gap:1px 5px;
+    border-radius:6px;
+  }
+  .cover-studio .designer-add-text-grid button > span { width:17px; height:17px; font-size:.8rem; }
+  .cover-studio .designer-add-text-grid strong { font-size:.62rem; }
+  .cover-studio .designer-add-text-grid small { font-size:.52rem; }
+  .cover-studio .ds-toggle-row { margin-bottom:7px; }
+  .cover-studio .ds-swatch-row {
+    display:grid;
+    grid-template-columns:repeat(5, 22px);
+    grid-auto-rows:22px;
+    gap:6px;
+    max-height:50px;
+    margin-bottom:7px;
+    overflow-y:auto;
+    overflow-x:hidden;
+  }
+  .cover-studio .ds-swatch-color {
+    width:22px;
+    min-width:22px;
+    height:22px;
+    aspect-ratio:1;
+    border-radius:999px;
+  }
+  .cover-studio .designer-inspector-body { overflow:hidden; padding:10px 12px 12px; }
+  .cover-studio .designer-inspector-heading { margin:5px 0 7px; }
+  .cover-studio .designer-field { gap:3px; margin:7px 0; }
+  .cover-studio .designer-field input,
+  .cover-studio .designer-field select { min-height:32px; }
+  .cover-studio .designer-inspector-swatches {
+    display:grid;
+    grid-template-columns:repeat(8, 22px);
+    grid-auto-rows:22px;
+    gap:6px;
+    max-height:50px;
+    margin:6px 0 10px;
+    overflow-y:auto;
+    overflow-x:hidden;
+  }
+  .cover-studio .designer-inspector-swatches button {
+    width:22px;
+    min-width:22px;
+    height:22px;
+    aspect-ratio:1;
+    padding:0;
+    border-radius:999px;
+  }
+  .cover-studio .ds-template-grid,
+  .cover-studio .ds-theme-grid,
+  .cover-studio .ds-palette-grid,
+  .cover-studio .ds-mood-grid,
+  .cover-studio .ds-media-grid,
+  .cover-studio .ds-font-grid,
+  .cover-studio .ds-ornament-row {
+    overflow-y:auto;
+    max-height:calc(100% - 56px);
+    scrollbar-width:thin;
+    scrollbar-color:rgba(199,155,83,.4) transparent;
+  }
+}
+
+/* Book proof readability: short final lines should not be stretched across
+   the measure, and drop caps must follow the live control. */
+.interior-paper-body { overflow-wrap:break-word; }
+.interior-paper-body p { hyphens:auto; }
+.interior-paper-body.is-justified p { text-align:justify; text-align-last:left; }
+.interior-paper-body.is-left p { text-align:left; }
+.interior-paper-body.has-drop-caps p:first-of-type:first-letter { float:left; font:3.7em/.72 var(--chapter-font,Georgia,serif); padding:8px 4px 0 0; color:#17130f; }
+.interior-paper-body:not(.has-drop-caps) p:first-of-type:first-letter { float:none; font:inherit; padding:0; color:inherit; }
+.interior-layout .interior-field .cselect { width:100% !important; display:block; }
+.interior-layout .interior-field .cselect-field { width:100%; min-height:34px; padding:0 10px; border:1px solid var(--interior-border,rgba(255,255,255,.12)); border-radius:5px; background:rgba(20,29,38,.9); color:var(--interior-text,#eee7d8); font:inherit; text-align:left; }
+.interior-layout .interior-field .cselect-field:hover { border-color:rgba(224,174,75,.7); }
+.interior-layout .interior-preview-toolbar > .interior-preview-select { width:64px !important; margin-left:auto; }
+.interior-layout .interior-preview-toolbar > .interior-preview-select .cselect-field { min-height:29px; padding:0 7px; }
+.interior-chapter-opening.is-left { text-align:left; }
+.interior-workspace.inspector-closed { grid-template-columns:258px minmax(0,1fr); }
+@media(max-width:1200px) and (min-width:901px){.interior-workspace.inspector-closed{grid-template-columns:230px minmax(0,1fr)}}
+
+/* Tab changes replace the inspector body instead of stacking another tool on
+   top of Typography. */
+.interior-right-panel[data-tab="headers"] > .interior-section,
+.interior-right-panel[data-tab="headers"] > .interior-reset,
+.interior-right-panel[data-tab="numbers"] > .interior-section,
+.interior-right-panel[data-tab="numbers"] > .interior-reset,
+.interior-right-panel[data-tab="ornaments"] > .interior-section,
+.interior-right-panel[data-tab="ornaments"] > .interior-reset,
+.interior-right-panel[data-tab="global"] > .interior-section,
+.interior-right-panel[data-tab="global"] > .interior-reset { display:none; }
+.interior-extra-panel { min-height:0; }
+.interior-extra-copy { color:#9aa1a5; font-size:11px; line-height:1.5; margin:0 0 12px; }
+
+/* Small motion cue for the existing sidebar return affordance. */
+.sidebar-back { transition:color .18s ease, transform .18s ease; }
+.sidebar-back svg { transition:transform .18s ease; }
+.sidebar-back:hover { transform:translateX(2px); }
+.sidebar-back:hover svg { transform:translateX(-3px); }
+
+/* A quieter, denser action header for the interior workspace. */
+.interior-page-header { padding:15px 17px; margin-bottom:12px; border:1px solid rgba(255,255,255,.09); border-radius:11px; background:linear-gradient(110deg,rgba(20,26,32,.88),rgba(10,15,21,.72)); box-shadow:inset 0 1px rgba(255,255,255,.04),0 10px 28px rgba(0,0,0,.14); }
+.interior-page-header h1 { margin-top:6px; font-size:26px; }
+.interior-header-actions { gap:7px; }
+.interior-secondary-button,.interior-primary-button { transition:transform .18s var(--ease-out),background .18s ease,border-color .18s ease,box-shadow .18s ease; }
+.interior-secondary-button:hover,.interior-primary-button:hover { transform:translateY(-2px); box-shadow:0 8px 18px rgba(0,0,0,.22); }
+.interior-secondary-button:active,.interior-primary-button:active { transform:translateY(0) scale(.97); }
+.interior-primary-button { position:relative; overflow:hidden; }
+.interior-primary-button:after { content:""; position:absolute; inset:0 auto 0 -70%; width:45%; background:linear-gradient(90deg,transparent,rgba(255,255,255,.28),transparent); transform:skewX(-18deg); transition:left .5s ease; }
+.interior-primary-button:hover:after { left:125%; }
+.interior-tabs button { transition:transform .18s var(--ease-out),color .18s ease,background .18s ease; }
+.interior-tabs button:hover { transform:translateY(-1px); color:#f0d18f; }
+
+/* Compact the global toast only while this workspace is open. */
+body:has(.interior-layout) #root > div.fixed.right-6.top-6 { width:min(360px,calc(100vw - 2rem)); gap:.5rem; }
+body:has(.interior-layout) #root > div.fixed.right-6.top-6 > article { min-height:0; border-radius:14px; padding:12px 14px; }
+body:has(.interior-layout) #root > div.fixed.right-6.top-6 > article > div.relative { gap:11px; }
+body:has(.interior-layout) #root > div.fixed.right-6.top-6 > article > div.relative > div:first-child { width:36px; height:36px; font-size:14px; }
+body:has(.interior-layout) #root > div.fixed.right-6.top-6 h3 { margin-top:2px; font-size:14px; }
+body:has(.interior-layout) #root > div.fixed.right-6.top-6 p { margin-top:2px; font-size:11px; line-height:1.35; }
+body:has(.interior-layout) #root > div.fixed.right-6.top-6 > article > div.absolute.bottom-3 { bottom:5px; left:14px; right:14px; height:2px; }

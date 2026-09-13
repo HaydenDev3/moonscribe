@@ -20,6 +20,39 @@
   --font-heading: Literata, Georgia, serif;
   --radius: .75rem;
   --ease-moon: cubic-bezier(.22,1,.36,1);
+  --animate-rb-content-in: rb-content-in .42s var(--ease-moon) both;
+}
+
+@keyframes rb-content-in {
+  from { opacity: 0; transform: translateY(10px) scale(.992); filter: blur(2px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+/* React Bits-style motion primitives, kept local so MoonScribe owns the
+   behavior and can respect its reduced-motion setting. */
+@utility rb-animated-content {
+  animation: var(--animate-rb-content-in);
+}
+
+@utility rb-button-motion {
+  transition-property: transform, box-shadow, background-color, border-color, color, opacity;
+  transition-duration: 180ms;
+  transition-timing-function: var(--ease-moon);
+  will-change: transform;
+  &:hover:not(:disabled) { transform: translateY(-1px); }
+  &:active:not(:disabled) { transform: translateY(0) scale(.97); }
+  &:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+}
+
+@layer components {
+  :where(#root button, #root [role='button']):not(.no-motion) {
+    @apply rb-button-motion;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rb-animated-content { animation: none; }
+  :where(#root button, #root [role='button']):not(.no-motion) { transition: none; }
 }
 
 @keyframes digest-in { from { opacity: 0; transform: translateY(18px) scale(.97); } to { opacity: 1; transform: none; } }

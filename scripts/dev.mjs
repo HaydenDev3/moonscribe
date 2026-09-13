@@ -59,10 +59,14 @@ async function start() {
   // Keep API/auth configuration beside the Vite configuration during local
   // development. Reusing an existing local service makes repeated dev/Tauri
   // launches safe and avoids a misleading beforeDevCommand failure.
-  // Always refresh the MoonScribe API in development. Reusing a listener here
-  // leaves old email/auth code alive after a React restart.
-  if (await portIsOpen(3001)) restartMoonScribeApi(3001)
-  children.push(spawnNode(['--env-file-if-exists=.env.local', 'server/index.js']))
+  // Reuse an already-running API on every platform. The old implementation
+  // only replaced the listener on Windows, so Linux/macOS launches attempted
+  // to bind a second server and failed with EADDRINUSE.
+  if (await portIsOpen(3001)) {
+    console.log('   MoonScribe API already running on http://localhost:3001; reusing it.')
+  } else {
+    children.push(spawnNode(['--env-file-if-exists=.env.local', 'server/index.js']))
+  }
 
   if (!await waitForPort(3001)) {
     console.error('   MoonScribe API did not become ready on http://localhost:3001.')

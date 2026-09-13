@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type ChangeEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Icon from '../components/Icon'
+import ThemedSelect from '../components/Select'
 import WebsiteLoading from '../components/WebsiteLoading'
 import { useApp } from '../context/AppContext'
 import { getAuthorWebsite, saveAuthorWebsite } from '../db/authorWebsite'
@@ -558,7 +559,6 @@ export default function AuthorWebsite() {
     </main>
   )
 }
-
 function Panel({ title, icon, children }: { title: string; icon: string; children: ReactNode }) {
   return (
     <details open className="group rounded-2xl border border-white/10 bg-white/[.025]">
@@ -625,13 +625,7 @@ function Select({
   return (
     <label className={label}>
       {labelText}
-      <select className={field} value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map((x) => (
-          <option key={x} value={x}>
-            {x[0].toUpperCase() + x.slice(1)}
-          </option>
-        ))}
-      </select>
+      <ThemedSelect className={field} value={value} onChange={onChange} ariaLabel={labelText} width="100%" options={options.map((x) => ({ value: x, label: x[0].toUpperCase() + x.slice(1) }))} />
     </label>
   )
 }

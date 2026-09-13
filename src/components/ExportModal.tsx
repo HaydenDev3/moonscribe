@@ -13,6 +13,7 @@ import {
 import { designPrintTheme } from '../designs/registry'
 import { buildPrintFontOptions } from '../utils/fonts'
 import { useApp } from '../context/AppContext'
+import Select from './Select'
 
 const EXTENSIONS = { epub: 'epub', docx: 'docx', markdown: 'md', txt: 'txt', html: 'html', json: 'json' }
 
@@ -175,8 +176,8 @@ export default function ExportModal({ open, onClose, novel, chapters, toast, imp
                 {supportsTypography && (
                   <div className="export-setting-group export-typography">
                     <h4>Typography</h4>
-                    <label><span>Typeface</span><select value={printFont} onChange={(event) => setPrintFont(event.target.value)}>{printFontOptions.map((font) => <option key={font.value} value={font.value}>{font.label}</option>)}</select></label>
-                    <label><span>Line spacing</span><select value={lineSpacing} onChange={(event) => setLineSpacing(event.target.value)}><option value="1">Single</option><option value="1.15">Compact</option><option value="1.5">Book</option><option value="2">Double</option></select></label>
+                    <label><span>Typeface</span><Select ariaLabel="Typeface" value={printFont} onChange={setPrintFont} options={printFontOptions.map((font) => ({ value: font.value, label: font.label }))} /></label>
+                    <label><span>Line spacing</span><Select ariaLabel="Line spacing" value={lineSpacing} onChange={setLineSpacing} options={[{ value: '1', label: 'Single' }, { value: '1.15', label: 'Compact' }, { value: '1.5', label: 'Book' }, { value: '2', label: 'Double' }]} /></label>
                   </div>
                 )}
               </>

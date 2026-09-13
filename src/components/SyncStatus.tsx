@@ -22,6 +22,16 @@ const DOTS = {
   error: 'err'
 }
 
+const STATE_META = {
+  offline: { code: 'OFFLINE', icon: '○' },
+  local: { code: 'LOCAL_ONLY', icon: '●' },
+  connecting: { code: 'CONNECTING', icon: '↗' },
+  syncing: { code: 'SYNCING', icon: '↻' },
+  synced: { code: 'SYNCED', icon: '✓' },
+  attention: { code: 'QUEUED', icon: '◐' },
+  error: { code: 'ERROR', icon: '!' },
+}
+
 export default function SyncStatus({ onClick }) {
   const [status, setStatus] = useState({ status: 'offline', detail: '' })
   const [pending, setPending] = useState(0)
@@ -59,15 +69,18 @@ export default function SyncStatus({ onClick }) {
     ? `${label} · ${totalPending} queued`
     : label
   const dot = DOTS[status.status] || ''
+  const meta = STATE_META[status.status] || STATE_META.offline
+  const diagnostic = `${meta.code}${totalPending ? ` · ${totalPending} pending` : ''}${status.detail ? ` · ${status.detail}` : ''}`
 
   return (
     <button
       className={`sync-status ${status.status}`}
       onClick={onClick}
-      title={status.detail ? `${displayLabel} — ${status.detail}` : displayLabel}
+      title={diagnostic}
       aria-label={displayLabel}
     >
-      <span className={`dot ${dot}`} />
+      <span className={`dot ${dot}`} aria-hidden="true" />
+      <span className="sync-state-code" aria-hidden="true">{meta.icon}</span>
       <span className="sync-label" aria-live="polite">{displayLabel}</span>
     </button>
   )

@@ -1,6 +1,6 @@
 # Browser QA report
 
-Test date: 2026-08-22 19:04 AEST
+Test date: 2026-09-13 AEST
 
 ## Environment
 
@@ -22,6 +22,14 @@ Test date: 2026-08-22 19:04 AEST
 | Direct `#dashboard` route without account | PASS | Redirects to `#/?signin=1` and opens the sign-in flow. |
 | Mobile landing at 390×844 | PASS | No horizontal overflow (`scrollWidth` 380, viewport 390); no browser console errors. |
 | Browser console | PASS | No `error` or `warn` entries during the exercised journeys. |
+
+## 1.1.6 validation additions
+
+- A fresh in-app browser session reached the current Vite HTML shell on `/author-website`; the old production asset was not served.
+- Local development now disables PWA worker generation, while production builds continue to generate the offline worker.
+- The localhost bootstrap unregisters an installed worker and clears Cache Storage before the development module graph starts.
+- The source scan reports no native `<select>` outside the shared custom `Select` component.
+- The known production build warning is the size of the main JavaScript chunk, not a runtime or test failure.
 
 ## Follow-up coverage required before 1.0
 

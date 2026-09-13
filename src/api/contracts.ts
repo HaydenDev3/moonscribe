@@ -7,4 +7,4 @@ export type SyncRecord = { store: string; id: string; novelId?: string; updatedA
 export type SyncPushResponse = { ok?: boolean; accepted?: string[]; rejected?: Array<{ key: string; reason: string }>; serverTime?: number; requestId?: string }
 export type SyncPullResponse = { records: SyncRecord[]; serverTime: number; requestId?: string }
 
-export type ShareFailureCode = 'INVITE_EXPIRED' | 'ACCESS_REVOKED' | 'HOST_NOT_SYNCED' | 'ROOM_OFFLINE' | 'PERMISSION_DENIED'
+export type ShareFailureCode = 'INVITE_EXPIRED' | 'ACCESS_REVOKED' | 'HOST_NOT_SYNCED' | 'ROOM_OFFLINE' | 'ROOM_FULL' | 'REALTIME_UNAVAILABLE' | 'PERMISSION_DENIED'

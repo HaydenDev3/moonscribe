@@ -14,8 +14,11 @@
 .notification-item:hover, .notification-item.unread { background: #b6823514; }
 .notification-item span, .notification-popover .muted { color: var(--muted, #a99ba0); font-size: 12px; }
 .notification-empty { padding:24px 10px; text-align:center; }
+.dashboard-app .notification-bell { z-index: 40; }
+.dashboard-app .notification-popover { position: fixed; top: 74px; right: 24px; width: min(400px, calc(100vw - 32px)); max-height: min(520px, calc(100dvh - 96px)); z-index: 3000; }
 @media (max-width: 700px) {
   .notification-popover { position: fixed; top: 58px; right: 12px; width: min(400px, calc(100vw - 24px)); max-height: calc(100dvh - 82px); }
+  .dashboard-app .notification-popover { top: 66px; right: 12px; width: min(400px, calc(100vw - 24px)); max-height: calc(100dvh - 82px); }
 }
 .editor-link-popover { position:fixed; z-index:100; width:240px; padding:10px; border:1px solid var(--border,#3a3030); border-radius:12px; background:var(--panel,#151116); box-shadow:0 14px 40px #0008; }
 .editor-link-popover-url { display:flex; gap:8px; align-items:center; min-width:0; color:var(--charcoal,#fff); font-size:12px; }

@@ -5,6 +5,7 @@ import 'fake-indexeddb/auto'
 import { getDB } from '../src/db/db'
 import { createNovel, updateNovel } from '../src/db/novels'
 import { createChapter, updateChapter, deleteChapter } from '../src/db/chapters'
+import { trashRecord } from '../src/db/trash'
 import { blobToDataUrl, dataUrlToBlob, toWire, fromWire } from '../src/sync/serialize'
 import { collectPending, applyIncoming, push, pull, setConfig, getConfig, listConflicts, resolveConflict, recordsDiffer } from '../src/sync/engine'
 
@@ -99,6 +100,23 @@ describe('applyIncoming (LWW)', () => {
     const kept = await db.get('novels', n.id)
     expect(kept.title).toBe('Keep Me')
     expect(kept.pendingSync).toBe(true)
+  })
+
+  it('restores a locally trashed shared novel from the owner copy', async () => {
+    const n = await createNovel({ title: 'Removed share' })
+    await updateNovel(n.id, { sharedRole: 'editor' })
+    await trashRecord('novels', n.id)
+
+    await applyIncoming([{
+      store: 'novels', id: n.id, novelId: n.id, updatedAt: n.updatedAt,
+      deleted: false,
+      payload: { id: n.id, title: 'Recreated share', sharedRole: 'editor', updatedAt: n.updatedAt - 1 }
+    }])
+
+    const db = await getDB()
+    const restored = await db.get('novels', n.id)
+    expect(restored.title).toBe('Recreated share')
+    expect(restored.trashedAt).toBeUndefined()
   })
 })
 

@@ -94,10 +94,10 @@ export default function Timeline({ novelId, embedded }) {
 
   const filtered = scenes.filter((c) => {
     const m = c.meta || {}
-    const haystack = `${c.title || ''} ${c.content || ''} ${m.pov || ''} ${m.location || ''} ${m.beat || ''} ${m.timelineNote || ''}`.toLowerCase()
+    const haystack = `${c.title || ''} ${c.content || ''} ${m.pov || ''} ${m.location || ''} ${m.beat || ''} ${m.sceneGoal || ''} ${m.conflict || ''} ${m.outcome || ''} ${m.timelineNote || ''}`.toLowerCase()
     if (query && !haystack.includes(query.toLowerCase())) return false
     if (filterPart && c.folderId !== filterPart && c.parentId !== filterPart) return false
-    if (incompleteOnly && [m.pov, m.location, m.timeOfDay, m.beat, m.timelineNote].every(Boolean)) return false
+    if (incompleteOnly && [m.pov, m.location, m.timeOfDay, m.beat, m.sceneGoal, m.conflict, m.outcome, m.timelineNote].every(Boolean)) return false
     if (filterPov && m.pov !== filterPov) return false
     if (filterBeat && !(m.beat || '').toLowerCase().includes(filterBeat.toLowerCase())) return false
     if (filterTime && resolveTimeKey(m.timeOfDay) !== filterTime) return false

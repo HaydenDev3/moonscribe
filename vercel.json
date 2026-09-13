@@ -10,6 +10,14 @@
   ],
   "rewrites": [
     {
+      "source": "/updates",
+      "destination": "https://github.com/HaydenDev3/moonscribe/releases/latest/download/latest.json"
+    },
+    {
+      "source": "/updates/:path*",
+      "destination": "https://github.com/HaydenDev3/moonscribe/releases/latest/download/latest.json"
+    },
+    {
       "source": "/auth/:path*",
       "destination": "https://moonscribe-production.up.railway.app/auth/:path*"
     },

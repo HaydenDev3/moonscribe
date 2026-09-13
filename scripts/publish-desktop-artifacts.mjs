@@ -3,9 +3,11 @@ import { resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 
 const root = resolve(import.meta.dirname, '..')
+const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'))
+const version = packageJson.version
 const sourceDir = resolve(root, 'src-tauri', 'target', 'release', 'bundle', 'nsis')
 const publicDir = resolve(root, 'public', 'downloads')
-const publicName = 'MoonScribe_0.1.0_x64-setup.exe'
+const publicName = `MoonScribe_${version}_x64-setup.exe`
 
 await mkdir(publicDir, { recursive: true })
 const candidates = (await readdir(sourceDir)).filter((name) => name.toLowerCase().endsWith('-setup.exe'))

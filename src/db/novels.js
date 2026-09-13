@@ -1,4 +1,5 @@
 import { getDB, uid, putRecord, removeRecord, waitForNativeHydration } from './db'
+import { trashRecord } from './trash'
 
 export async function listNovels() {
   await waitForNativeHydration()
@@ -15,7 +16,7 @@ export async function listNovels() {
       await db.put('novels', novels[i])
     }
   }
-  return novels.sort((a, b) => (b.lastOpened || b.createdAt || 0) - (a.lastOpened || a.createdAt || 0))
+  return novels.filter((novel) => !novel.trashedAt).sort((a, b) => (b.lastOpened || b.createdAt || 0) - (a.lastOpened || a.createdAt || 0))
 }
 
 export async function getNovel(id) {
@@ -66,6 +67,10 @@ export async function unarchiveNovel(id) {
   const next = { ...novel, id: novel.id }
   delete next.archived
   return putRecord('novels', next)
+}
+
+export async function trashNovel(id) {
+  return trashRecord('novels', id)
 }
 
 export async function deleteNovel(id) {

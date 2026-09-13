@@ -1,0 +1,84 @@
+name: MoonScribe Windows beta
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v1.1.6-beta.*'
+
+jobs:
+  publish-windows-beta:
+    permissions:
+      contents: write
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Require a beta tag
+        shell: bash
+        run: |
+          test "$GITHUB_REF_TYPE" = "tag" || { echo "Windows beta publishing must run from a version tag."; exit 1; }
+          [[ "$GITHUB_REF_NAME" =~ ^v1\.1\.6-beta\.[0-9]+$ ]] || { echo "Expected a tag such as v1.1.6-beta.1."; exit 1; }
+
+      - name: Verify release gates
+        run: npm run lint && npm run typecheck && npm test && npm run build
+
+      - name: Configure updater public key for this build
+        shell: bash
+        env:
+          TAURI_PUBLIC_KEY: ${{ secrets.TAURI_PUBLIC_KEY }}
+        run: |
+          test -n "$TAURI_PUBLIC_KEY" || { echo "Missing TAURI_PUBLIC_KEY"; exit 1; }
+          node -e "const fs=require('fs'); const p='src-tauri/tauri.conf.json'; const c=JSON.parse(fs.readFileSync(p,'utf8')); c.plugins.updater.pubkey=process.env.TAURI_PUBLIC_KEY; fs.writeFileSync(p, JSON.stringify(c,null,2)+'\n')"
+
+      - name: Verify desktop release configuration
+        shell: bash
+        env:
+          TAURI_PUBLIC_KEY: ${{ secrets.TAURI_PUBLIC_KEY }}
+        run: npm run desktop:release-check
+
+      - name: Build unsigned Windows beta installer
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'MoonScribe ${{ github.ref_name }}'
+          releaseBody: |
+            Windows beta build for MoonScribe 1.1.6.
+
+            This beta installer is unsigned. Windows SmartScreen may show a warning; only install it if you trust this release and verify the published checksum.
+          releaseDraft: false
+          prerelease: true
+          includeUpdaterJson: true
+          args: --target x86_64-pc-windows-msvc --bundles nsis
+
+      - name: Verify generated beta artifact
+        shell: bash
+        env:
+          DESKTOP_BUNDLES: nsis
+        run: npm run desktop:artifact-check > checksums-windows-beta.txt
+
+      - name: Upload beta checksum
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" checksums-windows-beta.txt --clobber

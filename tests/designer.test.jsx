@@ -71,11 +71,11 @@ describe('Book designer (cover studio)', () => {
     expect(container.querySelector('.studio-bar')).not.toBeNull()
 
     const labels = [...container.querySelectorAll('.studio-rail-icon')].map((b) => b.getAttribute('aria-label'))
-    for (const l of ['Cover text', 'Cover image', 'Ornaments', 'Body text', 'Title page', 'Signature', 'Print & trim']) {
+    for (const l of ['Text', 'Background', 'Elements', 'Body text', 'Title page', 'Signature', 'Print & trim']) {
       expect(labels).toContain(l)
     }
     expect(labels).not.toContain('Design packs')
-    expect(container.querySelector('.studio-rail-head strong').textContent).toContain('Cover text')
+    expect(container.querySelector('.studio-rail-head strong').textContent).toContain('Text')
     expect(container.querySelector('.designer-workflow-bar')).not.toBeNull()
     expect([...container.querySelectorAll('.designer-workflow-step')].map((button) => button.textContent)).toHaveLength(5)
     expect(container.querySelector('.designer-book-system')).toBeNull()
@@ -104,7 +104,7 @@ describe('Book designer (cover studio)', () => {
 
   it('lists the built-in gallery and picks a backdrop for the cover', async () => {
     await renderDesigner()
-    await clickSection('Cover image')
+    await clickSection('Background')
     const grid = container.querySelector('.cover-pick-grid')
     expect(grid).not.toBeNull()
     expect(grid.querySelectorAll('.cover-pick').length).toBe(GALLERY.length)
@@ -117,7 +117,7 @@ describe('Book designer (cover studio)', () => {
 
   it('picks an ornament from the Ornaments section', async () => {
     await renderDesigner()
-    await clickSection('Ornaments')
+    await clickSection('Elements')
     const swatches = [...container.querySelectorAll('.studio-rail-scroll .swatch')].filter((s) => s.textContent.trim().length > 0)
     const star = swatches.find((s) => s.textContent.trim() === '✦')
     expect(star).not.toBeNull()

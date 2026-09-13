@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getSnapshot, getSnapshotTimeline } from '../db/snapshots'
 import Icon from './Icon'
+import Select from './Select'
 import { sanitizeStoredHtml } from '../utils/formatHtml'
 
 // Replay is intentionally paced like a writing session rather than a slideshow.
@@ -101,33 +102,53 @@ export default function SessionReplay({ chapterId, sessionStart, onClose }) {
     setLoaded(true)
   }, [chapterId, sessionStart])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    load()
+  }, [load])
 
   useEffect(() => {
     const meta = snaps[idx]
     let cancelled = false
     setShowComplete(false)
-    if (!meta) { setSnap(null); return undefined }
+    if (!meta) {
+      setSnap(null)
+      return undefined
+    }
     setLoadingSnapshot(true)
-    getSnapshot(meta.id).then((row) => {
-      if (!cancelled) setSnap(row || meta)
-    }).finally(() => { if (!cancelled) setLoadingSnapshot(false) })
-    return () => { cancelled = true }
+    getSnapshot(meta.id)
+      .then((row) => {
+        if (!cancelled) setSnap(row || meta)
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingSnapshot(false)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [snaps, idx])
 
   // Auto-play: advance idx every PLAY_INTERVAL ms
   useEffect(() => {
-    if (!playing) { clearInterval(playRef.current); return }
+    if (!playing) {
+      clearInterval(playRef.current)
+      return
+    }
     playRef.current = setInterval(() => {
       setIdx((prev) => {
-        if (prev >= snaps.length - 1) { setPlaying(false); return prev }
+        if (prev >= snaps.length - 1) {
+          setPlaying(false)
+          return prev
+        }
         return prev + 1
       })
     }, SPEEDS[speed])
     return () => clearInterval(playRef.current)
   }, [playing, snaps.length, speed])
 
-  const preview = useMemo(() => boundedSnapshotHtml(snap?.content || '', showComplete), [snap?.content, showComplete])
+  const preview = useMemo(
+    () => boundedSnapshotHtml(snap?.content || '', showComplete),
+    [snap?.content, showComplete]
+  )
   const previewLength = useMemo(() => htmlTextLength(preview.html), [preview.html])
   useEffect(() => {
     if (!playing || !typingAnimation || loadingSnapshot) {
@@ -147,7 +168,10 @@ export default function SessionReplay({ chapterId, sessionStart, onClose }) {
     frame = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(frame)
   }, [playing, typingAnimation, loadingSnapshot, previewLength, idx, speed])
-  const replayHtml = useMemo(() => truncateReplayHtml(preview.html, typedChars), [preview.html, typedChars])
+  const replayHtml = useMemo(
+    () => truncateReplayHtml(preview.html, typedChars),
+    [preview.html, typedChars]
+  )
   const ticks = useMemo(() => {
     if (snaps.length <= MAX_TICKS) return snaps.map((item, index) => ({ item, index }))
     return Array.from({ length: MAX_TICKS }, (_, tick) => {
@@ -162,7 +186,9 @@ export default function SessionReplay({ chapterId, sessionStart, onClose }) {
       <div className="replay-empty">
         <Icon icon="fa-solid fa-clock-rotate-left" />
         <span>No snapshots yet — keep writing and they'll appear here.</span>
-        <button className="replay-close" onClick={onClose} aria-label="Close replay"><Icon icon="fa-solid fa-xmark" /></button>
+        <button className="replay-close" onClick={onClose} aria-label="Close replay">
+          <Icon icon="fa-solid fa-xmark" />
+        </button>
       </div>
     )
   }
@@ -180,21 +206,36 @@ export default function SessionReplay({ chapterId, sessionStart, onClose }) {
           <Icon icon="fa-solid fa-clock-rotate-left" /> Writing Replay
         </span>
         <div className="replay-head-meta">
-          {snapMeta && <span className="replay-ts">{fmt(snapMeta.ts)} · {fmtAgo(snapMeta.ts)}</span>}
+          {snapMeta && (
+            <span className="replay-ts">
+              {fmt(snapMeta.ts)} · {fmtAgo(snapMeta.ts)}
+            </span>
+          )}
           {isLive && <span className="replay-live-badge">LIVE</span>}
         </div>
-        <button className="replay-close" onClick={onClose} aria-label="Close replay"><Icon icon="fa-solid fa-xmark" /></button>
+        <button className="replay-close" onClick={onClose} aria-label="Close replay">
+          <Icon icon="fa-solid fa-xmark" />
+        </button>
       </div>
 
       {/* Timeline scrubber */}
       <div className="replay-scrubber">
-        <div className="replay-summary"><span>Session evolution</span><b>{sessionDelta >= 0 ? '+' : ''}{sessionDelta} words</b></div>
+        <div className="replay-summary">
+          <span>Session evolution</span>
+          <b>
+            {sessionDelta >= 0 ? '+' : ''}
+            {sessionDelta} words
+          </b>
+        </div>
         <input
           type="range"
           min={0}
           max={snaps.length - 1}
           value={idx}
-          onChange={(e) => { setPlaying(false); setIdx(Number(e.target.value)) }}
+          onChange={(e) => {
+            setPlaying(false)
+            setIdx(Number(e.target.value))
+          }}
           aria-label="Scrub through writing history"
         />
         <div className="replay-tick-row" aria-hidden="true">
@@ -213,7 +254,10 @@ export default function SessionReplay({ chapterId, sessionStart, onClose }) {
       <div className="replay-controls">
         <button
           className="replay-btn"
-          onClick={() => { setPlaying(false); setIdx(0) }}
+          onClick={() => {
+            setPlaying(false)
+            setIdx(0)
+          }}
           disabled={idx === 0}
           aria-label="Jump to start"
           title="Start"
@@ -222,7 +266,10 @@ export default function SessionReplay({ chapterId, sessionStart, onClose }) {
         </button>
         <button
           className="replay-btn"
-          onClick={() => { setPlaying(false); setIdx((p) => Math.max(0, p - 1)) }}
+          onClick={() => {
+            setPlaying(false)
+            setIdx((p) => Math.max(0, p - 1))
+          }}
           disabled={idx === 0}
           aria-label="Step back"
           title="Back"
@@ -246,7 +293,10 @@ export default function SessionReplay({ chapterId, sessionStart, onClose }) {
         </button>
         <button
           className="replay-btn"
-          onClick={() => { setPlaying(false); setIdx((p) => Math.min(snaps.length - 1, p + 1)) }}
+          onClick={() => {
+            setPlaying(false)
+            setIdx((p) => Math.min(snaps.length - 1, p + 1))
+          }}
           disabled={isLive}
           aria-label="Step forward"
           title="Forward"
@@ -255,29 +305,75 @@ export default function SessionReplay({ chapterId, sessionStart, onClose }) {
         </button>
         <button
           className="replay-btn"
-          onClick={() => { setPlaying(false); setIdx(snaps.length - 1) }}
+          onClick={() => {
+            setPlaying(false)
+            setIdx(snaps.length - 1)
+          }}
           disabled={isLive}
           aria-label="Jump to latest"
           title="Latest"
         >
           <Icon icon="fa-solid fa-forward-step" />
         </button>
-        <span className="replay-counter">{idx + 1} / {snaps.length}</span>
-        <label className="replay-speed">Speed<select value={speed} onChange={(e) => setSpeed(e.target.value)}><option value="slow">0.5×</option><option value="normal">1×</option><option value="fast">2×</option></select></label>
-        <button className={`replay-typing-toggle ${typingAnimation ? 'active' : ''}`} onClick={() => setTypingAnimation((value) => !value)} aria-pressed={typingAnimation} title="Animate the manuscript as it was written"><Icon icon="fa-solid fa-keyboard" /> Typing</button>
+        <span className="replay-counter">
+          {idx + 1} / {snaps.length}
+        </span>
+        <label className="replay-speed">
+          Speed
+          <Select
+            ariaLabel="Replay speed"
+            value={speed}
+            onChange={setSpeed}
+            options={[
+              { value: 'slow', label: '0.5×' },
+              { value: 'normal', label: '1×' },
+              { value: 'fast', label: '2×' },
+            ]}
+          />
+        </label>
+        <button
+          className={`replay-typing-toggle ${typingAnimation ? 'active' : ''}`}
+          onClick={() => setTypingAnimation((value) => !value)}
+          aria-pressed={typingAnimation}
+          title="Animate the manuscript as it was written"
+        >
+          <Icon icon="fa-solid fa-keyboard" /> Typing
+        </button>
         {snapMeta && <span className="replay-words">{snapMeta.wordCount ?? '—'} words</span>}
       </div>
 
       <div className="replay-insights">
-        <span><Icon icon="fa-solid fa-pen" /> {wordDelta === 0 ? 'No word-count change' : `${wordDelta > 0 ? '+' : ''}${wordDelta} words since previous snapshot`}</span>
-        <span><Icon icon="fa-regular fa-clock" /> Snapshot {idx + 1} of {snaps.length}</span>
+        <span>
+          <Icon icon="fa-solid fa-pen" />{' '}
+          {wordDelta === 0
+            ? 'No word-count change'
+            : `${wordDelta > 0 ? '+' : ''}${wordDelta} words since previous snapshot`}
+        </span>
+        <span>
+          <Icon icon="fa-regular fa-clock" /> Snapshot {idx + 1} of {snaps.length}
+        </span>
         <span className={isLive ? 'live' : ''}>{isLive ? 'Current draft' : 'Earlier draft'}</span>
       </div>
 
-      {preview.bounded && <div className="replay-large-notice"><span><Icon icon="fa-solid fa-bolt" /> Large chapter mode · showing the latest writing</span><button onClick={() => setShowComplete(true)}>Show complete snapshot</button></div>}
-      {showComplete && (snap?.content || '').length > LARGE_SNAPSHOT_CHARS && <div className="replay-large-notice"><span>Complete snapshot · rendering may take a moment</span><button onClick={() => setShowComplete(false)}>Return to fast view</button></div>}
+      {preview.bounded && (
+        <div className="replay-large-notice">
+          <span>
+            <Icon icon="fa-solid fa-bolt" /> Large chapter mode · showing the latest writing
+          </span>
+          <button onClick={() => setShowComplete(true)}>Show complete snapshot</button>
+        </div>
+      )}
+      {showComplete && (snap?.content || '').length > LARGE_SNAPSHOT_CHARS && (
+        <div className="replay-large-notice">
+          <span>Complete snapshot · rendering may take a moment</span>
+          <button onClick={() => setShowComplete(false)}>Return to fast view</button>
+        </div>
+      )}
       {/* Content preview: only one body is loaded and mounted at a time. */}
-      <div className={`replay-content prose-preview ${loadingSnapshot ? 'loading' : ''} ${playing && typingAnimation ? 'is-typing' : ''}`} dangerouslySetInnerHTML={{ __html: replayHtml }} />
+      <div
+        className={`replay-content prose-preview ${loadingSnapshot ? 'loading' : ''} ${playing && typingAnimation ? 'is-typing' : ''}`}
+        dangerouslySetInnerHTML={{ __html: replayHtml }}
+      />
     </div>
   )
 }

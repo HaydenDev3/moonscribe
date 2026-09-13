@@ -4,11 +4,13 @@ import { getNovel, updateNovel } from '../db/novels'
 import { listChapters } from '../db/chapters'
 import { listFolders } from '../db/folders'
 import { PAGE_PRESETS, pageSizeMm, pageMarginMm } from '../utils/pageSize'
+import { emitSound } from '../utils/sounds'
 import { computeNumbers, titleFor, isContainer } from '../utils/numbering'
 import { sanitizeStoredHtml } from '../utils/formatHtml'
 import '../styles/print.css'
 import { designPrintTheme } from '../designs/registry'
 import { buildBookPreview } from '../utils/bookPreview'
+import Select from '../components/Select'
 
 const FONTS = {
   literata: "'Literata', Georgia, serif",
@@ -129,7 +131,7 @@ export default function PrintView() {
     return <div className="print-proof-group" key={folder.id} style={{ '--proof-depth': depth } as CSSProperties}>
       <div className="print-proof-group-title"><span aria-hidden="true">▾</span>{folder.name}</div>
       {children.map((child) => renderFolderProof(child, depth + 1))}
-      {contents.map((chapter) => <button className={selectedPage === preview.pages.findIndex((page) => page.chapterId === chapter.id) ? 'active' : ''} key={chapter.id} onClick={() => { const index = preview.pages.findIndex((page) => page.chapterId === chapter.id); if (index >= 0) { setSelectedPage(index); document.getElementById(`print-page-${preview.pages[index].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) } }}>{numbers.get(chapter.id)?.number || '—'} <span>{titleFor(chapter, numbers)}</span></button>)}
+      {contents.map((chapter) => <button className={selectedPage === preview.pages.findIndex((page) => page.chapterId === chapter.id) ? 'active' : ''} key={chapter.id} onClick={() => { const index = preview.pages.findIndex((page) => page.chapterId === chapter.id); if (index >= 0) { setSelectedPage(index); emitSound('book.pageTurn'); document.getElementById(`print-page-${preview.pages[index].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) } }}>{numbers.get(chapter.id)?.number || '—'} <span>{titleFor(chapter, numbers)}</span></button>)}
     </div>
   }
 
@@ -143,12 +145,12 @@ export default function PrintView() {
       <div className="print-toolbar">
         <div className="print-view-heading"><span>BOOK PROOF</span><strong>{novel.title}</strong><small>{preview.pageCount} pages · {Math.round(w)} × {Math.round(h)} mm</small></div>
         <div className="print-controls">
-          <label>Mode<select value={mode} onChange={(event) => setMode(event.target.value as 'proof' | 'reader' | 'continuous')}><option value="proof">Print proof</option><option value="reader">Reader</option><option value="continuous">Continuous reader</option></select></label>
-          <label>Page size<select value={typeof layout.pageSize === 'string' ? layout.pageSize : 'trade-paperback'} onChange={(event) => updateGeometry({ pageSize: event.target.value })}>{PAGE_PRESETS.map((preset) => <option key={preset.key} value={preset.key}>{preset.label}</option>)}</select></label>
+          <label>Mode<Select ariaLabel="Mode" value={mode} onChange={(value) => setMode(value as 'proof' | 'reader' | 'continuous')} options={[{ value: 'proof', label: 'Print proof' }, { value: 'reader', label: 'Reader' }, { value: 'continuous', label: 'Continuous reader' }]} /></label>
+          <label>Page size<Select ariaLabel="Page size" value={typeof layout.pageSize === 'string' ? layout.pageSize : 'trade-paperback'} onChange={(value) => updateGeometry({ pageSize: value })} options={PAGE_PRESETS.map((preset) => ({ value: preset.key, label: preset.label }))} /></label>
           <label>Margins<input type="number" min="5" max="50" step="1" value={margin} onChange={(event) => updateGeometry({ pageMargin: Number(event.target.value) })} /><span>mm</span></label>
           <label className="print-theme-toggle"><input type="checkbox" checked={useDesignerTheme} onChange={(event) => setUseDesignerTheme(event.target.checked)} /> Designer theme</label>
-          <label>Preview<select value={device} onChange={(event) => setDevice(event.target.value)}>{Object.entries(devices).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
-          {mode === 'proof' && <label>Zoom<select value={zoom} onChange={(event) => setZoom(Number(event.target.value))}><option value="0.75">Fit</option><option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option></select></label>}
+          <label>Preview<Select ariaLabel="Preview" value={device} onChange={setDevice} options={Object.entries(devices).map(([key, value]) => ({ value: key, label: value.label }))} /></label>
+          {mode === 'proof' && <label>Zoom<Select ariaLabel="Zoom" value={String(zoom)} onChange={(value) => setZoom(Number(value))} options={[{ value: '0.75', label: 'Fit' }, { value: '1', label: '100%' }, { value: '1.25', label: '125%' }, { value: '1.5', label: '150%' }]} /></label>}
           <span className="muted small">{Math.round(w)} × {Math.round(h)} mm{bleed ? ` · ${bleed} mm bleed` : ''}</span>
         </div>
         <div className="actions-row">

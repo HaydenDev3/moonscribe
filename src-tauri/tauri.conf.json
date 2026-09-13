@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "MoonScribe",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "identifier": "com.moonscribe",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -28,7 +28,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": ["nsis", "dmg", "appimage", "deb"],
     "publisher": "MoonScribe",
     "category": "Productivity",
     "shortDescription": "A private writing studio for long-form fiction and book design.",
@@ -42,19 +42,33 @@
       "icons/icon.ico"
     ],
     "fileAssociations": [
-      { "ext": ["md"], "mimeType": "text/markdown", "description": "MoonScribe Markdown manuscript" },
-      { "ext": ["markdown"], "mimeType": "text/markdown", "description": "MoonScribe Markdown manuscript" },
-      { "ext": ["docx"], "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "description": "MoonScribe Word manuscript" },
-      { "ext": ["epub"], "mimeType": "application/epub+zip", "description": "MoonScribe EPUB manuscript" },
+      {
+        "ext": ["md"],
+        "mimeType": "text/markdown",
+        "description": "MoonScribe Markdown manuscript"
+      },
+      {
+        "ext": ["markdown"],
+        "mimeType": "text/markdown",
+        "description": "MoonScribe Markdown manuscript"
+      },
+      {
+        "ext": ["docx"],
+        "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "description": "MoonScribe Word manuscript"
+      },
+      {
+        "ext": ["epub"],
+        "mimeType": "application/epub+zip",
+        "description": "MoonScribe EPUB manuscript"
+      },
       { "ext": ["json"], "mimeType": "application/json", "description": "MoonScribe backup" }
     ]
   },
   "plugins": {
     "updater": {
-      "endpoints": [
-        "https://updates.moonscribe.cc/{{target}}/{{arch}}/{{current_version}}"
-      ],
-      "pubkey": "REPLACE_WITH_PRODUCTION_TAURI_PUBLIC_KEY"
+      "endpoints": ["https://www.moonscribe.cc/updates/{{target}}/{{arch}}/{{current_version}}"],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE2ODlFOTY0RkE4MzcwM0MKUldROGNJUDZaT21KRmxmaFpLTzZLWnRMa09vUGlEWU1MQ3hTYmJ4N0NDZ1pPd3Z2TGE5NTEwa2gK"
     },
     "deep-link": {
       "desktop": {

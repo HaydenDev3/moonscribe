@@ -1,6 +1,6 @@
 # Settings reference
 
-Settings opens as an internal application workspace. Normal changes save immediately; destructive changes require confirmation. A “Saved” indicator means the local settings record was updated, not necessarily synchronized to another device.
+Settings opens as an internal application workspace. Normal changes save immediately; destructive changes require confirmation. A “Saved” indicator means the local settings record was updated, not necessarily synchronized to another device. This reference describes the 1.1.6 surface.
 
 ## Navigation and search
 
@@ -10,7 +10,7 @@ Settings is grouped into General, Experience, Data & Sync, Privacy & Security, A
 
 - **Overview:** account, current appearance, editor summary, sync state, and quick links.
 - **Profile:** display/writer name, biography, language, and timezone.
-- **App Connections:** current MoonScribe identity and configured sign-in providers. Discord/Google/password management relies on server support. Signed-in users can register, review, and remove WebAuthn passkeys; supported browsers can use a passkey for passwordless sign-in.
+- **Account Centre:** primary MoonScribe connector, linked Discord/Google sign-in providers, profile identity, sessions, security activity, and passkeys. The primary connector is retained as the profile-picture source. Secondary providers can be disconnected, but a primary connector cannot be removed from its account.
 
 ## Experience
 
@@ -19,6 +19,12 @@ Settings is grouped into General, Experience, Data & Sync, Privacy & Security, A
 - **Writing Experience:** autosave pause, cursor/scroll restoration, last chapter, reminders, and celebration level.
 - **Dashboard:** hero, greeting, recent/streak cards, sidebar default, current story, labels, and animation.
 - **Sounds & Haptics:** master, interface, writing, notification, and ambient channels. Ambient output is synthesized by the current engine; native haptics depend on browser/device support.
+
+## Novel-specific design controls
+
+Novel presentation settings live in Designer and Interior Layout rather than global Settings. They include cover palettes and text colour, typography effects, cover templates, ornaments, trim/page size, margins, gutter, chapter styling, headers/footers, page numbers, scene breaks, and per-chapter drop caps. These values belong to the novel and should not be treated as device preferences.
+
+The Designer uses custom controls instead of browser-native select menus. Palette swatches are fixed circular controls and overflow areas are scrollable so additional typography, element, and effect options remain reachable.
 
 ## Data and sync
 

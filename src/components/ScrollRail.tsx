@@ -8,12 +8,29 @@ export default function ScrollRail({ scrollElRef, className = '', markers = [], 
   const [canScroll, setCanScroll]   = useState(false)
   const [active, setActive]         = useState(false)
   const [hoverRatio, setHoverRatio] = useState<number | null>(null)
+  const [railMode, setRailMode] = useState('standard')
   const railTrackRef = useRef(null)
   const dragging     = useRef(false)
   const dragStartY   = useRef(0)
   const dragStartScroll = useRef(0)
   const dragThumbH   = useRef(40)
   const activeTimer  = useRef(null)
+  const syncFrame = useRef<number | null>(null)
+  const reducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  useEffect(() => {
+    const el = scrollElRef?.current
+    const host = el?.closest?.('.editor-wrap-outer') || el?.parentElement
+    if (!host) return
+    const updateMode = () => {
+      const width = host.getBoundingClientRect().width
+      setRailMode(width < 390 ? 'hidden' : width < 620 ? 'compact' : 'standard')
+    }
+    updateMode()
+    const ro = new ResizeObserver(updateMode)
+    ro.observe(host)
+    return () => ro.disconnect()
+  }, [scrollElRef])
 
   const bump = useCallback(() => {
     setActive(true)
@@ -21,7 +38,7 @@ export default function ScrollRail({ scrollElRef, className = '', markers = [], 
     activeTimer.current = setTimeout(() => setActive(false), 1800)
   }, [])
 
-  const sync = useCallback(() => {
+  const syncNow = useCallback(() => {
     const el = scrollElRef?.current
     if (!el) return
     const { scrollTop, scrollHeight, clientHeight } = el
@@ -38,6 +55,16 @@ export default function ScrollRail({ scrollElRef, className = '', markers = [], 
     bump()
   }, [scrollElRef, bump])
 
+  // Scroll events can arrive dozens of times per frame. Coalesce them so the
+  // rail never forces a React render for every wheel/touch event.
+  const sync = useCallback(() => {
+    if (syncFrame.current !== null) return
+    syncFrame.current = requestAnimationFrame(() => {
+      syncFrame.current = null
+      syncNow()
+    })
+  }, [syncNow])
+
   useEffect(() => {
     const el = scrollElRef?.current
     if (!el) return
@@ -48,6 +75,7 @@ export default function ScrollRail({ scrollElRef, className = '', markers = [], 
     return () => {
       el.removeEventListener('scroll', sync)
       ro.disconnect()
+      if (syncFrame.current !== null) cancelAnimationFrame(syncFrame.current)
     }
   }, [scrollElRef, sync])
 
@@ -93,10 +121,10 @@ export default function ScrollRail({ scrollElRef, className = '', markers = [], 
     window.addEventListener('mouseup', onUp)
   }
 
-  if (!canScroll) return null
+  if (!canScroll || railMode === 'hidden') return null
 
   return (
-    <div className={`scroll-rail ${active ? 'active' : ''} ${className}`}>
+    <div className={`scroll-rail scroll-rail-${railMode} ${active ? 'active' : ''} ${className}`}>
       <div
         className="scroll-rail-track"
         ref={railTrackRef}
@@ -108,10 +136,28 @@ export default function ScrollRail({ scrollElRef, className = '', markers = [], 
         {context && hoverRatio !== null && <RailContextTip context={context} ratio={hoverRatio} />}
         <motion.div
           className="scroll-rail-thumb"
+          role="scrollbar"
+          tabIndex={0}
+          aria-label="Document position"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round((scrollElRef?.current?.scrollTop || 0) / Math.max(1, (scrollElRef?.current?.scrollHeight || 1) - (scrollElRef?.current?.clientHeight || 1)) * 100)}
           initial={false}
           animate={{ top: thumbTop, height: thumbHeight }}
-          transition={{ type: 'spring', stiffness: 360, damping: 34, mass: 0.28 }}
+          transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 360, damping: 34, mass: 0.28 }}
           onMouseDown={onThumbDown}
+          onKeyDown={(event) => {
+            const el = scrollElRef?.current
+            if (!el) return
+            const amount = event.key === 'PageUp' || event.key === 'PageDown' ? el.clientHeight * 0.8 : el.clientHeight * 0.12
+            if (event.key === 'Home') el.scrollTop = 0
+            else if (event.key === 'End') el.scrollTop = el.scrollHeight
+            else if (event.key === 'ArrowUp' || event.key === 'PageUp') el.scrollTop -= amount
+            else if (event.key === 'ArrowDown' || event.key === 'PageDown') el.scrollTop += amount
+            else return
+            event.preventDefault()
+            sync()
+          }}
         />
         {markers.map((marker) => (
           <motion.button
@@ -120,7 +166,7 @@ export default function ScrollRail({ scrollElRef, className = '', markers = [], 
             className={`scroll-rail-marker ${marker.activity || 'viewing'} ${marker.emphasis ? 'is-emphasis' : ''}`}
             initial={false}
             animate={{ top: `${Math.max(0, Math.min(1, marker.topRatio || 0)) * 100}%` }}
-            transition={{ type: 'spring', stiffness: 360, damping: 34, mass: 0.28 }}
+            transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 360, damping: 34, mass: 0.28 }}
             style={{ '--marker-color': marker.color || '#84b9ff' } as React.CSSProperties}
             title={marker.label || 'Collaborator'}
             aria-label={marker.label || 'Collaborator marker'}

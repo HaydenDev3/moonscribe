@@ -4,6 +4,8 @@
 
 # MoonScribe server guide
 
+> Current release: **1.1.6**. The server guide covers the identity-linking, sync, and Live Share behavior shipped in this release.
+
 > A practical guide to the sync server, auth flow, routes, and the meanings behind common failure states.
 
 <div align="center">
@@ -16,6 +18,7 @@ The MoonScribe backend is a lightweight Node.js HTTP + WebSocket service built a
 
 - account creation and bearer-token auth
 - Discord and Google OAuth bridge flow
+- primary and secondary account connector mapping
 - per-user sync records in IndexedDB terms
 - collaborative room access and live presence
 - static file serving for the production build
@@ -82,6 +85,8 @@ For OAuth:
 - `/auth/google`
 - exchange endpoint calls the provider and issues a MoonScribe token
 
+The first provider used to create an account is stored as its primary connector. Account Centre linking attaches a verified provider subject to the existing user row; it never changes the primary connector, replaces its avatar, or silently merges another account.
+
 ### 4. Collaboration model
 
 Shared writing uses:
@@ -131,6 +136,8 @@ All routes below return JSON unless specifically noted; OAuth login routes redir
 | `POST` | `/api/auth/login` | Sign in with username/email + password | No | `401` or `429` |
 | `POST` | `/api/auth/logout` | Invalidate current session token | Yes | `401` if no valid token |
 | `GET` | `/api/auth/me` | Fetch current account metadata | Yes | `401` |
+| `POST` | `/api/auth/link/start` | Start linking Discord or Google to the current account | Yes | `400`, `503` |
+| `POST` | `/api/auth/unlink-provider` | Disconnect a secondary Discord or Google identity | Yes | `400` if primary or unsupported |
 | `GET` | `/api/auth/sessions` | List all active device sessions | Yes | `401` |
 | `POST` | `/api/auth/sessions/revoke` | Revoke a specific session | Yes | `400` or `404` |
 | `POST` | `/api/auth/logout-others` | Sign out all other devices | Yes | `401` |

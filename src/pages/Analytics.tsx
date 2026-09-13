@@ -114,8 +114,8 @@ export default function Analytics({ embedded }) {
             <div className="card chart-card analytics-primary-chart">
               <div className="analytics-card-head"><div><span className="analytics-eyebrow">Momentum</span><h3>Words per day</h3></div><span className="analytics-range">Last 30 days</span></div>
               <div className="chart-bars" style={{ ['--max' as any]: maxDay } as CSSProperties}>
-                {clippedHistory.slice(-30).map((d) => (
-                  <div className="chart-col" key={d.date} title={`${prettyDate(d.date)} — ${formatWords(d.words)} words`}>
+                {clippedHistory.slice(-30).map((d, index) => (
+                  <div className="chart-col" key={`${d.date}-${index}`} title={`${prettyDate(d.date)} — ${formatWords(d.words)} words`}>
                     <div className="chart-bar" style={{ height: `${d.words ? Math.max(4, (d.words / maxDay) * 100) : 2}%` }}>
                       <span className="chart-tip">{d.words > 0 ? d.words : ''}</span>
                     </div>
@@ -158,8 +158,8 @@ export default function Analytics({ embedded }) {
             <div className="card chart-card">
               <div className="analytics-card-head"><div><span className="analytics-eyebrow">Long view</span><h3>Words per month</h3></div><span className="analytics-range">Last 12 months</span></div>
               <div className="chart-bars month-bars" style={{ ['--max' as any]: Math.max(...monthly.map((m) => m.words), 1) } as CSSProperties}>
-                {monthly.map((m) => (
-                  <div className="chart-col" key={m.key} title={`${m.label} — ${formatWords(m.words)} words`}>
+                {monthly.map((m, index) => (
+                  <div className="chart-col" key={`${m.key}-${index}`} title={`${m.label} — ${formatWords(m.words)} words`}>
                     <div className="chart-bar" style={{ height: `${m.words ? Math.max(4, (m.words / Math.max(...monthly.map((x) => x.words), 1)) * 100) : 2}%` }}>
                       <span className="chart-tip">{m.words > 0 ? formatWords(m.words) : ''}</span>
                     </div>
@@ -176,8 +176,8 @@ export default function Analytics({ embedded }) {
                   <p className="muted small">No chapters yet.</p>
                 ) : (
                   <div className="chapter-bars">
-                    {topChapters.map((c) => (
-                      <div className="chapter-bar-row" key={c.id}>
+                    {topChapters.map((c, index) => (
+                      <div className="chapter-bar-row" key={`${c.id}-${index}`}>
                         <span className="cb-label" title={c.title}>{c.title || 'Untitled'}</span>
                         <div className="cb-track">
                           <div className="cb-fill" style={{ width: `${((c.wordCount || 0) / maxChapter) * 100}%` }} />
@@ -218,7 +218,7 @@ export default function Analytics({ embedded }) {
 
             <div className="card chart-card analytics-session-history">
               <div className="analytics-card-head"><div><span className="analytics-eyebrow">Practice</span><h3>Recent writing sessions</h3></div><span className="analytics-range">This device</span></div>
-              {sessions.length === 0 ? <p className="muted small">Completed sessions will appear here after you write for a little while.</p> : <div className="session-history-list">{sessions.map((session) => <div className="session-history-row" key={session.id}><span><strong>{new Date(session.startedAt).toLocaleDateString()}</strong><small>{new Date(session.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {Math.round(session.minutes)} min</small></span><b>{formatWords(session.words)} words</b></div>)}</div>}
+              {sessions.length === 0 ? <p className="muted small">Completed sessions will appear here after you write for a little while.</p> : <div className="session-history-list">{sessions.map((session, index) => <div className="session-history-row" key={`${session.id}-${index}`}><span><strong>{new Date(session.startedAt).toLocaleDateString()}</strong><small>{new Date(session.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · {Math.round(session.minutes)} min</small></span><b>{formatWords(session.words)} words</b></div>)}</div>}
             </div>
           </>
         )}

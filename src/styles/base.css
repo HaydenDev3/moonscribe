@@ -26,6 +26,31 @@ body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
+/* Opt-in low-cost rendering for integrated graphics and battery-constrained
+   devices. Keep layout and content identical; remove only paint-heavy effects. */
+html.performance-mode *,
+html.performance-mode *::before,
+html.performance-mode *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+html.performance-mode [class*="backdrop-blur"],
+html.performance-mode [class*="backdrop-filter"] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+html.performance-mode .modal-overlay,
+html.performance-mode .settings-overlay,
+html.performance-mode .mobile-hub-overlay {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html.performance-mode * {
+  text-rendering: geometricPrecision;
+}
+
 /* soft paper texture — subtle, like morning light on a page */
 html.paper-texture {
   --paper-opacity: .22;

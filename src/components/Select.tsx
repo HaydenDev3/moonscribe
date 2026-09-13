@@ -22,12 +22,13 @@ type SelectProps = {
   className?: string
   popClassName?: string
   disabled?: boolean
+  style?: CSSProperties
 }
 
 // A themed dropdown that replaces the native <select> so menus match the app.
 // options: [{ value, label, hint? }]. Values are compared as strings.
 // The popup is portalled to <body> so it is never clipped by overflow:hidden panels.
-export default function Select({ value, onChange, options = [], ariaLabel = 'Select', width = 180, onMouseDown: onMD, renderLabel, className = '', popClassName = '', disabled = false }: SelectProps) {
+export default function Select({ value, onChange, options = [], ariaLabel = 'Select', width = 180, onMouseDown: onMD, renderLabel, className = '', popClassName = '', disabled = false, style }: SelectProps) {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState(0)
   const [rect, setRect] = useState(null)
@@ -93,7 +94,7 @@ export default function Select({ value, onChange, options = [], ariaLabel = 'Sel
         minWidth: Math.max(rect.width, 180),
         maxHeight: `calc(100dvh - 24px)`,
         overflowY: 'auto',
-        zIndex: 9999,
+        zIndex: 20000,
       }
     : { position: 'fixed', top: -9999, left: -9999 }
 
@@ -107,7 +108,13 @@ export default function Select({ value, onChange, options = [], ariaLabel = 'Sel
         aria-expanded={open}
         aria-label={ariaLabel}
         disabled={disabled}
-        onMouseDown={(e) => onMD?.(e)}
+        style={style}
+        onMouseDown={(e) => {
+          // Keep the ProseMirror selection alive while the toolbar opens.
+          // Toolbar controls must never blur the editor before their command runs.
+          e.preventDefault()
+          onMD?.(e)
+        }}
         onClick={() => !disabled && setOpen((o) => !o)}
         onKeyDown={onKeyDown}
         onWheel={(e) => e.stopPropagation()}

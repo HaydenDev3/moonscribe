@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { emitSound } from '../utils/sounds'
 
 // Small shared modal with Esc-to-close and overlay click.
 export default function Modal({ open, onClose, title, children, width, className = '' }) {
@@ -8,9 +9,12 @@ export default function Modal({ open, onClose, title, children, width, className
   const closeTimer = useRef(null)
   const modalRef = useRef(null)
   const previousActiveRef = useRef(null)
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     if (open) {
+      emitSound('ui.panelOpen')
       if (closeTimer.current) {
         clearTimeout(closeTimer.current)
         closeTimer.current = null
@@ -34,10 +38,12 @@ export default function Modal({ open, onClose, title, children, width, className
 
   useEffect(() => {
     if (!open) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     previousActiveRef.current = document.activeElement
     const focusTimer = window.setTimeout(() => modalRef.current?.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')?.focus(), 0)
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') onCloseRef.current?.()
       if (e.key !== 'Tab' || !modalRef.current) return
       const focusable = [...modalRef.current.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter((item) => !item.disabled)
       if (!focusable.length) return
@@ -47,8 +53,8 @@ export default function Modal({ open, onClose, title, children, width, className
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
     }
     window.addEventListener('keydown', onKey)
-    return () => { window.clearTimeout(focusTimer); window.removeEventListener('keydown', onKey); if (previousActiveRef.current instanceof HTMLElement) previousActiveRef.current.focus() }
-  }, [open, onClose])
+    return () => { window.clearTimeout(focusTimer); window.removeEventListener('keydown', onKey); document.body.style.overflow = previousOverflow; if (previousActiveRef.current instanceof HTMLElement) previousActiveRef.current.focus() }
+  }, [open])
 
   if (!rendered) return null
 

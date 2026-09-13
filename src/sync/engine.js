@@ -1,7 +1,7 @@
 // Sync engine. Local-first: every write stays in IndexedDB and is flagged
 // pendingSync; the engine pushes pending records and pulls remote changes
 // with last-writer-wins merge. Deletes travel as tombstones.
-import { getDB, listStores, uid, markDirty } from '../db/db'
+import { getDB, listStores, uid, markDirty, switchDatabaseProfile } from '../db/db'
 import { migrateGuestToAccount } from '../db/guestMerge'
 import { getMeta, setMeta } from '../db/meta'
 import { toWire, fromWire } from './serialize'
@@ -224,6 +224,9 @@ export async function validateSession() {
   if (!cfg.server || !cfg.token) return null
   try {
     const profile = await accountProfile(cfg.server, cfg.token)
+    // Each account gets an isolated local repository. Never expose the last
+    // signed-in account's IndexedDB records while validating a new session.
+    await switchDatabaseProfile(profile.id)
     try {
       await bindLocalLibrary(profile.id)
     } catch (error) {
@@ -243,7 +246,10 @@ export async function validateSession() {
   }
 }
 
+let refreshInFlight = null
 export async function refreshSession() {
+  if (refreshInFlight) return refreshInFlight
+  refreshInFlight = (async () => {
   const cfg = await getConfig()
   if (!cfg.server || !cfg.token) return { ok: false, reason: 'NO_SESSION' }
   const res = await fetch(`${apiBase(cfg)}/api/auth/session/refresh`, { method: 'POST', headers: { Authorization: `Bearer ${cfg.token}`, ...(await deviceHeaders()) } })
@@ -255,6 +261,8 @@ export async function refreshSession() {
   }
   await setConfig({ token: data.token })
   return { ok: true, expiresAt: data.expiresAt }
+  })()
+  try { return await refreshInFlight } finally { refreshInFlight = null }
 }
 
 function notifySynced() {
@@ -409,8 +417,17 @@ export async function collectPending() {
   const db = await getDB()
   const out = []
   for (const store of listStores()) {
-    const all = await db.getAll(store)
-    for (const rec of all) {
+    let pending
+    try {
+      pending = await db.getAllFromIndex(store, 'by-pendingSync')
+      // Some older IndexedDB implementations do not index boolean keys
+      // consistently. Only fall back when the indexed result is empty.
+      if (!pending.length) pending = (await db.getAll(store)).filter((rec) => rec?.pendingSync)
+    } catch {
+      // Profiles created before schema v13 do not have the optimization index.
+      pending = (await db.getAll(store)).filter((rec) => rec?.pendingSync)
+    }
+    for (const rec of pending) {
       if (rec && rec.pendingSync) {
         const wire = await toWire(rec)
         if (wire) {
@@ -433,6 +450,9 @@ export async function applyIncoming(records) {
   if (!records || !records.length) return { applied: 0 }
   const db = await getDB()
   let applied = 0
+  const writes = []
+  const dailyDeltas = []
+  const conflictWork = []
   for (const r of records) {
     if (!r || !r.store || !r.id) continue
     const key = r.id
@@ -441,10 +461,10 @@ export async function applyIncoming(records) {
     if (r.deleted) {
       if (local && local.updatedAt > r.updatedAt) {
         // Local edit is newer than the remote delete — keep it, re-push it.
-        if (!local.pendingSync) await db.put(r.store, { ...local, pendingSync: true })
+        if (!local.pendingSync) writes.push({ type: 'put', store: r.store, record: { ...local, pendingSync: true } })
       } else {
-        await db.delete(r.store, key)
-        await db.delete('tombstones', `${r.store}:${key}`)
+        writes.push({ type: 'delete', store: r.store, id: key })
+        writes.push({ type: 'delete', store: 'tombstones', id: `${r.store}:${key}` })
         applied += 1
       }
       continue
@@ -452,6 +472,7 @@ export async function applyIncoming(records) {
 
     const incoming = fromWire(r.payload)
     const sharedRecord = await isSharedRecord(db, { ...r, payload: incoming })
+    const restoringSharedRecord = sharedRecord && local?.trashedAt && incoming && !incoming.trashedAt
 
     // Both sides changed since the last sync: this device has unpushed edits
     // (pendingSync) and the remote differs. Capture both rather than pick a
@@ -461,18 +482,18 @@ export async function applyIncoming(records) {
       // manuscript prose. Merge them automatically so dragging a folder out
       // of another folder never interrupts the writer with a prose conflict.
       if (r.store === 'chapters' && isOutlineOnlyChapterChange(local, incoming)) {
-        await db.put(r.store, { ...incoming, parentId: local.parentId || null, order: local.order, updatedAt: Date.now(), pendingSync: true })
+        writes.push({ type: 'put', store: r.store, record: { ...incoming, parentId: local.parentId || null, order: local.order, updatedAt: Date.now(), pendingSync: true } })
         continue
       }
-      await recordConflict(r.store, key, local, incoming)
+      conflictWork.push(() => recordConflict(r.store, key, local, incoming))
       continue
     }
 
-    if (sharedRecord) await clearRecordConflict(r.store, key)
+    if (sharedRecord) conflictWork.push(() => clearRecordConflict(r.store, key))
 
-    if (local && (local.updatedAt || 0) >= r.updatedAt) {
+    if (local && !restoringSharedRecord && (local.updatedAt || 0) >= r.updatedAt) {
       // Local copy is at least as new. Make sure the server gets it back.
-      if (!local.pendingSync) await db.put(r.store, { ...local, pendingSync: true })
+      if (!local.pendingSync) writes.push({ type: 'put', store: r.store, record: { ...local, pendingSync: true } })
       continue
     }
 
@@ -481,8 +502,8 @@ export async function applyIncoming(records) {
     // Restore the id in case the wire payload was keyed differently.
     next.id = key
     delete next.pendingSync
-    await db.put(r.store, next)
-    if (r.store === 'accountPreferences' && r.id === 'settings' && next.value) await setMeta('settings', next.value)
+    writes.push({ type: 'put', store: r.store, record: next })
+    if (r.store === 'accountPreferences' && r.id === 'settings' && next.value) writes.push({ type: 'meta', value: next.value })
     applied += 1
 
     // Keep the daily "words today" tally roughly in step across devices.
@@ -492,10 +513,24 @@ export async function applyIncoming(records) {
       const today = todayKey(next.novelId)
       const recDate = todayKey(next.novelId, new Date(r.updatedAt))
       if (recDate === today && nowWords > prev) {
-        await addTodayWords(next.novelId, nowWords - prev)
+        dailyDeltas.push([next.novelId, nowWords - prev])
       }
     }
   }
+  if (writes.length) {
+    const stores = [...new Set(writes.filter((write) => write.type !== 'meta').map((write) => write.store))]
+    const tx = db.transaction(stores, 'readwrite')
+    for (const write of writes) {
+      if (write.type === 'meta') continue
+      const objectStore = tx.objectStore(write.store)
+      if (write.type === 'delete') await objectStore.delete(write.id)
+      else await objectStore.put(write.record)
+    }
+    await tx.done
+    for (const write of writes) if (write.type === 'meta') await setMeta('settings', write.value)
+  }
+  for (const work of conflictWork) await work()
+  for (const [novelId, delta] of dailyDeltas) await addTodayWords(novelId, delta)
   return { applied }
 }
 
@@ -656,10 +691,11 @@ export async function connect({ url, mode = 'login', username, password, replace
       return { ok: false, requires2fa: true, userId: data.userId, username: data.username, email: data.email || null }
     }
     if (await getMeta('guestMode', false)) await migrateGuestToAccount(data.accountId)
+    await switchDatabaseProfile(data.accountId)
     await bindLocalLibrary(data.accountId, { replaceOwner: replaceLocal })
     await setConfig({ server: base, token: data.token, accountId: data.accountId, username: data.username })
     await sync()
-    return { ok: true, username: data.username }
+    return { ok: true, username: data.username, profileSetupRequired: Boolean(data.profileSetupRequired) }
   } catch (err) {
     setStatus('error', err.message)
     return { ok: false, error: err.message, code: err.code }
@@ -673,6 +709,7 @@ export async function connectWithToken({ server, token, username }) {
     const base = server.replace(/\/+$/, '')
     const profile = await accountProfile(base, token)
     if (await getMeta('guestMode', false)) await migrateGuestToAccount(profile.id)
+    await switchDatabaseProfile(profile.id)
     let libraryConflict = false
     try {
       await bindLocalLibrary(profile.id)
@@ -691,7 +728,7 @@ export async function connectWithToken({ server, token, username }) {
     try { if (!libraryConflict) await sync() } catch (syncError) {
       setStatus('attention', syncError?.message || 'Cloud sync will retry shortly.')
     }
-    return { ok: true, username: profile.username || username, libraryConflict }
+    return { ok: true, username: profile.username || username, libraryConflict, profileSetupRequired: profile.profile ? !profile.profile.setupCompleted : false }
   } catch (err) {
     setStatus('error', err.message)
     return { ok: false, error: err.message }
@@ -732,19 +769,15 @@ export async function revokeSession(sessionId) {
 async function shareRequest(path, { method = 'GET', body, keepalive = false } = {}) {
   const cfg = await getConfig()
   if (!cfg.server || !cfg.token) throw new Error('Sign in to share a writing session.')
-  const res = await fetch(`${apiBase(cfg)}${path}`, {
+  const idempotencyKey = body && method !== 'GET'
+    ? `share:${method}:${path}:${JSON.stringify(body)}`
+    : undefined
+  return requestJson(`${apiBase(cfg)}${path}`, {
     method,
     headers: { Authorization: `Bearer ${cfg.token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
     ...(keepalive ? { keepalive: true } : {})
-  })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) {
-    const error = new Error(data.error || 'The collaboration request failed.')
-    error.status = res.status
-    throw error
-  }
-  return data
+  }, { idempotencyKey, retries: method === 'GET' ? 2 : 1 })
 }
 
 export async function createShareInvite(novelId, role, accessDurationMs = null) {
@@ -823,6 +856,7 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
   const wsUrl = websocketOrigin(base) + `/ws/presence?novelId=${encodeURIComponent(novelId)}&token=${encodeURIComponent(cfg.token)}&sessionId=${encodeURIComponent(sessionId)}`
   let closed = false
   let retryTimer = null
+  let pingTimer = null
   let retryAttempt = 0
   let online = typeof navigator === 'undefined' || navigator.onLine !== false
   let socket = null
@@ -841,6 +875,13 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
     if (String(event?.detail?.novelId || '') !== String(novelId) || socket?.readyState !== WebSocket.OPEN) return
     socket.send(JSON.stringify({ type: 'presence.update', protocolVersion: 1, roomId: String(novelId), sessionId, presence: { ...event.detail.context, clientVersion: import.meta.env?.VITE_APP_VERSION || 'web' } }))
   }
+  const stopHeartbeat = () => { if (pingTimer) clearInterval(pingTimer); pingTimer = null }
+  const startHeartbeat = () => {
+    stopHeartbeat()
+    pingTimer = setInterval(() => {
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'ping' }))
+    }, 25_000)
+  }
   window.addEventListener('moonscribe:record-written', publishRecord)
   window.addEventListener('moonscribe:presence-update', publishPresence)
 
@@ -850,6 +891,7 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
     socket = new WebSocket(wsUrl)
     socket.addEventListener('open', () => {
       retryAttempt = 0
+      startHeartbeat()
       for (const [key, record] of pendingRecords) {
         if (sendRecord(record)) pendingRecords.delete(key)
       }
@@ -860,6 +902,7 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
     socket.addEventListener('message', async (event) => {
       try {
         const data = JSON.parse(event.data)
+        if (data?.type === 'pong') return
         if (data?.type === 'presence' || data?.type === 'room.snapshot') onMessage?.(data.people || [])
         if ((data?.type === 'record:update' || data?.type === 'document.update') && data.record) {
           onRecord?.(data.record)
@@ -877,10 +920,12 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
       }
     })
     socket.addEventListener('close', (event) => {
+      stopHeartbeat()
       if (closed) return
       const reason = event?.reason || (event?.code ? `Socket closed (${event.code}).` : 'The collaboration connection closed.')
       window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: 'reconnecting', novelId, detail: reason } }))
-      const delay = Math.min(30000, 800 * (2 ** Math.min(retryAttempt++, 6))) + Math.round(Math.random() * 250)
+      const maxDelay = Math.min(30_000, 800 * (2 ** Math.min(retryAttempt++, 6)))
+      const delay = Math.floor(Math.random() * maxDelay)
       retryTimer = setTimeout(connectSocket, delay)
     })
     socket.addEventListener('error', (error) => {
@@ -890,7 +935,7 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
   }
 
   const onOnline = () => { online = true; retryAttempt = 0; connectSocket() }
-  const onOffline = () => { online = false; clearTimeout(retryTimer); try { socket?.close() } catch { /* socket may already be closed */ } ; window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: 'offline', novelId } })) }
+  const onOffline = () => { online = false; clearTimeout(retryTimer); stopHeartbeat(); try { socket?.close() } catch { /* socket may already be closed */ } ; window.dispatchEvent(new CustomEvent('moonscribe:collaboration', { detail: { status: 'offline', novelId } })) }
   window.addEventListener('online', onOnline)
   window.addEventListener('offline', onOffline)
 
@@ -902,6 +947,7 @@ export async function subscribePresence(novelId, { onMessage, onRecord, onError 
     window.removeEventListener('online', onOnline)
     window.removeEventListener('offline', onOffline)
     clearTimeout(retryTimer)
+    stopHeartbeat()
     if (!socket) return
     if (socket.readyState === WebSocket.OPEN) {
       try { socket.close() } catch { /* noop */ }

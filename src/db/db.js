@@ -11,7 +11,7 @@ const environment = import.meta.env.VITE_MOONSCRIBE_ENV || (import.meta.env.DEV 
 // reached version 11 with an incomplete object-store set after an interrupted
 // upgrade. Opening at a new version reruns the non-destructive store creation
 // loop below and repairs those profiles without clearing their writing.
-const DB_VERSION = 12
+const DB_VERSION = 13
 
 const STORES = ['novels', 'chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'projectFiles', 'workspacePreferences', 'accountPreferences', 'authorWebsites', 'glossary', 'annotations', 'branches', 'suggestions', 'research', 'storyThreads', 'sceneChecklists', 'betaPackages', 'tombstones', 'meta', 'snapshots']
 
@@ -35,7 +35,7 @@ export async function switchDatabaseProfile(profile) {
 function getLegacyDB() {
   if (!legacyDbPromise) {
     legacyDbPromise = openDB(`moonscribe:${environment}:${activeProfile}`, DB_VERSION, {
-      upgrade(db) {
+      upgrade(db, _oldVersion, _newVersion, transaction) {
         const defs = {
           novels: { keyPath: 'id' },
           chapters: { keyPath: 'id', index: 'by-novel' },
@@ -67,6 +67,10 @@ function getLegacyDB() {
             const s = db.createObjectStore(name, { keyPath: spec.keyPath })
             const INDEX_FIELDS = { 'by-novel': 'novelId', 'by-chapter': 'chapterId' }
             if (spec.index) s.createIndex(spec.index, INDEX_FIELDS[spec.index] ?? spec.index)
+            s.createIndex('by-pendingSync', 'pendingSync')
+          } else {
+            const s = transaction.objectStore(name)
+            if (s && !s.indexNames.contains('by-pendingSync')) s.createIndex('by-pendingSync', 'pendingSync')
           }
         }
       }

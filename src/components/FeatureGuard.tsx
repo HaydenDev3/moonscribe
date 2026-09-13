@@ -24,10 +24,19 @@ function safeParseFeatureStatus(raw: string | null) {
   }
 }
 
+function isStaleNovelEditorFailure(featureName: string, reason?: string) {
+  return featureName === 'novel' && (
+    reason?.startsWith('Schema is missing its top node type') ||
+    reason?.includes("reading 'immediatelyRender'") ||
+    reason?.includes("reading 'doc'")
+  )
+}
+
 export function getFeatureStatus(featureName?: string) {
   if (!featureName || typeof window === 'undefined') return { disabled: false }
   const raw = window.localStorage.getItem(`${FEATURE_STATUS_KEY}:${featureName}`)
   const parsed = safeParseFeatureStatus(raw)
+  if (isStaleNovelEditorFailure(featureName, parsed.reason)) return { ...parsed, disabled: false }
   return { ...parsed, disabled: !!parsed?.disabled }
 }
 

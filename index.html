@@ -1,6 +1,28 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // Never let an installed production PWA worker serve stale Vite assets
+      // while developing on localhost. Opera can retain a worker between
+      // sessions, so clean it before the module graph boots.
+      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+        if ('serviceWorker' in navigator) {
+          const reloadKey = 'moonscribe:localhost-worker-reset-v2'
+          const shouldReload = !sessionStorage.getItem(reloadKey)
+          navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+            const hadWorker = registrations.length > 0 || !!navigator.serviceWorker.controller
+            await Promise.all(registrations.map((registration) => registration.unregister()))
+            if (shouldReload && hadWorker) {
+              sessionStorage.setItem(reloadKey, '1')
+              location.reload()
+            }
+          })
+        }
+        if ('caches' in window) {
+          caches.keys().then((keys) => keys.forEach((key) => caches.delete(key)))
+        }
+      }
+    </script>
     <meta name="trustpilot-one-time-domain-verification-id" content="7e222c05-80f2-4ac2-ba62-7de9aac494ec" />
     <script>
       // Advertising is web-only. Do not load Google's storage/cookie script

@@ -79,6 +79,11 @@ export function ContextMenuProvider({ children }) {
               {menu.items.map((it, i) =>
                 it === 'divider' ? (
                   <div className="cm-sep" key={i} />
+                ) : it.kind === 'profile' ? (
+                  <div className="cm-profile-card" key={i} style={it.banner ? { backgroundImage: `linear-gradient(180deg, rgba(12,11,15,.28), rgba(12,11,15,.96)), url(${it.banner})` } : undefined}>
+                    <div className="cm-profile-avatar">{it.avatar ? <img src={it.avatar} alt="" /> : <span>{(it.username || '?').slice(0, 2).toUpperCase()}</span>}</div>
+                    <div className="cm-profile-copy"><strong>{it.username || 'Local writer'}</strong><small><i className={`sync-dot-${it.status || 'offline'}`} />{it.status === 'synced' ? 'Synced across devices' : it.status === 'syncing' ? 'Syncing changes' : 'Local workspace'}</small></div>
+                  </div>
                 ) : (
                   <button
                     key={it.label + i}

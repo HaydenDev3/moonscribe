@@ -7,6 +7,7 @@ import { listWorld } from '../db/world'
 import { computeNumbers, titleFor, isContainer } from '../utils/numbering'
 import EmptyState from '../components/EmptyState'
 import Icon from '../components/Icon'
+import Select from '../components/Select'
 import { formatWords } from '../utils/words'
 import { useContextMenu } from '../components/ContextMenu'
 
@@ -129,11 +130,7 @@ export default function Corkboard({ novelId, embedded }) {
             <p className="muted small" style={{ margin: '3px 0 0' }}>Every scene as a card. Drag to reorder · right-click for options.</p>
           </div>
           <div className="cork-toolbar">
-            <select className="tl-filter-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
-              <option value="order">Story order</option>
-              <option value="words">Most words</option>
-              <option value="updated">Recently edited</option>
-            </select>
+            <Select className="tl-filter-select" ariaLabel="Sort by" value={sortBy} onChange={setSortBy} options={[{ value: 'order', label: 'Story order' }, { value: 'words', label: 'Most words' }, { value: 'updated', label: 'Recently edited' }]} />
           </div>
         </div>
 
@@ -167,6 +164,8 @@ export default function Corkboard({ novelId, embedded }) {
               const sc = STATUS_CSS[status]
               const pov = c.meta?.pov
               const povColor = pov ? (povColors[pov] || 'var(--grey)') : null
+              const revisionPasses = Object.values(c.meta?.revisionPasses || {})
+              const completedPasses = revisionPasses.filter(Boolean).length
               const isEditingSyn = editingSynopsis === c.id
 
               return (
@@ -227,6 +226,7 @@ export default function Corkboard({ novelId, embedded }) {
 
                   <div className="cork-card-footer">
                     <span className="cork-card-words">{formatWords(c.wordCount || 0)}</span>
+                    {revisionPasses.length > 0 && <span className="cork-card-revisions" title={`${completedPasses} of ${revisionPasses.length} revision passes complete`}><Icon icon="fa-solid fa-check-double" /> {completedPasses}/{revisionPasses.length}</span>}
                     <button
                       className="cork-card-menu"
                       title="Card options"

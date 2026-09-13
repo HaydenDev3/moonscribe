@@ -12,6 +12,7 @@ import { buildEditorFontOptions } from '../utils/fonts'
 import { PAGE_TEMPLATES, TEMPLATE_MIME } from '../designs/pageTemplates'
 import { listMoodboard } from '../db/moodboard'
 import { editorPageGeometry, PAGE_MARGIN_PRESETS, PAGE_PRESETS } from '../utils/pageSize'
+import { normalizeDocumentHtml } from '../editor/documentModel'
 
 type TypographyStyle = { fontFamily?: string; color?: string; [key: string]: unknown }
 type TypographyConfig = {
@@ -133,12 +134,13 @@ export default function Editor({
   collaborators = [],
   chapterId = null,
   novelId = null,
+  onReady = undefined,
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const wrapRef = useRef(null)
   const titleRef = useRef(null)
   const onReportRef = useRef(onReport)
-  const { customFonts, systemFonts, toast } = useApp()
+  const { customFonts, systemFonts, toast, settings, updateSettings, syncUsername } = useApp()
   const editorFontOptions = useMemo(
     () => buildEditorFontOptions({ systemFonts, customFonts }),
     [systemFonts, customFonts]
@@ -211,6 +213,25 @@ export default function Editor({
 
   const [lineSpacing, setLineSpacing] = useState('1.5')
   const [toolbarIdle, setToolbarIdle] = useState(false)
+  const editorPreferenceKey = `moonscribe:editor-density:${syncUsername || 'local'}`
+  const [editorDensity, setEditorDensity] = useState(() => {
+    try { return localStorage.getItem(editorPreferenceKey) || settings?.editorDensity || 'balanced' } catch { return settings?.editorDensity || 'balanced' }
+  })
+  const [writingHud, setWritingHud] = useState(() => settings?.writingHud !== false)
+  const setDensity = (value) => {
+    setEditorDensity(value)
+    try { localStorage.setItem(editorPreferenceKey, value) } catch { /* storage may be unavailable */ }
+    updateSettings?.({ editorDensity: value })
+  }
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(editorPreferenceKey)
+      if (!stored && settings?.editorDensity) setEditorDensity(settings.editorDensity)
+    } catch { /* storage may be unavailable */ }
+  }, [editorPreferenceKey, settings?.editorDensity])
+  useEffect(() => {
+    if (typeof settings?.writingHud === 'boolean') setWritingHud(settings.writingHud)
+  }, [settings?.writingHud])
   const [dictationSupported, setDictationSupported] = useState(false)
   const [dictating, setDictating] = useState(false)
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
@@ -678,7 +699,8 @@ export default function Editor({
 
     if (!el) return
 
-    const annotated = annotateProse(sanitizeStoredHtml(initialHtml || ''), {
+    const normalizedHtml = normalizeDocumentHtml(initialHtml || '')
+    const annotated = annotateProse(sanitizeStoredHtml(normalizedHtml), {
       characters: charactersRef.current,
       terms: termsRef.current,
       entities: entitiesRef.current,
@@ -688,6 +710,25 @@ export default function Editor({
     if (el.innerHTML !== withComments) {
       el.innerHTML = withComments
     }
+
+    onReady?.({
+      element: el,
+      getHtml: () => getPersistentHtml(el),
+      setHtml: (html) => {
+        const next = annotateCommentAnchors(annotateProse(normalizeDocumentHtml(html || ''), {
+          characters: charactersRef.current,
+          terms: termsRef.current,
+          entities: entitiesRef.current,
+        }))
+        if (el.innerHTML === next) return
+        const selection = window.getSelection()
+        const hadFocus = document.activeElement === el
+        const offset = hadFocus ? getCursorOffset() : 0
+        el.innerHTML = next
+        if (hadFocus) setCursorOffset(offset)
+        recalcRef.current?.()
+      },
+    })
 
     requestAnimationFrame(() => {
       recalcRef.current?.()
@@ -864,11 +905,15 @@ export default function Editor({
     const addAutoBreak = (before, previousPage, page, pageBottom, breakTop) => {
       const marker = document.createElement('div')
 
-      marker.className = 'pg-auto-break'
+      marker.className = 'pg-auto-break relative flex items-center justify-center bg-transparent select-none pointer-events-none'
       marker.contentEditable = 'false'
       marker.tabIndex = -1
       marker.dataset.autoPageBreak = 'true'
       marker.setAttribute('aria-hidden', 'true')
+      marker.innerHTML = `
+        <span class="pointer-events-none absolute inset-x-0 top-[calc(var(--pg-fill-before,0px)+21px)] h-px bg-gradient-to-r from-transparent via-[#e6b860]/90 to-transparent shadow-[0_0_12px_rgba(230,184,96,0.18)]"></span>
+        <span class="pointer-events-none relative z-[1] inline-flex min-h-[23px] items-center rounded-full border border-[#e6b860]/35 bg-[#202124]/95 px-[11px] text-[.52rem] font-semibold tracking-[.16em] text-[#efd3a3]/90 shadow-[0_4px_12px_rgba(0,0,0,0.16)]">Page ${previousPage} · Page ${page}</span>
+      `
       marker.style.setProperty(
         '--pg-fill-before',
         `${Math.max(0, Math.round(pageBottom - breakTop))}px`
@@ -1141,13 +1186,25 @@ export default function Editor({
   )
 
   // ── Block formatting ──────────────────────────────────────────────────────
+  const restoreSelection = useCallback(() => {
+    const editor = ref.current
+    const range = savedRange.current
+    if (!editor || !range || !editor.contains(range.commonAncestorContainer)) return false
+    const sel = window.getSelection()
+    if (!sel) return false
+    editor.focus()
+    sel.removeAllRanges()
+    sel.addRange(range)
+    return true
+  }, [])
+
   const formatBlock = useCallback(
     (tag) => {
       const el = ref.current
 
       if (!el) return
 
-      el.focus()
+      restoreSelection()
 
       try {
         document.execCommand('formatBlock', false, tag)
@@ -1157,7 +1214,7 @@ export default function Editor({
 
       report()
     },
-    [report]
+    [report, restoreSelection]
   )
 
   const toggleHeading = useCallback(
@@ -1166,6 +1223,7 @@ export default function Editor({
 
       if (!el) return
 
+      restoreSelection()
       const sel = window.getSelection()
       const node = sel?.anchorNode
 
@@ -1182,7 +1240,7 @@ export default function Editor({
         formatBlock(tag)
       }
     },
-    [formatBlock]
+    [formatBlock, restoreSelection]
   )
 
   // ── Inline style ─────────────────────────────────────────────────────────
@@ -1192,14 +1250,7 @@ export default function Editor({
 
       if (!el) return
 
-      el.focus()
-
-      if (savedRange.current) {
-        const sel = window.getSelection()
-
-        sel.removeAllRanges()
-        sel.addRange(savedRange.current)
-      }
+      restoreSelection()
 
       const sel = window.getSelection()
 
@@ -1279,7 +1330,7 @@ export default function Editor({
 
       report()
     },
-    [report]
+    [report, restoreSelection]
   )
 
   const clearHighlight = useCallback(() => {
@@ -1484,14 +1535,13 @@ export default function Editor({
 
     const marker = document.createElement('div')
 
-    marker.className = 'pg-break'
+    marker.className = 'pg-break relative flex items-center justify-center bg-transparent select-none'
     marker.contentEditable = 'false'
     marker.dataset.pageBreak = 'true'
 
     marker.innerHTML = `
-      <span class="pg-break-line">
-        <span class="pg-break-label">Page break</span>
-      </span>
+      <span class="pointer-events-none absolute inset-x-0 top-[calc(var(--pg-fill-before,0px)+21px)] h-px bg-gradient-to-r from-transparent via-[#e6b860]/90 to-transparent shadow-[0_0_12px_rgba(230,184,96,0.18)]"></span>
+      <span class="pointer-events-none relative z-[1] inline-flex min-h-[23px] items-center rounded-full border border-[#e6b860]/35 bg-[#202124]/95 px-[11px] text-[.52rem] font-semibold tracking-[.16em] text-[#efd3a3]/90 shadow-[0_4px_12px_rgba(0,0,0,0.16)]">Page break</span>
     `
 
     const paragraph = document.createElement('p')
@@ -2845,7 +2895,7 @@ export default function Editor({
   const saveSelection = useCallback(() => {
     const sel = window.getSelection()
 
-    if (sel && sel.rangeCount) {
+    if (sel && sel.rangeCount && ref.current?.contains(sel.getRangeAt(0).commonAncestorContainer)) {
       savedRange.current = sel.getRangeAt(0).cloneRange()
     }
   }, [])
@@ -3007,7 +3057,14 @@ export default function Editor({
           </div>
         </div>
       )}
-      <div className="editor-shell" onMouseMove={resetToolbarActivity}>
+      <div className={`editor-shell editor-density-${editorDensity}`} onMouseMove={resetToolbarActivity}>
+        <div className="editor-command-surface" aria-label="Editor view controls">
+          <span className="editor-command-label"><Icon icon="fa-solid fa-feather-pointed" /> Writing surface</span>
+          <div className="editor-density-controls" role="group" aria-label="Editor density">
+            {(['focused', 'balanced', 'expanded']).map((density) => <button key={density} type="button" className={editorDensity === density ? 'is-active' : ''} onClick={() => setDensity(density)}>{density}</button>)}
+          </div>
+          <button type="button" className={`editor-hud-toggle${writingHud ? ' is-active' : ''}`} onClick={() => { const next = !writingHud; setWritingHud(next); updateSettings?.({ writingHud: next }) }} aria-pressed={writingHud}><Icon icon="fa-solid fa-chart-line" /> HUD</button>
+        </div>
         {findOpen && (
           <div className="editor-find-bar" role="search" aria-label="Find and replace in chapter">
             <Icon icon="fa-solid fa-magnifying-glass" />
@@ -3184,7 +3241,7 @@ export default function Editor({
         )}
         <div
           ref={toolbarRef}
-          className={`editor-toolbar flex items-center gap-1 overflow-x-auto touch-pan-x overscroll-contain border-t border-[var(--border)] bg-[var(--surface-elev)]/95 px-2 py-1 shadow-[0_-8px_24px_rgba(0,0,0,.16)] backdrop-blur-xl ${
+          className={`editor-toolbar touch-pan-x overscroll-contain border-t border-[var(--border)] bg-[var(--surface-elev)]/95 shadow-[0_-8px_24px_rgba(0,0,0,.16)] backdrop-blur-xl ${
             toolbarIdle ? 'is-idle' : ''
           }`}
           onMouseDown={(e) => e.preventDefault()}
@@ -3714,13 +3771,19 @@ export default function Editor({
               <Icon icon="fa-solid fa-link" />
             </Btn>
 
-            {libraryImages.length > 0 && (
+            {(
               <div className="editor-media-picker" title="Insert image from Media Library">
                 <button
                   type="button"
-                  className="editor-media-icon"
+                  className="editor-media-icon has-editor-tooltip"
+                  data-tooltip="Insert from Media Library"
                   aria-label="Open Media Library images"
-                  onClick={() => setMediaOpen((open) => !open)}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    setPageTemplatesOpen(false)
+                    setMediaOpen((open) => !open)
+                  }}
                 >
                   <Icon icon="fa-regular fa-image" />
                 </button>
@@ -3741,7 +3804,9 @@ export default function Editor({
                           <span>{item.text || 'Untitled image'}</span>
                         </button>
                       ))}
+                      {!libraryImages.length && <p className="muted small">No media yet. Add images in the Media Library.</p>}
                     </div>
+                    <a href={`/novel/${novelId}/media`} className="editor-media-library-link">Open Media Library</a>
                   </div>
                 )}
               </div>
@@ -3752,7 +3817,11 @@ export default function Editor({
                 type="button"
                 className="editor-media-icon"
                 aria-label="Open page templates"
-                onClick={() => onDesigns?.()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setMediaOpen(false)
+                  setPageTemplatesOpen((open) => !open)
+                }}
               >
                 <Icon icon="fa-solid fa-file-lines" />
               </button>
@@ -4510,12 +4579,14 @@ export default function Editor({
               faction: 'fa-solid fa-shield-halved',
               artefact: 'fa-solid fa-gem',
               place: 'fa-solid fa-location-dot',
+              creature: 'fa-solid fa-paw',
             }
 
             const KIND_LABELS = {
               faction: 'Faction',
               artefact: 'Artefact',
               place: 'Place',
+              creature: 'Creature',
             }
 
             const color = entity.color || '#7B9EBF'
@@ -4527,6 +4598,8 @@ export default function Editor({
                   ? entity.origin
                   : entity.kind === 'place'
                     ? entity.region
+                    : entity.kind === 'creature'
+                      ? entity.species || entity.habitat
                     : null
 
             return (
