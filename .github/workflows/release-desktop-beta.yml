@@ -82,3 +82,83 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$GITHUB_REF_NAME" checksums-windows-beta.txt --clobber
+
+  publish-linux-beta:
+    name: Publish Linux beta
+    permissions:
+      contents: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential curl wget file libssl-dev libxdo-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Require a beta tag
+        shell: bash
+        run: |
+          test "$GITHUB_REF_TYPE" = "tag" || { echo "Linux beta publishing must run from a version tag."; exit 1; }
+          [[ "$GITHUB_REF_NAME" =~ ^v1\.1\.6-beta\.[0-9]+$ ]] || { echo "Expected a tag such as v1.1.6-beta.1."; exit 1; }
+
+      - name: Verify release gates
+        run: npm run lint && npm run typecheck && npm test && npm run build
+
+      - name: Configure updater public key
+        shell: bash
+        env:
+          TAURI_PUBLIC_KEY: ${{ secrets.TAURI_PUBLIC_KEY }}
+        run: |
+          test -n "$TAURI_PUBLIC_KEY" || { echo "Missing TAURI_PUBLIC_KEY"; exit 1; }
+          node -e "const fs=require('fs'); const p='src-tauri/tauri.conf.json'; const c=JSON.parse(fs.readFileSync(p,'utf8')); c.plugins.updater.pubkey=process.env.TAURI_PUBLIC_KEY; fs.writeFileSync(p, JSON.stringify(c,null,2)+'\n')"
+
+      - name: Verify desktop release configuration
+        env:
+          TAURI_PUBLIC_KEY: ${{ secrets.TAURI_PUBLIC_KEY }}
+        run: npm run desktop:release-check
+
+      - name: Build Linux beta packages
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          NO_STRIP: '1'
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'MoonScribe ${{ github.ref_name }}'
+          releaseBody: |
+            Linux beta builds for MoonScribe 1.1.6.
+
+            Install the AppImage or Debian package and verify the published checksum before running it.
+          releaseDraft: false
+          prerelease: true
+          includeUpdaterJson: true
+          args: --target x86_64-unknown-linux-gnu --bundles appimage,deb
+
+      - name: Verify generated beta artifacts
+        env:
+          DESKTOP_BUNDLES: appimage,deb
+        run: npm run desktop:artifact-check > checksums-linux-beta.txt
+
+      - name: Upload beta checksums
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$GITHUB_REF_NAME" checksums-linux-beta.txt --clobber
