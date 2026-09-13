@@ -1,40 +1,8 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <script>
-      // Never let an installed production PWA worker serve stale Vite assets
-      // while developing on localhost. Opera can retain a worker between
-      // sessions, so clean it before the module graph boots.
-      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-        if ('serviceWorker' in navigator) {
-          const reloadKey = 'moonscribe:localhost-worker-reset-v2'
-          const shouldReload = !sessionStorage.getItem(reloadKey)
-          navigator.serviceWorker.getRegistrations().then(async (registrations) => {
-            const hadWorker = registrations.length > 0 || !!navigator.serviceWorker.controller
-            await Promise.all(registrations.map((registration) => registration.unregister()))
-            if (shouldReload && hadWorker) {
-              sessionStorage.setItem(reloadKey, '1')
-              location.reload()
-            }
-          })
-        }
-        if ('caches' in window) {
-          caches.keys().then((keys) => keys.forEach((key) => caches.delete(key)))
-        }
-      }
-    </script>
+    <script src="/bootstrap.js"></script>
     <meta name="trustpilot-one-time-domain-verification-id" content="7e222c05-80f2-4ac2-ba62-7de9aac494ec" />
-    <script>
-      // Advertising is web-only. Do not load Google's storage/cookie script
-      // inside the Tauri WebView, where it causes Tracking Prevention noise.
-      if (!/^tauri:$/i.test(window.location.protocol) && !/tauri\.localhost$/i.test(window.location.hostname)) {
-        const ads = document.createElement('script')
-        ads.async = true
-        ads.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7279660074920894'
-        ads.crossOrigin = 'anonymous'
-        document.head.appendChild(ads)
-      }
-    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="MoonScribe is a free, private writing studio for serious novelists: draft manuscripts, shape story worlds, track continuity, collaborate, and design the finished book." />
