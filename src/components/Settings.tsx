@@ -454,17 +454,21 @@ export default function Settings() {
                   </span>
                   <div className="min-w-0">
                     <div className="settings-row-title">
-                      Version 1.1.6 <em>Current</em>
+                      Version 1.1.7 <em>Current</em>
                     </div>
                     <div className="settings-row-sub">
-                      Current release — Writing workspace, editor, and print-production expansion
+                      Current release — writing, publishing, media, recovery, and book-production
+                      improvements
                     </div>
-                    <div
-                      className={`settings-row-detail ${aboutReleaseExpanded ? '' : 'line-clamp-3'}`}
-                    >
-                      A substantial writing-studio update spanning the Novel Editor, print production,
-                      Book Designer, Author Website, dashboard, identity, collaboration, sync, and
-                      desktop reliability.
+                    <div className="settings-row-detail">
+                      Added a shared Global Media Library, authenticated Author Website publishing,
+                      richer recovery and history tools, account-scoped local data, offline sync
+                      handling, presentation-aware backup round trips, and responsive mobile and
+                      tablet workspaces. Updated the editor, Designer, Interior Layout, dashboard,
+                      identity, collaboration, accessibility, and startup experience. Replaced cramped
+                      or disconnected controls with shared responsive surfaces, removed startup content
+                      from unauthenticated entry, and guarded the account setup guide against repeated
+                      prompts during one live session.
                     </div>
                     <button
                       type="button"
@@ -606,6 +610,26 @@ export default function Settings() {
                             </li>
                           </ul>
                         </div>
+                        <div>
+                          <strong className="mb-2 block text-xs uppercase tracking-[0.16em] text-[#e3b866]">
+                            Global Media Library
+                          </strong>
+                          <ul className="space-y-2">
+                            <li>
+                              Reworked the shared media browser around real local-first assets,
+                              project/story associations, storage usage, search, type tabs, sorting,
+                              grid/list views, uploads, drag-and-drop, selection, and metadata.
+                            </li>
+                            <li>
+                              Added responsive mobile media flows for filters, upload choices, sort,
+                              asset details, multi-select actions, and safe file management.
+                            </li>
+                            <li>
+                              Preserved existing asset URLs, IndexedDB records, sync behavior, and
+                              reuse across Designer, Author Website, Moodboard, and editor insertion.
+                            </li>
+                          </ul>
+                        </div>
                         <div className="sm:col-span-2">
                           <strong className="mb-2 block text-xs uppercase tracking-[0.16em] text-[#e3b866]">
                             Desktop &amp; reliability
@@ -629,6 +653,15 @@ export default function Settings() {
                               states, updater status handling, and safer failure messaging.
                             </li>
                             <li>
+                              Authenticated Author Website publish/unpublish state, writing recovery,
+                              history and Trash restoration, account-scoped local data, and
+                              manuscript/presentation backup round trips.
+                            </li>
+                            <li>
+                              Unauthenticated entry now stays on the auth surface, and setup guidance
+                              is guarded against repeating on live production sessions.
+                            </li>
+                            <li>
                               Shared custom controls, keyboard navigation improvements, accessible
                               pressed states, responsive mobile surfaces, and reduced-motion
                               support.
@@ -642,6 +675,26 @@ export default function Settings() {
               )}
               {aboutPage === 0 && (
                 <>
+                  <div
+                    className="settings-row about-release"
+                    style={{ marginTop: 'var(--space-5)' }}
+                  >
+                    <span className="about-release-mark">
+                      <Icon icon="fa-solid fa-clock-rotate-left" />
+                    </span>
+                    <div>
+                      <div className="settings-row-title">Version 1.1.6</div>
+                      <div className="settings-row-sub">
+                        9 September 2026 — Identity, sync, writing, and book-production foundations
+                      </div>
+                      <div className="settings-row-detail">
+                        Added primary-provider identity semantics, account connection recovery,
+                        reliable sync triggers, recoverable Trash, responsive References, expanded
+                        Book Designer and Interior Layout controls, print-aware previews, Author
+                        Website builder state, and Live Share owner-away read-only support.
+                      </div>
+                    </div>
+                  </div>
                   <div
                     className="settings-row about-release"
                     style={{ marginTop: 'var(--space-5)' }}

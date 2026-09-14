@@ -1,6 +1,6 @@
 # Settings reference
 
-Settings opens as an internal application workspace. Normal changes save immediately; destructive changes require confirmation. A “Saved” indicator means the local settings record was updated, not necessarily synchronized to another device. This reference describes the 1.1.6 surface.
+Settings opens as an internal application workspace. Normal changes save immediately; destructive changes require confirmation. A “Saved” indicator means the local settings record was updated, not necessarily synchronized to another device. This reference describes the 1.1.7 surface.
 
 ## Navigation and search
 

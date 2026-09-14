@@ -3,6 +3,8 @@ import { getNovel, updateNovel } from '../db/novels'
 import { listChapters } from '../db/chapters'
 import { PAGE_PRESETS, pageSizeMm } from '../utils/pageSize'
 import { buildBookPreview } from '../utils/bookPreview'
+import { buildStyledHtml, prepareExport } from '../utils/exportDocument'
+import { downloadBlob, safeName } from '../utils/download'
 import { useApp } from '../context/AppContext'
 import Icon from '../components/Icon'
 import Select from '../components/Select'
@@ -113,6 +115,20 @@ export default function InteriorLayoutPage({ novelId, embedded = false }: { nove
   const save = useCallback(async () => { if (!novel) return; const next = await updateNovel(novelId, { layout: { ...(novel.layout || {}), interiorLayout: config }, updatedAt: Date.now() }); setNovel(next); setSaved(true); toast?.('Interior layout saved.') }, [config, novel, novelId, toast])
   const resetDefaults = useCallback(() => { setConfig({ ...DEFAULT_CONFIG, margins: { ...DEFAULT_CONFIG.margins } }); setSaved(false); toast?.('Interior layout reset to defaults.') }, [toast])
   const applyToBook = useCallback(async () => { if (!novel) return; const next = await updateNovel(novelId, { layout: { ...(novel.layout || {}), interiorLayout: config }, updatedAt: Date.now() }); setNovel(next); setSaved(true); toast?.(`Interior layout applied to all ${chapters.length || 0} chapters.`) }, [chapters.length, config, novel, novelId, toast])
+  const exportLayout = useCallback(() => {
+    if (!novel) return
+    const prepared = prepareExport(novel, chapters, { includePartHeadings: true, includeChapterNumbers: true })
+    const html = buildStyledHtml(novel, prepared.items, {
+      layout: { ...(novel.layout || {}), interiorLayout: config },
+      includeFrontMatter: true,
+      includeSceneBreaks: true,
+      totalWords: prepared.totalWords,
+      chapterCount: prepared.chapterCount,
+      includeWordStats: true,
+    })
+    downloadBlob(new Blob([html], { type: 'text/html;charset=utf-8' }), `${safeName(novel.title)}-interior.html`)
+    toast?.('Interior proof exported. Open it in a browser and print to PDF.')
+  }, [chapters, config, novel, toast])
   useEffect(() => { const timer = window.setTimeout(() => { if (!saved && novel) void save() }, 900); return () => window.clearTimeout(timer) }, [config, novel, save, saved])
 
   const headerText = (page: any, side: 'left' | 'right') => {
@@ -152,7 +168,7 @@ export default function InteriorLayoutPage({ novelId, embedded = false }: { nove
 
   if (!novel) return <div className="interior-layout-loading">Preparing your book interior…</div>
   return <div className={`interior-layout ${embedded ? 'embedded' : ''}`}>
-    <header className="interior-page-header"><div><span className="interior-breadcrumb">{novel.title} <Icon icon="fa-solid fa-chevron-right" /> <strong>Interior Layout</strong></span><h1>Interior Layout</h1><p>Shape the reading experience, page by page.</p></div><div className="interior-header-actions"><span className="interior-save-state">{saved ? 'Saved' : 'Saving…'}</span><button className="interior-secondary-button" onClick={save}><Icon icon="fa-regular fa-floppy-disk" /> Save</button><button className="interior-secondary-button" onClick={() => setMobilePanel('preview')}><Icon icon="fa-regular fa-eye" /> Preview</button><button className="interior-primary-button" onClick={() => toast?.('Print-ready export will use these same interior settings.')}><Icon icon="fa-solid fa-file-export" /> Export Layout</button></div></header>
+    <header className="interior-page-header"><div><span className="interior-breadcrumb">{novel.title} <Icon icon="fa-solid fa-chevron-right" /> <strong>Interior Layout</strong></span><h1>Interior Layout</h1><p>Shape the reading experience, page by page.</p></div><div className="interior-header-actions"><span className="interior-save-state" role="status" aria-live="polite">{saved ? 'Saved' : 'Saving…'}</span><button type="button" className="interior-secondary-button" onClick={save}><Icon icon="fa-regular fa-floppy-disk" /> Save</button><button type="button" className="interior-secondary-button" onClick={() => setMobilePanel('preview')}><Icon icon="fa-regular fa-eye" /> Preview</button><button type="button" className="interior-primary-button" onClick={exportLayout}><Icon icon="fa-solid fa-file-export" /> Export Layout</button></div></header>
     <nav className="interior-tabs" aria-label="Interior layout tools">{TABS.map(([key, icon, label]) => <button key={key} className={tab === key ? 'active' : ''} onClick={() => { setTab(key); setInspectorOpen(key !== 'layout'); if (key !== 'layout') setMobilePanel('more') }}><Icon icon={icon} />{label}</button>)}</nav>
     <div className="interior-mobile-toolbar"><button className={mobilePanel === 'layout' ? 'active' : ''} onClick={() => setMobilePanel('layout')}><Icon icon="fa-regular fa-file-lines" />Layout</button><button className={mobilePanel === 'preview' ? 'active' : ''} onClick={() => setMobilePanel('preview')}><Icon icon="fa-regular fa-eye" />Preview</button><button className={mobilePanel === 'chapters' ? 'active' : ''} onClick={() => setMobilePanel('chapters')}><Icon icon="fa-solid fa-heading" />Chapters</button><button className={mobilePanel === 'more' ? 'active' : ''} onClick={() => setMobilePanel('more')}><Icon icon="fa-solid fa-ellipsis" />More</button></div>
     <div className={`interior-workspace ${inspectorOpen ? '' : 'inspector-closed'}`}>{leftPanel}<main className="interior-preview-column" ref={previewRef}><div className="interior-preview-toolbar"><span>Pages</span><button onClick={() => setPageIndex((i) => Math.max(0, i - (config.spread ? 2 : 1)))} aria-label="Previous pages"><Icon icon="fa-solid fa-chevron-left" /></button><button onClick={() => setPageIndex((i) => Math.min(Math.max(0, pages.length - 1), i + (config.spread ? 2 : 1)))} aria-label="Next pages"><Icon icon="fa-solid fa-chevron-right" /></button><strong>{current.number}{second ? ` – ${second.number}` : ''} / {pages.length}</strong><Select value={String(zoom)} onChange={(value) => setZoom(Number(value))} options={[{ value: '60', label: '60%' }, { value: '78', label: '78%' }, { value: '100', label: '100%' }]} ariaLabel="Preview zoom" width={64} className="interior-preview-select" /><button className="interior-tool-toggle" onClick={() => patch({ spread: !config.spread })}>{config.spread ? 'Two-page spread' : 'Single page'}</button>{!inspectorOpen && <button className="interior-tool-toggle" onClick={() => setInspectorOpen(true)}>Typography</button>}</div><div className={`interior-book-stage ${config.spread ? 'is-spread' : 'is-single'}`}><div className="interior-book-spread" style={{ '--page-scale': zoom / 100 } as React.CSSProperties}>{renderPage(current, 'left')}{second && renderPage(second, 'right')}</div></div><div className="interior-chapter-caption"><span>{current.title}</span><span>{saved ? 'All changes saved locally' : 'Updating preview…'}</span></div><div className="interior-thumbnails" aria-label="Page thumbnails">{pages.slice(Math.max(0, pageIndex - 3), Math.min(pages.length, pageIndex + 7)).map((page, i) => <button key={`${page.number}-${i}`} className={page.number === current.number ? 'active' : ''} onClick={() => setPageIndex(pages.findIndex((item) => item.number === page.number))}><span className="thumbnail-paper"><small>{page.number}</small><i /><i /><i /></span><em>{page.number}</em></button>)}</div></main>{inspectorOpen && rightPanel}</div>

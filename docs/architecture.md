@@ -1,6 +1,6 @@
 # Architecture
 
-> Current release: **1.1.6**. This document describes implemented boundaries, not planned mockups.
+> Current release: **1.1.7**. This document describes implemented boundaries, not planned mockups.
 
 ## System overview
 
@@ -56,7 +56,7 @@ Vite builds static assets and `vite-plugin-pwa` generates a service worker. Font
 
 New settings must declare a scope and migration/default behavior before being added.
 
-## 1.1.6 presentation architecture
+## 1.1.7 presentation architecture
 
 The Designer and Interior Layout are deliberately stateful production workspaces rather than static previews:
 

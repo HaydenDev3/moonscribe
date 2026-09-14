@@ -184,6 +184,7 @@ export function AppProvider({ children }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [accountCentreOpen, setAccountCentreOpen] = useState(false)
   const [profileSetupOpen, setProfileSetupOpen] = useState(false)
+  const profileSetupPromptedFor = useRef(null)
   const [conflicts, setConflicts] = useState([])
   const toastId = useRef(0)
   const idleTimer = useRef(null)
@@ -207,6 +208,16 @@ export function AppProvider({ children }) {
   const refreshNovels = useCallback(async () => {
     const all = await listNovels()
     setNovels(all)
+  }, [])
+
+  // Several authentication/bootstrap paths can report the same incomplete
+  // profile during one sign-in. Keep the guide single-instance and avoid
+  // reopening it as the sync connection moves from connecting to synced.
+  const requestProfileSetup = useCallback((identity) => {
+    const key = String(identity || 'current-account')
+    if (profileSetupPromptedFor.current === key) return
+    profileSetupPromptedFor.current = key
+    setProfileSetupOpen(true)
   }, [])
 
   // Load persisted state once.
@@ -268,7 +279,7 @@ export function AppProvider({ children }) {
           avatarUrl: parsedProfile.avatarUrl || parsedProfile.discordAvatar || null,
           bannerUrl: parsedProfile.bannerUrl || null,
         })
-        if (parsedProfile.profile && !parsedProfile.profile.setupCompleted) setProfileSetupOpen(true)
+        if (parsedProfile.profile && !parsedProfile.profile.setupCompleted) requestProfileSetup(parsedProfile.id || parsedProfile.username || cfg.username)
       } else {
         setAccount(DEFAULT_ACCOUNT)
       }
@@ -323,7 +334,7 @@ export function AppProvider({ children }) {
           await setMeta('authProvider', 'magic')
             const res = await syncEngine.connectWithToken({ server: account.server || magicServer, token: account.token, username: account.username })
             if (res.ok) {
-             if (res.profileSetupRequired) setProfileSetupOpen(true)
+             if (res.profileSetupRequired) requestProfileSetup(account.username)
               clearOAuthCallback(window.location)
             setAuthFlow({ state: 'success', provider: 'magic', error: null, conflictId: null })
             setSync({ server: account.server || magicServer, username: account.username, status: 'synced', discordAvatar: null, provider: 'magic' })
@@ -387,7 +398,7 @@ export function AppProvider({ children }) {
            avatarUrl: profile.avatarUrl || profile.discordAvatar || null,
            bannerUrl: profile.bannerUrl || null,
               })
-              if (profile.profile && !profile.profile.setupCompleted && !account.linked) setProfileSetupOpen(true)
+              if (profile.profile && !profile.profile.setupCompleted && !account.linked) requestProfileSetup(profile.id || profile.username || account.username)
             }
             setSync({ server: account.server || oauthServer, username: account.username, status: 'synced', discordAvatar: account.avatar || null, provider: account.provider || oauthProvider || 'discord' })
             clearOAuthCallback(window.location)
@@ -436,7 +447,7 @@ export function AppProvider({ children }) {
       }
     })().finally(() => { if (typeof window !== 'undefined') setAccountReady(true) })
     syncEngine.listConflicts().then(setConflicts)
-  }, [refreshNovels, toast])
+  }, [refreshNovels, requestProfileSetup, toast])
 
   // Rotate remembered sessions twice daily. The token remains valid for 30
   // days, while active writers receive a fresh 30-day window transparently.

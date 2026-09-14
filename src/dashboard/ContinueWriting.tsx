@@ -21,7 +21,7 @@ export default function ContinueWriting({ novel, chapter, todayWords, onContinue
   const { refreshNovels, toast } = useApp()
   const [editingTitle, setEditingTitle] = useState(false)
   const [title, setTitle] = useState(novel?.title || '')
-  const cover = useCover(novel?.cover)
+  const cover = useCover(novel?.layout?.cover?.frontImage || novel?.cover)
   const goal = Number(novel?.goalWords) || 0
   useEffect(() => { setTitle(novel?.title || '') }, [novel?.id, novel?.title])
 

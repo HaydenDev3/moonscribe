@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import Icon from '../components/Icon'
 import AuthModal from '../components/AuthModal'
@@ -7,7 +7,6 @@ import { detectPlatform, platformDownload, platformLabel } from '../utils/platfo
 import InstallPrompt from '../components/InstallPrompt'
 import UserPill from '../components/UserPill'
 import LandingEditorPreview from '../components/LandingEditorPreview'
-import LandingAtmosphere from '../components/LandingAtmosphere'
 import BlurText from '../components/BlurText'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetTitle, SheetTrigger } from '../components/ui/sheet'
 import { Button } from '../components/ui/button'
@@ -16,6 +15,10 @@ import { HighlightText, MorphingText } from '../components/LandingTextEffects'
 import UserPresenceAvatar from '../components/UserPresenceAvatar'
 import GithubStarsWheel from '../components/GithubStarsWheel'
 import LandingShareModal from '../components/LandingShareModal'
+
+// Three.js is only needed for the decorative landing atmosphere. Keep it out
+// of the initial web route so the writing studio can start without WebGL.
+const LandingAtmosphere = lazy(() => import('../components/LandingAtmosphere'))
 
 const GITHUB_REPOSITORY = 'https://github.com/HaydenDev3/moonscribe'
 type GithubRepository = { stargazers_count: number; forks_count: number; open_issues_count: number; language: string | null; owner?: { login?: string; avatar_url?: string } }
@@ -77,7 +80,7 @@ export default function Landing() {
   const signedIn = Boolean(syncUsername)
 
   return <main className="landing">
-    <LandingAtmosphere />
+    <Suspense fallback={null}><LandingAtmosphere /></Suspense>
     <InstallPrompt />
     <nav className="landing-nav">
       <Link className="landing-brand" to="/"><img src="/moonscribelogo.png" alt="MoonScribe logo" className="landing-brand-logo" /><span className="landing-brand-copy">MoonScribe<span>✦</span></span></Link>
@@ -113,7 +116,7 @@ export default function Landing() {
     <section className="landing-rhythm" id="rhythm"><div className="landing-rhythm-intro"><span>The rhythm of a novel</span><h2>Make room for the messy middle.</h2><p>Stories rarely arrive in a straight line. MoonScribe gives each stage a surface, then lets you move between them without losing the thread.</p></div><div className="landing-rhythm-track"><article><b>01</b><span>Gather</span><strong>Collect the fragments.</strong><p>Notes, references, characters, and sparks can live beside the draft until they find their place.</p></article><i aria-hidden="true" /><article><b>02</b><span>Shape</span><strong>Follow the connections.</strong><p>See the pattern in your story as it changes, without locking the work too early.</p></article><i aria-hidden="true" /><article><b>03</b><span>Finish</span><strong>Bring it into the world.</strong><p>When the words are ready, move naturally into a designed, printable book.</p></article></div></section>
     <section className="landing-constellation-story" id="constellation"><div className="landing-section-head"><span>Continuity, made visible</span><h2>Follow the thread, not the clutter.</h2><p>Characters, places, threads and turning points stay connected as the story changes. Select a node to inspect the relationship.</p></div><div className="landing-constellation-card"><div className="landing-constellation-canvas" role="list" aria-label="Interactive story constellation"><div className="landing-constellation-legend"><span><i className="gold" /> Character</span><span><i className="blue" /> Place</span><span><i className="rose" /> Thread</span><span><i className="moss" /> Beat</span></div>{CONSTELLATION_NODES.map((node) => <span key={node.id} className={`landing-constellation-line landing-constellation-line-${node.id}`} aria-hidden="true" />)}{CONSTELLATION_NODES.map((node) => <button key={node.id} role="listitem" className={`landing-constellation-node ${node.tone} ${constellationFocus === node.id ? 'active' : ''}`} style={{ left: `${node.x}%`, top: `${node.y}%` }} onClick={() => setConstellationFocus(node.id)}><i /><strong>{node.label}</strong><small>{node.type}</small></button>)}</div><div className="landing-constellation-detail"><span>SELECTED THREAD</span><div className="landing-constellation-detail-status"><i /> Connected to 3 story elements</div><h3>{CONSTELLATION_NODES.find((node) => node.id === constellationFocus)?.label}</h3><p>{CONSTELLATION_NODES.find((node) => node.id === constellationFocus)?.detail}</p><button className="button button-secondary" onClick={signIn}>Build your own map <Icon icon="fa-solid fa-arrow-right" /></button></div></div></section>
     <section className="landing-final"><div className="landing-final-orbit landing-final-orbit-a" aria-hidden="true" /><div className="landing-final-orbit landing-final-orbit-b" aria-hidden="true" /><div className="landing-final-inner"><div className="landing-final-mark" aria-hidden="true">✦</div><span>YOUR NEXT CHAPTER</span><h2>Start with one true sentence.</h2><p>The rest of the world can gather around it.</p><button className="button button-primary" onClick={signIn}>Begin writing <Icon icon="fa-solid fa-arrow-right" /></button><small>Private by default · Yours to keep</small></div></section>
-    <footer className="landing-footer landing-footer-rich"><div className="landing-footer-brand"><span>MoonScribe <i>✦</i></span><p>A quiet, private home for novels in progress.</p><small>© 2026 MoonScribe. Made for the stories still becoming.</small></div><div className="landing-footer-column"><strong>Explore</strong><a href="#features">Features</a><a href="#rhythm">How it works</a><a href="#community">Community</a><Link to="/contact">Contact</Link></div><div className="landing-footer-column"><strong>Legal</strong><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/cookies">Cookies</Link><Link to="/acceptable-use">Acceptable use</Link></div><div className="landing-footer-newsletter"><strong>Keep writing</strong><p>Write in the cloud or download the desktop studio.</p><button className="landing-footer-action" onClick={signIn}>Sign in / Open Cloud</button>{!cloudOnly && !lockedDownload && <a className="landing-footer-download" href={downloadUrl} download>Download MoonScribe</a>}<div className="landing-footer-social"><a href={GITHUB_REPOSITORY} target="_blank" rel="noreferrer" aria-label="MoonScribe on GitHub"><Icon icon="fa-brands fa-github" /></a><button type="button" onClick={() => setShareOpen(true)} aria-label="Share MoonScribe"><Icon icon="fa-solid fa-share-nodes" /></button></div></div></footer>
+    <footer className="landing-footer landing-footer-rich"><div className="landing-footer-brand"><span>MoonScribe <i>✦</i></span><p>A quiet, private home for novels in progress.</p><small>© 2026 MoonScribe. Made for the stories still becoming.</small></div><div className="landing-footer-column"><strong>Explore</strong><a href="#features">Features</a><a href="#rhythm">How it works</a><a href="#community">Community</a><Link to="/contact">Contact</Link></div><div className="landing-footer-column"><strong>Legal</strong><Link to="/privacy">Privacy</Link><Link to="/terms">Terms</Link><Link to="/cookies">Cookies</Link><Link to="/acceptable-use">Acceptable use</Link></div><div className="landing-footer-newsletter"><strong>Keep writing</strong><p>{signedIn ? 'Your studio is ready whenever you are.' : 'Write in the cloud or download the desktop studio.'}</p><button className="landing-footer-action" onClick={signIn}>{signedIn ? 'Open your studio' : 'Sign in / Open Cloud'}</button>{!cloudOnly && !lockedDownload && <a className="landing-footer-download" href={downloadUrl} download>Download MoonScribe</a>}<div className="landing-footer-social"><a href={GITHUB_REPOSITORY} target="_blank" rel="noreferrer" aria-label="MoonScribe on GitHub"><Icon icon="fa-brands fa-github" /></a><button type="button" onClick={() => setShareOpen(true)} aria-label="Share MoonScribe"><Icon icon="fa-solid fa-share-nodes" /></button></div></div></footer>
     <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
     <LandingShareModal open={shareOpen} onOpenChange={setShareOpen} />
   </main>

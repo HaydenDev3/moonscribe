@@ -1,6 +1,6 @@
 # Tauri desktop application
 
-> Current release: **1.1.6**.
+> Current release: **1.1.7**.
 
 ## Current status
 

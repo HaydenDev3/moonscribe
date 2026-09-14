@@ -21,7 +21,7 @@ for (const target of ['nsis', 'dmg', 'appimage', 'deb']) {
     failures.push(`Desktop bundle target is missing: ${target}.`)
 }
 if (config.bundle?.targets?.includes('msi'))
-  failures.push('MSI is not part of the supported 1.1.6 desktop release targets.')
+  failures.push('MSI is not part of the supported 1.1.7 desktop release targets.')
 if (config.version !== packageJson.version)
   failures.push(
     `Tauri version ${config.version} does not match package version ${packageJson.version}.`

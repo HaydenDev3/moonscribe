@@ -56,9 +56,13 @@ export default function AuthorWebsiteBuilder() {
   const [selected, setSelected] = useState('hero')
   const [query, setQuery] = useState('')
   const [deleteCandidate, setDeleteCandidate] = useState<string | null>(null)
+  const [inspectorOpen, setInspectorOpen] = useState(false)
   useEffect(() => {
     let ok = true
     const name = settings?.writerName || syncUsername || ''
+    // Render an account-specific shell immediately so a stalled local DB or
+    // sync request cannot turn this route into a blank page.
+    setSite(defaultAuthorWebsite(name))
     getAuthorWebsite(name)
       .then((v) => ok && setSite(normalizeAuthorWebsite(v, name)))
       .catch(() => ok && setSite(defaultAuthorWebsite(name)))
@@ -176,12 +180,54 @@ export default function AuthorWebsiteBuilder() {
       toast?.(e instanceof Error ? e.message : 'Publishing failed.')
     }
   }
+  const unpublish = async () => {
+    setStatus('publishing')
+    try {
+      const c = await getConfig()
+      if (!c.server || !c.token) throw Error('Sign in to manage your published website.')
+      const r = await fetch(`${c.server.replace(/\/$/, '')}/api/author-website/unpublish`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${c.token}` },
+      })
+      const data = await r.json()
+      if (!r.ok) throw Error(data.error || 'The website could not be unpublished.')
+      const next = normalizeAuthorWebsite(data.website, site?.authorName)
+      setSite(next)
+      await saveAuthorWebsite(next)
+      setStatus('draft-saved')
+      toast?.('Website unpublished. Your draft is still available here.')
+    } catch (e) {
+      setStatus('failed')
+      toast?.(e instanceof Error ? e.message : 'The website could not be unpublished.')
+    }
+  }
+  const showPreview = () => {
+    setMobileWorkspace('preview')
+    document
+      .querySelector('.builder-preview')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  const selectSection = (id: string) => {
+    setSelected(id)
+    setInspector('section')
+    setInspectorOpen(true)
+  }
   if (!site) return <WebsiteLoading />
   const items = catalog.filter((x) => x.name.toLowerCase().includes(query.toLowerCase()))
   const mobileContent =
     mobileWorkspace === 'preview' ? (
       <div className="mobile-preview-workspace">
-        <AuthorSite site={site} pageId={pageId} editable selectedSectionId={selected} onSelectSection={(id) => { setSelected(id); setInspector('section') }} onEditSection={(id) => { setSelected(id); setInspector('section') }} onDeleteSection={removeSection} onMoveSection={moveSection} />
+        <AuthorSite
+          site={site}
+          pageId={pageId}
+          editable
+          selectedSectionId={selected}
+          onSelectSection={selectSection}
+          onEditSection={selectSection}
+          onUpdateSite={update}
+          onDeleteSection={removeSection}
+          onMoveSection={moveSection}
+        />
       </div>
     ) : mobileWorkspace === 'sections' ? (
       <MobileSections items={items} add={add} query={query} setQuery={setQuery} />
@@ -192,6 +238,7 @@ export default function AuthorWebsiteBuilder() {
     ) : mobileWorkspace === 'inspector' ? (
       <InspectorPanel
         mode={inspector}
+        open={inspectorOpen}
         setMode={setInspector}
         site={site}
         update={update}
@@ -205,6 +252,11 @@ export default function AuthorWebsiteBuilder() {
         site={site}
         save={() => void save(false)}
         publish={() => void publish()}
+        unpublish={() => void unpublish()}
+        viewLive={() =>
+          site.published &&
+          window.open(`/@${encodeURIComponent(site.authorName)}`, '_blank', 'noopener,noreferrer')
+        }
         preview={() => setMobileWorkspace('preview')}
       />
     )
@@ -212,7 +264,7 @@ export default function AuthorWebsiteBuilder() {
     <>
       <div className="mobile-builder-shell">
         <div className="mobile-builder-head">
-          <button onClick={() => nav('/dashboard')} aria-label="Back to dashboard">
+          <button type="button" onClick={() => nav('/dashboard')} aria-label="Back to dashboard">
             <Icon icon="fa-solid fa-arrow-left" />
           </button>
           <strong>
@@ -226,7 +278,9 @@ export default function AuthorWebsiteBuilder() {
         <nav className="mobile-builder-nav">
           {(['sections', 'pages', 'preview', 'design', 'more'] as const).map((x) => (
             <button
+              type="button"
               className={mobileWorkspace === x ? 'active' : ''}
+              aria-pressed={mobileWorkspace === x}
               onClick={() => setMobileWorkspace(x)}
               key={x}
             >
@@ -250,7 +304,7 @@ export default function AuthorWebsiteBuilder() {
       </div>
       <main className="author-builder">
         <header className="builder-header">
-          <button onClick={() => nav('/dashboard')} aria-label="Back">
+          <button type="button" onClick={() => nav('/dashboard')} aria-label="Back">
             <Icon icon="fa-solid fa-arrow-left" />
           </button>
           <span>
@@ -258,11 +312,12 @@ export default function AuthorWebsiteBuilder() {
           </span>
           <div className="builder-actions">
             <small>{statusText(status)}</small>
-            <button className="builder-action">
+            <button type="button" className="builder-action" onClick={showPreview}>
               <Icon icon="fa-regular fa-eye" />
               Preview
             </button>
             <button
+              type="button"
               className="builder-action"
               disabled={!site.published}
               onClick={() =>
@@ -272,15 +327,25 @@ export default function AuthorWebsiteBuilder() {
               <Icon icon="fa-solid fa-arrow-up-right-from-square" />
               View live
             </button>
-            <button className="builder-action" onClick={() => void save(false)}>
+            <button type="button" className="builder-action" onClick={() => void save(false)}>
               <Icon icon="fa-regular fa-floppy-disk" />
               Save draft
             </button>
-            <button className="builder-publish" onClick={() => void publish()}>
+            <button type="button" className="builder-publish" onClick={() => void publish()}>
               <Icon icon="fa-solid fa-upload" />
               {status === 'publishing' ? 'Publishing…' : 'Publish'}
             </button>
-            <button className="builder-action">
+            {site.published && (
+              <button
+                type="button"
+                className="builder-action builder-unpublish"
+                onClick={() => void unpublish()}
+              >
+                <Icon icon="fa-solid fa-eye-slash" />
+                Unpublish
+              </button>
+            )}
+            <button type="button" className="builder-action" aria-label="More website options">
               <Icon icon="fa-solid fa-ellipsis-vertical" />
             </button>
           </div>
@@ -335,7 +400,9 @@ export default function AuthorWebsiteBuilder() {
               <div className="device-switch">
                 {(['desktop', 'tablet', 'mobile'] as Device[]).map((d) => (
                   <button
+                    type="button"
                     className={device === d ? 'active' : ''}
+                    aria-pressed={device === d}
                     onClick={() => setDevice(d)}
                     key={d}
                   >
@@ -370,17 +437,34 @@ export default function AuthorWebsiteBuilder() {
                       .map((x) => ({ value: x.id, label: x.name })) || []),
                   ]}
                 />
-                <button onClick={() => setInspector('page')}>
+                <button
+                  onClick={() => {
+                    setInspector('page')
+                    setInspectorOpen(true)
+                  }}
+                  aria-label="Open page settings"
+                >
                   <Icon icon="fa-solid fa-gear" />
                 </button>
               </div>
             </div>
             <div className={`preview-viewport ${device}`}>
-              <AuthorSite site={site} pageId={pageId} editable selectedSectionId={selected} onSelectSection={(id) => { setSelected(id); setInspector('section') }} onEditSection={(id) => { setSelected(id); setInspector('section') }} onDeleteSection={removeSection} onMoveSection={moveSection} />
+              <AuthorSite
+                site={site}
+                pageId={pageId}
+                editable
+                selectedSectionId={selected}
+                onSelectSection={selectSection}
+                onEditSection={selectSection}
+                onUpdateSite={update}
+                onDeleteSection={removeSection}
+                onMoveSection={moveSection}
+              />
             </div>
           </section>
           <InspectorPanel
             mode={inspector}
+            open={inspectorOpen}
             setMode={setInspector}
             site={site}
             update={update}
@@ -413,7 +497,12 @@ export default function AuthorWebsiteBuilder() {
           </button>
         </nav>
       </main>
-      {deleteCandidate && <DeleteSectionModal onCancel={() => setDeleteCandidate(null)} onConfirm={confirmRemoveSection} />}
+      {deleteCandidate && (
+        <DeleteSectionModal
+          onCancel={() => setDeleteCandidate(null)}
+          onConfirm={confirmRemoveSection}
+        />
+      )}
     </>
   )
 }
@@ -585,6 +674,7 @@ function Content({
 }
 function InspectorPanel({
   mode,
+  open,
   setMode,
   site,
   update,
@@ -594,6 +684,7 @@ function InspectorPanel({
   onDelete,
 }: {
   mode: Inspector
+  open: boolean
   setMode: (x: Inspector) => void
   site: Site
   update: (x: Partial<Site>) => void
@@ -605,7 +696,7 @@ function InspectorPanel({
   const section = page?.sections.find((x) => x.id === selected)
   const name = catalog.find((x) => x.type === section?.type)?.name || 'Hero Section'
   return (
-    <aside className="builder-inspector">
+    <aside className={`builder-inspector ${open ? 'is-open' : ''}`}>
       <div className="inspector-tabs">
         {(['page', 'section', 'element'] as Inspector[]).map((x) => (
           <button className={mode === x ? 'active' : ''} onClick={() => setMode(x)} key={x}>
@@ -683,7 +774,14 @@ function InspectorPanel({
               />
             </>
           ) : (
-            <SectionActions page={page} site={site} update={update} section={section} move={move} onDelete={onDelete} />
+            <SectionActions
+              page={page}
+              site={site}
+              update={update}
+              section={section}
+              move={move}
+              onDelete={onDelete}
+            />
           )}{' '}
         </div>
       )}
@@ -693,6 +791,13 @@ function InspectorPanel({
 function Hero({ site, update }: { site: Site; update: (x: Partial<Site>) => void }) {
   return (
     <>
+      <Field label="Eyebrow">
+        <input
+          className={control}
+          value={site.heroEyebrow}
+          onChange={(e) => update({ heroEyebrow: e.target.value })}
+        />
+      </Field>
       <Field label="Heading">
         <input
           className={control}
@@ -727,6 +832,14 @@ function Hero({ site, update }: { site: Site; update: (x: Partial<Site>) => void
           className={control}
           value={site.secondaryCta}
           onChange={(e) => update({ secondaryCta: e.target.value })}
+        />
+      </Field>
+      <Field label="Hero quote">
+        <textarea
+          className={control}
+          rows={2}
+          value={site.heroQuote}
+          onChange={(e) => update({ heroQuote: e.target.value })}
         />
       </Field>
       <Field label="Background">
@@ -765,14 +878,118 @@ function Hero({ site, update }: { site: Site; update: (x: Partial<Site>) => void
     </>
   )
 }
-function DeleteSectionModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
-  return <div className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-5 backdrop-blur-sm" role="presentation" onMouseDown={onCancel}><div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#12171c] p-5 text-[#eee8de] shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="delete-component-title" onMouseDown={(event) => event.stopPropagation()}><div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-400/10 text-red-300"><Icon icon="fa-solid fa-trash" /></div><h2 id="delete-component-title" className="font-serif text-xl">Remove this component?</h2><p className="mt-2 text-sm leading-6 text-white/55">This section will be removed from the current page. Your other website content will stay untouched.</p><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onCancel} className="rounded-lg border border-white/10 px-4 py-2.5 text-sm text-white/70 hover:border-white/25">Keep component</button><button type="button" autoFocus onClick={onConfirm} className="rounded-lg border border-red-300/30 bg-red-400/10 px-4 py-2.5 text-sm text-red-200 hover:bg-red-400/20">Remove component</button></div></div></div>
+function DeleteSectionModal({
+  onCancel,
+  onConfirm,
+}: {
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[100] grid place-items-center bg-black/70 p-5 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={onCancel}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#12171c] p-5 text-[#eee8de] shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-component-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-red-400/10 text-red-300">
+          <Icon icon="fa-solid fa-trash" />
+        </div>
+        <h2 id="delete-component-title" className="font-serif text-xl">
+          Remove this component?
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-white/55">
+          This section will be removed from the current page. Your other website content will stay
+          untouched.
+        </p>
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-lg border border-white/10 px-4 py-2.5 text-sm text-white/70 hover:border-white/25"
+          >
+            Keep component
+          </button>
+          <button
+            type="button"
+            autoFocus
+            onClick={onConfirm}
+            className="rounded-lg border border-red-300/30 bg-red-400/10 px-4 py-2.5 text-sm text-red-200 hover:bg-red-400/20"
+          >
+            Remove component
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
-function SectionActions({ page, site, update, section, move, onDelete }: { page?: WebsitePage; site: Site; update: (x: Partial<Site>) => void; section: any; move: (d: number) => void; onDelete: (id: string) => void }) {
-  return <><Toggle label="Visible" checked={section.visible !== false} onChange={(v) => page && update({ pages: site.pages?.map((p) => p.id === page.id ? { ...p, sections: p.sections.map((s) => s.id === section.id ? { ...s, visible: v } : s) } : p) })} /><div className="move-controls"><button onClick={() => move(-1)}>↑ Move up</button><button onClick={() => move(1)}>↓ Move down</button></div><button className="remove-section" onClick={() => onDelete(section.id)}><Icon icon="fa-solid fa-trash" /> Delete component</button></>
+function SectionActions({
+  page,
+  site,
+  update,
+  section,
+  move,
+  onDelete,
+}: {
+  page?: WebsitePage
+  site: Site
+  update: (x: Partial<Site>) => void
+  section: any
+  move: (d: number) => void
+  onDelete: (id: string) => void
+}) {
+  return (
+    <>
+      <Toggle
+        label="Visible"
+        checked={section.visible !== false}
+        onChange={(v) =>
+          page &&
+          update({
+            pages: site.pages?.map((p) =>
+              p.id === page.id
+                ? {
+                    ...p,
+                    sections: p.sections.map((s) =>
+                      s.id === section.id ? { ...s, visible: v } : s
+                    ),
+                  }
+                : p
+            ),
+          })
+        }
+      />
+      <div className="move-controls">
+        <button onClick={() => move(-1)}>↑ Move up</button>
+        <button onClick={() => move(1)}>↓ Move down</button>
+      </div>
+      <button className="remove-section" onClick={() => onDelete(section.id)}>
+        <Icon icon="fa-solid fa-trash" /> Delete component
+      </button>
+    </>
+  )
 }
 function BookLayout({ site, update }: { site: Site; update: (x: Partial<Site>) => void }) {
-  return <Field label="Book display"><ThemedSelect value={site.booksView || 'shelf'} onChange={(v) => update({ booksView: v as Site['booksView'] })} ariaLabel="Book display" width="100%" options={[{ value: 'shelf', label: 'Shelf — 3D presentation' }, { value: 'list', label: 'List — editorial cards' }]} /></Field>
+  return (
+    <Field label="Book display">
+      <ThemedSelect
+        value={site.booksView || 'list'}
+        onChange={(v) => update({ booksView: v as Site['booksView'] })}
+        ariaLabel="Book display"
+        width="100%"
+        options={[
+          { value: 'list', label: 'List — editorial cards' },
+          { value: 'shelf', label: 'Shelf — 3D presentation' },
+        ]}
+      />
+    </Field>
+  )
 }
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -879,11 +1096,15 @@ function MobileMore({
   site,
   save,
   publish,
+  unpublish,
+  viewLive,
   preview,
 }: {
   site: Site
   save: () => void
   publish: () => void
+  unpublish: () => void
+  viewLive: () => void
   preview: () => void
 }) {
   return (
@@ -897,7 +1118,7 @@ function MobileMore({
         </span>
         <Icon icon="fa-solid fa-chevron-right" />
       </button>
-      <button disabled={!site.published}>
+      <button type="button" disabled={!site.published} onClick={viewLive}>
         <Icon icon="fa-solid fa-arrow-up-right-from-square" />
         <span>
           View live<small>Visit your published site</small>
@@ -915,6 +1136,15 @@ function MobileMore({
         <Icon icon="fa-solid fa-upload" />
         Publish
       </button>
+      {site.published && (
+        <button type="button" onClick={unpublish}>
+          <Icon icon="fa-solid fa-eye-slash" />
+          <span>
+            Unpublish<small>Remove the public version while keeping this draft</small>
+          </span>
+          <Icon icon="fa-solid fa-chevron-right" />
+        </button>
+      )}
       <h3>SITE SETTINGS</h3>
       <button>
         <Icon icon="fa-solid fa-magnifying-glass" />

@@ -2413,7 +2413,7 @@ dependencies = [
 
 [[package]]
 name = "moonscribe"
-version = "1.1.6"
+version = "1.1.7"
 dependencies = [
  "discord-rich-presence",
  "keyring",

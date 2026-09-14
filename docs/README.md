@@ -1,8 +1,8 @@
 # MoonScribe documentation
 
-Current release: **1.1.6** (9 September 2026).
+Current release: **1.1.7** (14 September 2026).
 
-MoonScribe 1.1.6 is the current release: a local-first writing workspace with a redesigned Designer, print-aware manuscript previews, an author-site builder, reliable sync triggers, primary-provider identity linking, normalized profile avatars, account connection recovery, global command actions, recoverable Trash, and a responsive References sidebar.
+MoonScribe 1.1.7 is the current release: a local-first writing workspace with responsive Designer and Interior Layout surfaces, print-aware manuscript previews, an author-site builder, reliable sync and recovery flows, primary-provider identity linking, normalized profile avatars, account connection recovery, global command actions, recoverable Trash, and a responsive References sidebar.
 
 MoonScribe is a local-first novel-writing, worldbuilding, planning, and book-design application. This handbook documents the product as it exists, its trust boundaries, and the work required for a public 1.0 release.
 
@@ -26,15 +26,15 @@ MoonScribe is a local-first novel-writing, worldbuilding, planning, and book-des
 
 - [Security model](security.md) — authentication, authorization, secrets, imported content, sessions, and known gaps.
 - [Browser QA report](browser-qa.md) — browser coverage, clean-profile validation, and remaining manual journeys.
-- [1.1.6 release notes](release-1.1.6.md) — shipped features, verification, and release boundaries.
-- [Release-candidate audit](release-candidate-audit.md) — historical 1.0 readiness audit; use the 1.1.6 release notes for current status.
+- [1.1.7 release notes](release-1.1.7.md) — shipped features, verification, and release boundaries.
+- [Release-candidate audit](release-candidate-audit.md) — historical 1.0 readiness audit; use the 1.1.7 release notes for current status.
 - [Desktop application](desktop.md) — current Tauri status, toolchain, packaging, and native roadmap.
 - [Desktop release runbook](desktop-release.md) — signing, updater, packaging, and release verification.
 - [Legal review handoff](legal-review-handoff.md) — product claims and review context.
 
-Historical release notes: [1.1.3](release-1.1.3.md), [1.1.4](release-1.1.4.md), and [1.1.5](release-1.1.5.md).
+Historical release notes: [1.1.3](release-1.1.3.md), [1.1.4](release-1.1.4.md), [1.1.5](release-1.1.5.md), and [1.1.6](release-1.1.6.md).
 
-## 1.1.6 feature map
+## 1.1.7 feature map
 
 ### Writing and print
 
@@ -60,11 +60,11 @@ Historical release notes: [1.1.3](release-1.1.3.md), [1.1.4](release-1.1.4.md), 
 - The command palette includes Dashboard, Quick Capture, Sync now, and Settings actions.
 - Supported deleted records move through recoverable Trash, and References becomes a responsive editor-side workspace.
 
-For the release boundary and verification record, read [release-1.1.6.md](release-1.1.6.md).
+For the release boundary and verification record, read [release-1.1.7.md](release-1.1.7.md).
 
 ## Current release status
 
-The web release is the primary 1.1.6 validation target. The current gate passes TypeScript, lint, the full automated test suite, production build, dependency audit, and the native-select source scan. The build still reports a large-main-chunk warning; it is tracked as an optimization item, not a release blocker for this version.
+The web release is the primary 1.1.7 validation target. The current gate passes TypeScript, lint, the full automated test suite, production build, dependency audit, and the native-select source scan. Route-level lazy loading is in place; remaining bundle-budget work is tracked in the 1.1.7 release notes.
 
 The web app stores manuscripts in IndexedDB. The desktop shell uses native SQLite as its authoritative profile-scoped repository and provides OS keychain credentials, window state, tray behavior, global Quick Capture, notifications, backups, guarded restore, and WebAuthn passkeys. Desktop distribution still requires real updater signing credentials and packaged accessibility/device QA.
 

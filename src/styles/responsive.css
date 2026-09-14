@@ -684,6 +684,160 @@ body,
 @keyframes mobileNavBounce { 0%,72%,100% { transform: translateY(0); } 78% { transform: translateY(-4px); } 84% { transform: translateY(0); } 89% { transform: translateY(-2px); } }
 @media (prefers-reduced-motion: reduce) { .mobile-novel-nav, .mobile-novel-nav .mobile-novel-create { animation: none; } }
 
+/* Selecting a component is an explicit editing action; keep its controls
+   visible until another component is selected. */
+.author-editor-boundary.is-selected .author-editor-boundary-toolbar {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transform: translateY(0) !important;
+  pointer-events: auto !important;
+  transition-delay: 0s !important;
+}
+
+/* Constrained horizontal tablet editor layout. Keep the manuscript dominant
+   without allowing the desktop chrome to wrap into a second, tall toolbar. */
+@media (min-width: 701px) and (max-width: 1024px) {
+  .workspace:has(.editor-wrap) .workspace-topbar {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    min-height: 56px;
+    padding: 8px 12px;
+    overflow: hidden;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap !important;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .mobile-menu-btn {
+    display: inline-flex;
+    flex: 0 0 36px;
+    width: 36px;
+    min-width: 36px;
+    min-height: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar .crumbs {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.74rem;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar .mobile-hub-trigger {
+    flex: 0 0 34px;
+    width: 34px;
+    min-width: 34px;
+    padding: 0;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child {
+    display: flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 52%;
+    flex-wrap: nowrap !important;
+    align-items: center;
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child::-webkit-scrollbar { display: none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > * { flex: 0 0 auto; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .notification-bell {
+    flex: 0 0 36px;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button span:not(.sr-only) { display: none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button i { margin-right: 0 !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .collab-presence-wrap { flex: 0 0 auto; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill {
+    flex: 0 0 42px;
+    width: 42px;
+    min-width: 42px;
+    height: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-name,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-caret,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-discord { display: none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-avatar { width: 30px; height: 30px; }
+
+  .workspace:has(.editor-wrap) .scene-meta {
+    display: grid !important;
+    grid-template-columns: 116px repeat(5, minmax(0, 1fr)) !important;
+    align-items: end;
+    gap: 5px;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 7px 10px 8px !important;
+    overflow: hidden !important;
+  }
+  .workspace:has(.editor-wrap) .scene-meta-header { grid-column: auto !important; margin: 0 5px 3px 0 !important; }
+  .workspace:has(.editor-wrap) .scene-meta-label { padding: 5px 7px; font-size: 0.55rem; white-space: nowrap; }
+  .workspace:has(.editor-wrap) .scene-meta-field { display: grid; min-width: 0; gap: 2px; margin: 0; }
+  .workspace:has(.editor-wrap) .scene-meta-field > span { font-size: 0.5rem; }
+  .workspace:has(.editor-wrap) .scene-meta-field input,
+  .workspace:has(.editor-wrap) .scene-meta-field select {
+    min-width: 0;
+    width: 100%;
+    height: 27px;
+    min-height: 27px;
+    padding: 3px 6px;
+    font-size: 0.67rem;
+  }
+
+  .workspace:has(.editor-wrap) .editor-toolbar {
+    max-height: 84px;
+    overflow: hidden !important;
+  }
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row {
+    width: max-content;
+    max-width: 100%;
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    scrollbar-width: thin;
+  }
+  .workspace:has(.editor-wrap) .editor-footer {
+    min-height: 42px;
+    height: 42px;
+    padding: 5px 10px;
+    gap: 8px;
+    overflow: hidden;
+    font-size: 0.68rem;
+  }
+  .workspace:has(.editor-wrap) .editor-footer-metrics { gap: 7px; padding-right: 8px; }
+  .workspace:has(.editor-wrap) .editor-footer-metrics .stat:nth-child(n+3),
+  .workspace:has(.editor-wrap) .editor-footer .editor-footer-goal { display: none; }
+  .workspace:has(.editor-wrap) .editor-footer .editor-footer-save-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .workspace:has(.editor-wrap) .editor-footer-actions > .button:nth-of-type(n+2) { display: none; }
+}
+
+/* The picker lives above a horizontally scrolling toolbar. A fixed layer
+   keeps it clickable and visible at tablet widths and on narrow screens. */
+.editor-media-picker .editor-media-popover {
+  position: fixed !important;
+  top: auto;
+  bottom: auto !important;
+  z-index: 5000;
+  margin: 0;
+}
+
 /* Final editor toolbar positioning: clear the shared bottom nav and preserve
    scrollable manuscript space beneath the formatting controls. */
 @media (max-width: 767px) {
@@ -707,6 +861,396 @@ body,
   .workspace:has(.editor-wrap) .editor-wrap {
     padding-bottom: calc(145px + env(safe-area-inset-bottom)) !important;
   }
+}
+
+/* Author Website builder: keep the simulated site usable at iPad widths. */
+@media (min-width: 701px) and (max-width: 1024px) {
+  .author-builder .builder-inspector.is-open {
+    transform: translateX(0) !important;
+    visibility: visible !important;
+  }
+  .author-builder .builder-header {
+    min-height: 58px !important;
+    gap: 8px !important;
+    padding: 0 12px !important;
+  }
+  .author-builder .builder-header > button {
+    flex: 0 0 auto;
+  }
+  .author-builder .builder-header > span,
+  .author-builder .builder-actions small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .author-builder .builder-actions {
+    min-width: 0;
+    gap: 5px !important;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .author-builder .builder-actions > * {
+    flex: 0 0 auto;
+  }
+  .author-builder .builder-action,
+  .author-builder .builder-publish {
+    min-height: 34px;
+    padding: 6px 9px !important;
+    white-space: nowrap;
+  }
+  .author-builder .builder-layout {
+    grid-template-columns: 220px minmax(0, 1fr) !important;
+  }
+  .author-builder .builder-library {
+    min-width: 0;
+    overflow-y: auto;
+  }
+  .author-builder .builder-preview {
+    min-width: 0;
+    overflow-x: hidden !important;
+    padding: 8px !important;
+  }
+  .author-builder .builder-preview .preview-head {
+    min-width: 0;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+  .author-builder .preview-viewport {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: calc(100vh - 112px) !important;
+    min-height: 0 !important;
+    overflow-x: hidden !important;
+  }
+  .author-builder .preview-viewport .author-site-root {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: hidden !important;
+  }
+  .author-builder .preview-viewport .author-site-root * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .author-builder .preview-viewport .author-site-root #about > div {
+    grid-template-columns: minmax(150px, .72fr) minmax(0, 1.28fr) !important;
+    gap: 16px !important;
+    padding-inline: 18px !important;
+  }
+  .author-builder .preview-viewport .author-site-root #about > div > ul {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    padding: 14px 0 0;
+  }
+  .author-builder .preview-viewport .author-site-root header > div,
+  .author-builder .preview-viewport .author-site-root footer > div {
+    padding-inline: 18px !important;
+  }
+  .author-builder .author-editor-boundary.is-selected .author-editor-boundary-toolbar {
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: translateY(0) !important;
+    pointer-events: auto !important;
+    transition-delay: 0s !important;
+  }
+}
+
+/* Author Website tablet layout: retain the library and preview without the
+   desktop inspector consuming the available horizontal space. */
+@media (min-width: 701px) and (max-width: 1024px) {
+  .author-builder .builder-header {
+    min-height: 62px !important;
+    height: auto !important;
+    padding: 8px 12px !important;
+    gap: 8px !important;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .author-builder .builder-header > span {
+    min-width: 120px !important;
+    max-width: 190px !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.25;
+  }
+  .author-builder .builder-actions {
+    min-width: 0 !important;
+    gap: 6px !important;
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .author-builder .builder-actions small {
+    flex: 0 0 42px;
+    font-size: 10px;
+    line-height: 1.2;
+  }
+  .author-builder .builder-action,
+  .author-builder .builder-publish {
+    flex: 0 0 auto;
+    min-height: 38px !important;
+    padding: 8px 10px !important;
+    white-space: nowrap;
+  }
+  .author-builder .builder-layout {
+    grid-template-columns: 220px minmax(0, 1fr) !important;
+    min-width: 0;
+  }
+  .author-builder .builder-library {
+    position: static !important;
+    width: auto !important;
+    min-width: 0 !important;
+    transform: none !important;
+    visibility: visible !important;
+    overflow-x: hidden;
+  }
+  .author-builder .builder-preview {
+    min-width: 0;
+    padding: 10px !important;
+    overflow-x: hidden;
+  }
+  .author-builder .builder-preview .preview-head {
+    min-width: 0;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .author-builder .device-switch,
+  .author-builder .preview-tools {
+    min-width: 0;
+    flex-wrap: nowrap;
+  }
+  .author-builder .device-switch button,
+  .author-builder .preview-tools button,
+  .author-builder .preview-tools select {
+    padding: 8px 9px !important;
+    white-space: nowrap;
+  }
+  .author-builder .preview-viewport {
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0;
+    height: calc(100vh - 142px) !important;
+    min-height: 520px;
+  }
+}
+
+/* Final horizontal iPad editor containment. */
+@media (min-width: 701px) and (max-width: 1024px) {
+  .workspace:has(.editor-wrap) .workspace-topbar { display: flex !important; flex-wrap: nowrap !important; align-items: center; gap: 8px; width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child { display: flex !important; flex: 0 1 46%; width: 46%; min-width: 0; flex-wrap: nowrap !important; align-items: center; gap: 6px; overflow: hidden; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .mobile-menu-btn { display: inline-flex !important; flex: 0 0 auto !important; width: auto !important; min-width: 86px !important; min-height: 36px !important; height: 36px; padding: 0 10px !important; justify-content: center; gap: 7px; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .tablet-library-label { display: inline !important; white-space: nowrap; font-size: .72rem; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .crumbs { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .mobile-hub-trigger { flex: 0 0 34px; width: 34px; min-width: 34px; height: 34px; padding: 0; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child { display: flex !important; flex: 1 1 54%; width: 54%; max-width: none; min-width: 0; flex-wrap: nowrap !important; align-items: center; justify-content: flex-end; gap: 5px; overflow-x: auto !important; overflow-y: hidden; scrollbar-width: none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child::-webkit-scrollbar { display: none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > * { flex: 0 0 auto !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .notification-bell { width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important; padding: 0 !important; justify-content: center; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button span:not(.sr-only) { display: none !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button i { margin-right: 0 !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill { width: 42px !important; min-width: 42px !important; height: 36px !important; padding: 0 !important; justify-content: center; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-name,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-caret,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-discord { display: none !important; }
+  .workspace:has(.editor-wrap) .scene-meta { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)) !important; align-items: end !important; gap: 6px !important; max-height: none !important; margin: 0 !important; padding: 7px 10px 8px !important; overflow: hidden !important; }
+  .workspace:has(.editor-wrap) .scene-meta-header { grid-column: 1 / -1 !important; margin: 0 !important; }
+  .workspace:has(.editor-wrap) .scene-meta-field { display: grid !important; min-width: 0 !important; gap: 2px !important; margin: 0 !important; }
+  .workspace:has(.editor-wrap) .scene-meta-field input,
+  .workspace:has(.editor-wrap) .scene-meta-field select { width: 100% !important; min-width: 0 !important; height: 27px !important; min-height: 27px !important; padding: 3px 6px !important; font-size: .67rem !important; }
+  .workspace:has(.editor-wrap) .editor-toolbar,
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row,
+  .workspace:has(.editor-wrap) .split-editor-primary,
+  .workspace:has(.editor-wrap) .editor-shell,
+  .workspace:has(.editor-wrap) .editor-wrap { min-width: 0 !important; max-width: 100% !important; box-sizing: border-box; }
+  .workspace:has(.editor-wrap) .editor-toolbar { width: 100% !important; overflow: hidden !important; }
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row { width: 100% !important; max-width: 100% !important; overflow-x: auto !important; overflow-y: hidden !important; flex-wrap: nowrap !important; }
+}
+
+/* Final horizontal iPad editor containment: preserve a dedicated Library
+   trigger and keep command rows inside the available editor width. */
+@media (min-width: 701px) and (max-width: 1024px) {
+  .workspace:has(.editor-wrap) .workspace-topbar { display: flex !important; flex-wrap: nowrap !important; align-items: center; gap: 8px; width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child { display: flex !important; flex: 0 1 46%; width: 46%; min-width: 0; flex-wrap: nowrap !important; align-items: center; gap: 6px; overflow: hidden; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .mobile-menu-btn { display: inline-flex !important; flex: 0 0 auto !important; width: auto !important; min-width: 86px !important; min-height: 36px !important; height: 36px; padding: 0 10px !important; justify-content: center; gap: 7px; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .tablet-library-label { display: inline !important; white-space: nowrap; font-size: .72rem; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .crumbs { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .mobile-hub-trigger { flex: 0 0 34px; width: 34px; min-width: 34px; height: 34px; padding: 0; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child { display: flex !important; flex: 1 1 54%; width: 54%; max-width: none; min-width: 0; flex-wrap: nowrap !important; align-items: center; justify-content: flex-end; gap: 5px; overflow-x: auto !important; overflow-y: hidden; scrollbar-width: none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child::-webkit-scrollbar { display: none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > * { flex: 0 0 auto !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .notification-bell { width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important; padding: 0 !important; justify-content: center; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button span:not(.sr-only) { display: none !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button i { margin-right: 0 !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill { width: 42px !important; min-width: 42px !important; height: 36px !important; padding: 0 !important; justify-content: center; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-name,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-caret,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-discord { display: none !important; }
+  .workspace:has(.editor-wrap) .scene-meta { display: grid !important; grid-template-columns: 116px repeat(5, minmax(0, 1fr)) !important; align-items: end !important; gap: 5px !important; max-height: none !important; margin: 0 !important; padding: 7px 10px 8px !important; overflow: hidden !important; }
+  .workspace:has(.editor-wrap) .scene-meta-header { grid-column: auto !important; margin: 0 5px 3px 0 !important; }
+  .workspace:has(.editor-wrap) .scene-meta-field { display: grid !important; min-width: 0 !important; gap: 2px !important; margin: 0 !important; }
+  .workspace:has(.editor-wrap) .scene-meta-field input,
+  .workspace:has(.editor-wrap) .scene-meta-field select { width: 100% !important; min-width: 0 !important; height: 27px !important; min-height: 27px !important; padding: 3px 6px !important; font-size: .67rem !important; }
+  .workspace:has(.editor-wrap) .editor-toolbar,
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row,
+  .workspace:has(.editor-wrap) .split-editor-primary,
+  .workspace:has(.editor-wrap) .editor-shell,
+  .workspace:has(.editor-wrap) .editor-wrap { min-width: 0 !important; max-width: 100% !important; box-sizing: border-box; }
+  .workspace:has(.editor-wrap) .editor-toolbar { width: 100% !important; overflow: hidden !important; }
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row { width: 100% !important; max-width: 100% !important; overflow-x: auto !important; overflow-y: hidden !important; flex-wrap: nowrap !important; }
+}
+
+/* Last word for horizontal iPad panes: keep a real Library trigger visible,
+   reserve space for the breadcrumb, and contain every command rail inside
+   the editor instead of letting its intrinsic width widen the page. */
+@media (min-width: 701px) and (max-width: 1024px) {
+  .workspace:has(.editor-wrap) .workspace-topbar {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child {
+    display: flex !important;
+    flex: 0 1 46%;
+    width: 46%;
+    min-width: 0;
+    flex-wrap: nowrap !important;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .mobile-menu-btn {
+    display: inline-flex !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    min-width: 86px !important;
+    min-height: 36px !important;
+    height: 36px;
+    padding: 0 10px !important;
+    justify-content: center;
+    gap: 7px;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .tablet-library-label {
+    display: inline !important;
+    white-space: nowrap;
+    font-size: 0.72rem;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .crumbs {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .mobile-hub-trigger {
+    flex: 0 0 34px;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child {
+    display: flex !important;
+    flex: 1 1 54%;
+    width: 54%;
+    max-width: none;
+    min-width: 0;
+    flex-wrap: nowrap !important;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 5px;
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child::-webkit-scrollbar { display: none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > * { flex: 0 0 auto !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .notification-bell {
+    width: 36px !important;
+    min-width: 36px !important;
+    height: 36px !important;
+    min-height: 36px !important;
+    padding: 0 !important;
+    justify-content: center;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button span:not(.sr-only) { display: none !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button i { margin-right: 0 !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill {
+    width: 42px !important;
+    min-width: 42px !important;
+    height: 36px !important;
+    padding: 0 !important;
+    justify-content: center;
+  }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-name,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-caret,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-discord { display: none !important; }
+
+  .workspace:has(.editor-wrap) .scene-meta {
+    display: grid !important;
+    grid-template-columns: 116px repeat(5, minmax(0, 1fr)) !important;
+    align-items: end !important;
+    gap: 5px !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 7px 10px 8px !important;
+    overflow: hidden !important;
+  }
+  .workspace:has(.editor-wrap) .scene-meta-header { grid-column: auto !important; margin: 0 5px 3px 0 !important; }
+  .workspace:has(.editor-wrap) .scene-meta-field { display: grid !important; min-width: 0 !important; gap: 2px !important; margin: 0 !important; }
+  .workspace:has(.editor-wrap) .scene-meta-field input,
+  .workspace:has(.editor-wrap) .scene-meta-field select { width: 100% !important; min-width: 0 !important; height: 27px !important; min-height: 27px !important; padding: 3px 6px !important; font-size: .67rem !important; }
+
+  .workspace:has(.editor-wrap) .editor-toolbar,
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row,
+  .workspace:has(.editor-wrap) .split-editor-primary,
+  .workspace:has(.editor-wrap) .editor-shell,
+  .workspace:has(.editor-wrap) .editor-wrap { min-width: 0 !important; max-width: 100% !important; box-sizing: border-box; }
+  .workspace:has(.editor-wrap) .editor-toolbar { width: 100% !important; overflow: hidden !important; }
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row { width: 100% !important; max-width: 100% !important; overflow-x: auto !important; overflow-y: hidden !important; flex-wrap: nowrap !important; }
+}
+
+/* Final constrained-tablet editor pass: this intentionally follows every
+   broader responsive rule so 850px near-square panes cannot expand the scene
+   metadata back into a tall desktop stack. */
+@media (min-width: 701px) and (max-width: 900px) {
+  .workspace:has(.editor-wrap) .scene-meta {
+    display: grid !important;
+    grid-template-columns: 116px repeat(5, minmax(0, 1fr)) !important;
+    align-items: end;
+    gap: 5px;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 7px 10px 8px !important;
+    overflow: hidden !important;
+    border-radius: 0;
+  }
+  .workspace:has(.editor-wrap) .scene-meta-header { grid-column: auto !important; margin: 0 5px 3px 0 !important; }
+  .workspace:has(.editor-wrap) .scene-meta-label { padding: 5px 7px; font-size: .55rem; white-space: nowrap; }
+  .workspace:has(.editor-wrap) .scene-meta-field { display: grid; min-width: 0; gap: 2px; margin: 0; }
+  .workspace:has(.editor-wrap) .scene-meta-field > span { font-size: .5rem; }
+  .workspace:has(.editor-wrap) .scene-meta-field input,
+  .workspace:has(.editor-wrap) .scene-meta-field select { min-width: 0; width: 100%; height: 27px; min-height: 27px; padding: 3px 6px; font-size: .67rem; }
+  .workspace:has(.editor-wrap) .editor-footer { min-height: 42px; padding: 5px 10px; gap: 8px; overflow: hidden; font-size: .68rem; }
+  .workspace:has(.editor-wrap) .editor-footer-metrics { gap: 7px; padding-right: 8px; }
+  .workspace:has(.editor-wrap) .editor-footer-metrics .stat:nth-child(n+3),
+  .workspace:has(.editor-wrap) .editor-footer-goal { display: none; }
+  .workspace:has(.editor-wrap) .editor-footer-actions { min-width: 0; gap: 2px; }
+  .workspace:has(.editor-wrap) .editor-footer-actions .saved-indicator { min-width: 0; max-width: 150px; margin-left: 0; }
+  .workspace:has(.editor-wrap) .editor-footer-actions .saved-indicator span[role='status'] { max-width: 108px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .workspace:has(.editor-wrap) .editor-footer-actions > .button:nth-of-type(n+2) { display: none; }
 }
 
 /* Final dashboard mobile details. Keep these after the legacy responsive
@@ -7440,6 +7984,62 @@ body,
   .workspace > .main { width: 100%; min-width: 0; margin-left: 0; overflow-x: hidden; }
   .workspace > .sidebar { position: fixed; inset: 0 auto 0 0; z-index: 2200; width: min(88vw, 340px); max-width: 340px; transform: translateX(-105%); visibility: hidden; pointer-events: none; }
   .workspace > .sidebar.open { transform: translateX(0); visibility: visible; pointer-events: auto; }
+}
+@media (min-width: 701px) and (max-width: 1024px) {
+  .workspace:has(.editor-wrap) .workspace-topbar { display: flex !important; flex-wrap: nowrap !important; align-items: center; gap: 8px; width: 100%; min-width: 0; box-sizing: border-box; overflow: hidden; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child { display: flex !important; flex: 0 1 46%; width: 46%; min-width: 0; flex-wrap: nowrap !important; align-items: center; gap: 6px; overflow: hidden; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .mobile-menu-btn { display: inline-flex !important; flex: 0 0 auto !important; width: auto !important; min-width: 86px !important; min-height: 36px !important; height: 36px; padding: 0 10px !important; justify-content: center; gap: 7px; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .tablet-library-label { display: inline !important; white-space: nowrap; font-size: .72rem; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .crumbs { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:first-child .mobile-hub-trigger { flex: 0 0 34px; width: 34px; min-width: 34px; height: 34px; padding: 0; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child { display: flex !important; flex: 1 1 54%; width: 54%; max-width: none; min-width: 0; flex-wrap: nowrap !important; align-items: center; gap: 5px; overflow-x: auto !important; overflow-y: hidden; scrollbar-width: none; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > * { flex: 0 0 auto !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .notification-bell { width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important; padding: 0 !important; justify-content: center; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child > .button span:not(.sr-only) { display: none !important; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill { width: 42px !important; min-width: 42px !important; height: 36px !important; padding: 0 !important; justify-content: center; }
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-name,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-caret,
+  .workspace:has(.editor-wrap) .workspace-topbar > .actions-row:last-child .user-pill-discord { display: none !important; }
+  .workspace:has(.editor-wrap) .scene-meta { display: grid !important; grid-template-columns: 116px repeat(5, minmax(0, 1fr)) !important; align-items: end !important; gap: 5px !important; max-height: none !important; margin: 0 !important; padding: 7px 10px 8px !important; overflow: hidden !important; }
+  .workspace:has(.editor-wrap) .scene-meta-header { grid-column: auto !important; margin: 0 5px 3px 0 !important; }
+  .workspace:has(.editor-wrap) .scene-meta-field { display: grid !important; min-width: 0 !important; gap: 2px !important; margin: 0 !important; }
+  .workspace:has(.editor-wrap) .scene-meta-field input,
+  .workspace:has(.editor-wrap) .scene-meta-field select { width: 100% !important; min-width: 0 !important; height: 27px !important; min-height: 27px !important; padding: 3px 6px !important; font-size: .67rem !important; }
+  .workspace:has(.editor-wrap) .editor-toolbar,
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row,
+  .workspace:has(.editor-wrap) .split-editor-primary,
+  .workspace:has(.editor-wrap) .editor-shell,
+  .workspace:has(.editor-wrap) .editor-wrap { min-width: 0 !important; max-width: 100% !important; box-sizing: border-box; }
+  .workspace:has(.editor-wrap) .editor-toolbar { width: 100% !important; overflow: hidden !important; }
+  .workspace:has(.editor-wrap) .editor-toolbar .tb-row { width: 100% !important; max-width: 100% !important; overflow-x: auto !important; overflow-y: hidden !important; flex-wrap: nowrap !important; }
+}
+@media (min-width: 701px) and (max-width: 1024px) {
+  .workspace:has(.editor-wrap) .scene-meta { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 6px !important; }
+  .workspace:has(.editor-wrap) .scene-meta-header { grid-column: 1 / -1 !important; margin: 0 !important; }
+  .workspace:has(.editor-wrap) .scene-meta-field,
+  .workspace:has(.editor-wrap) .scene-meta-field input,
+  .workspace:has(.editor-wrap) .scene-meta-field select { min-width: 0 !important; max-width: 100% !important; box-sizing: border-box !important; }
+  .workspace:has(.editor-wrap) .scene-meta-field > span {
+    min-width: 0 !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: .52rem !important;
+  }
+  .workspace:has(.editor-wrap) .scene-meta-field .cselect,
+  .workspace:has(.editor-wrap) .scene-meta-field .cselect-field {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .workspace:has(.editor-wrap) .scene-meta-field .cselect-field {
+    height: 27px !important;
+    min-height: 27px !important;
+    padding: 3px 6px !important;
+    font-size: .67rem !important;
+  }
 }
 @media (max-width: 700px) {
   .workspace { min-width: 0; overflow: hidden; }

@@ -1,6 +1,6 @@
 # Security model
 
-> Current release: **1.1.6**. Security behavior documented here reflects the current identity, sync, import, and recovery surfaces.
+> Current release: **1.1.7**. Security behavior documented here reflects the current identity, sync, import, and recovery surfaces.
 
 ## Trust boundaries
 

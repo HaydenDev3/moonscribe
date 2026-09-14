@@ -45,6 +45,37 @@ export function prepareExport(novel, chapters, options = {}) {
   }
 }
 
+// Interior Layout stores print-specific settings under layout.interiorLayout,
+// while the older export surfaces read the edition-level layout directly.
+// Resolve both shapes here so browser exports match the live proof.
+export function resolveExportLayout(layout = {}) {
+  const interior = layout.interiorLayout || {}
+  const margins = interior.margins || {}
+  const pageSize = pageSizeMm(interior.pageSize ?? layout.pageSize)
+  const orientedPageSize = interior.orientation === 'landscape'
+    ? { w: pageSize.h, h: pageSize.w }
+    : pageSize
+
+  return {
+    ...layout,
+    ...interior,
+    pageSize: orientedPageSize,
+    pageMargin: margins.top ?? layout.pageMargin,
+    pageMargins: margins,
+    printFont: interior.bodyFont || layout.printFont,
+    bodySize: interior.bodySize ?? layout.bodySize,
+    lineSpacing: interior.lineHeight ?? layout.lineSpacing,
+    textAlign: interior.paragraphStyle === 'left' ? 'left' : 'justify',
+    firstIndent: interior.firstLineIndent ?? layout.firstIndent,
+    chapterFont: interior.chapterFont || layout.chapterFont,
+    chapterSize: interior.chapterSize ?? layout.chapterSize,
+    chapterAlignment: interior.chapterAlignment || layout.chapterAlignment,
+    showHeaders: interior.showHeaders ?? layout.showHeaders,
+    showPageNumbers: interior.showPageNumbers ?? layout.showPageNumbers,
+    pageNumberPosition: interior.pageNumberPosition || layout.pageNumberPosition,
+  }
+}
+
 export function filterSceneBreaks(html, includeSceneBreaks) {
   if (!html || typeof DOMParser === 'undefined') return html || ''
   const doc = new DOMParser().parseFromString(String(html), 'text/html')
@@ -69,9 +100,20 @@ export function buildStyledHtml(novel, items, options = {}) {
     : '1.5'
   const title = escapeExportHtml(novel?.title || 'Untitled novel')
   const theme = options.exportTheme || { paper: '#fffdf9', ink: '#211d19', accent: '#8a6a3d' }
-  const layout = options.layout || novel?.layout || {}
+  const layout = resolveExportLayout(options.layout || novel?.layout || {})
   const page = pageSizeMm(layout.pageSize)
+  const margins = layout.pageMargins || {}
   const margin = pageMarginMm(layout.pageMargin)
+  const pageMarginTop = pageMarginMm(margins.top ?? margin)
+  const pageMarginBottom = pageMarginMm(margins.bottom ?? margin)
+  const pageMarginInside = pageMarginMm(margins.inside ?? margin)
+  const pageMarginOutside = pageMarginMm(margins.outside ?? margin)
+  const bodySize = Number(layout.bodySize) || 11
+  const chapterSize = Number(layout.chapterSize) || 24
+  const paragraphIndent = Number(layout.firstIndent ?? layout.firstLineIndent) || 0
+  const paragraphAlign = layout.textAlign === 'justify' || layout.paragraphStyle === 'justified' ? 'justify' : 'left'
+  const paragraphSpacing = Number.isFinite(Number(layout.paragraphSpacing)) ? Number(layout.paragraphSpacing) : 1
+  const chapterAlign = layout.chapterAlignment === 'left' || layout.chapterStyle === 'left' ? 'left' : 'center'
   const byline = escapeExportHtml(novel?.layout?.cover?.byline || novel?.byline || '')
   const sections = items.map((chapter) => {
     if (chapter.exportContainer) {
@@ -91,11 +133,11 @@ export function buildStyledHtml(novel, items, options = {}) {
 <title>${title}</title><style>
 :root{color-scheme:light;--ink:${theme.ink};--muted:color-mix(in srgb,${theme.ink} 62%,transparent);--rule:color-mix(in srgb,${theme.accent} 38%,transparent);--paper:${theme.paper};--accent:${theme.accent}}
 *{box-sizing:border-box}body{margin:0;background:#eee9e1;color:var(--ink);font-family:${font},Georgia,serif;line-height:${spacing}}
-.title-page,.chapter,.part{width:min(100% - 32px,760px);min-height:calc(100vh - 48px);margin:24px auto;padding:12% 11%;background:var(--paper);box-shadow:0 12px 40px #342b211c}
+.title-page,.chapter,.part{width:min(100% - 32px,760px);min-height:calc(100vh - 48px);margin:24px auto;padding:${pageMarginTop}mm ${pageMarginOutside}mm ${pageMarginBottom}mm ${pageMarginInside}mm;background:var(--paper);box-shadow:0 12px 40px #342b211c}
 .title-page,.part{display:grid;place-content:center;text-align:center}.title-page h1,.part h1{font-size:clamp(2.4rem,7vw,5rem);line-height:1.02;margin:.2em 0}.eyebrow{font:600 .72rem/1.2 system-ui;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
-.byline{font-style:italic;color:var(--muted)}.chapter h2{text-align:center;font-size:2rem;line-height:1.15;margin:0 0 3em}.prose p{margin:0 0 1em}.prose blockquote{border-left:2px solid var(--rule);margin:1.5em 0;padding-left:1.25em;color:var(--muted)}
+.byline{font-style:italic;color:var(--muted)}.chapter h2{text-align:${chapterAlign};font-family:${String(layout.chapterFont || font).replace(/[;{}]/g, '')},Georgia,serif;font-size:${chapterSize}pt;line-height:1.15;margin:0 0 3em}.prose{font-size:${bodySize}pt;text-align:${paragraphAlign}}.prose p{margin:0 0 ${paragraphSpacing}em;text-indent:${paragraphIndent}em}.prose blockquote{border-left:2px solid var(--rule);margin:1.5em 0;padding-left:1.25em;color:var(--muted)}
 .scene-break{text-align:center;margin:2em 0}.page-break,.pg-break,.pg-auto-break,[data-page-break="true"],[data-auto-page-break="true"]{break-after:page;page-break-after:always;height:0;overflow:hidden}footer{width:min(100% - 32px,760px);margin:24px auto;color:var(--muted);font:500 .8rem system-ui;text-align:center}
-@page{size:${page.w}mm ${page.h}mm;margin:${margin}mm}
+@page{size:${page.w}mm ${page.h}mm;margin:${pageMarginTop}mm ${pageMarginOutside}mm ${pageMarginBottom}mm ${pageMarginInside}mm}
 @media print{body{background:white}.title-page,.chapter,.part{width:auto;min-height:auto;margin:0;padding:0;box-shadow:none;break-after:page}.chapter:last-of-type{break-after:auto}footer{display:none}}
 </style></head><body>${frontMatter}${sections}${stats}</body></html>`
 }

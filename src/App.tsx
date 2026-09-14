@@ -3,24 +3,24 @@ import React, { lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { BrowserRouter, HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import { useApp } from './context/AppContext'
-import Landing from './pages/Landing'
-import DesktopGateway from './components/DesktopGateway'
+const Landing = lazy(() => import('./pages/Landing'))
+const DesktopGateway = lazy(() => import('./components/DesktopGateway'))
 import { isDesktopRuntime } from './api/config'
 import { callbackSearch } from './api/desktopAuth'
 import { capabilities } from './platform/capabilities'
 import { checkForDesktopUpdate } from './platform/updater'
-import Toasts from './components/Toasts'
-import CommandPalette from './components/CommandPalette'
+const Toasts = lazy(() => import('./components/Toasts'))
+const CommandPalette = lazy(() => import('./components/CommandPalette'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Novel = lazy(() => import('./pages/Novel'))
 const Settings = lazy(() => import('./components/Settings'))
 const AccountCentre = lazy(() => import('./components/AccountCentre'))
 const ProfileSetupWizard = lazy(() => import('./components/ProfileSetupWizard'))
-import Onboarding from './pages/Onboarding'
+const Onboarding = lazy(() => import('./pages/Onboarding'))
 import ErrorBoundary from './components/ErrorBoundary'
 import FeatureGuard, { clearFeatureStatus } from './components/FeatureGuard'
-import NotFound from './pages/NotFound'
-import LockScreen from './components/LockScreen'
+const NotFound = lazy(() => import('./pages/NotFound'))
+const LockScreen = lazy(() => import('./components/LockScreen'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
 const PublicPage = lazy(() => import('./pages/PublicPage'))
 const Trash = lazy(() => import('./pages/Trash'))
@@ -30,8 +30,8 @@ import './styles/notifications.css'
 import './styles/scrollrail.css'
 import './styles/announcements.css'
 import './styles/responsive.css'
-import AnnouncementBanner from './components/AnnouncementBanner'
-import StartupDigest from './components/StartupDigest'
+const AnnouncementBanner = lazy(() => import('./components/AnnouncementBanner'))
+const StartupDigest = lazy(() => import('./components/StartupDigest'))
 import Icon from './components/Icon'
 import Select from './components/Select'
 import { createNote } from './db/notes'
@@ -185,7 +185,7 @@ export default function App() {
         <DiscordPresenceBridge enabled={!!(appState as any).settings?.discordRichPresence} locked={!!locked} active={!!syncUsername || !!guestMode} />
         <a className="skip-link" href="#main-content">Skip to main content</a>
         <AnnouncementBanner />
-        <StartupDigest />
+        {syncUsername && !guestMode && <StartupDigest />}
         <GlobalQuickCapture novels={appState.novels || []} toast={appState.toast} />
         <div id="main-content" tabIndex={-1}>
         <Suspense fallback={<Loading />}><Routes>

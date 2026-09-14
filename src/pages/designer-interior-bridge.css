@@ -168,6 +168,9 @@
 .interior-right-panel[data-tab="global"] > .interior-reset { display:none; }
 .interior-extra-panel { min-height:0; }
 .interior-extra-copy { color:#9aa1a5; font-size:11px; line-height:1.5; margin:0 0 12px; }
+.cover-studio button:focus-visible,
+.cover-studio input:focus-visible,
+.cover-studio [role="tab"]:focus-visible { outline:2px solid #c79b53; outline-offset:2px; }
 
 /* Small motion cue for the existing sidebar return affordance. */
 .sidebar-back { transition:color .18s ease, transform .18s ease; }

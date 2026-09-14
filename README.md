@@ -7,7 +7,7 @@
 ### A calm, local-first studio for stories that take time.
 
 <p>
-  <a href="https://github.com/HaydenDev3/moonscribe"><img alt="Version 1.1.6" src="https://img.shields.io/badge/release-1.1.6-8b7cf6?style=for-the-badge&logo=starship&logoColor=white" /></a>
+  <a href="https://github.com/HaydenDev3/moonscribe"><img alt="Version 1.1.7" src="https://img.shields.io/badge/release-1.1.7-8b7cf6?style=for-the-badge&logo=starship&logoColor=white" /></a>
   <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=111827" />
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
   <img alt="PWA installable" src="https://img.shields.io/badge/PWA-installable-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white" />
@@ -29,17 +29,18 @@ MoonScribe keeps drafting, story memory, planning, collaboration, and finished-b
 <td width="33%"><h3>✦ Design</h3>Cover templates, palettes, typography effects, ornaments, trim settings, print previews, and a live 3D book.</td>
 </tr></table>
 
-### What arrived in 1.1.6
+### What arrived in 1.1.7
 
 - **Designer workspace:** live cover colour updates, restored palette families, custom selectors, cover templates, ornaments, scene-break marks, typography settings, shadow effects, responsive controls, and independently editable front, spine, and back surfaces.
 - **Interior Layout:** custom controls for page size, typography, chapter styling, headers, footers, page numbers, ornaments, margins, and per-chapter drop caps. The two-page proof uses distinct paginated content instead of duplicating the first page.
 - **Manuscript pages:** clearer page-break treatment, visible page margins, improved spacing and alignment, and print-oriented paper geometry.
 - **Author Website:** editable hero content, responsive desktop/tablet/mobile preview, real book data, custom controls, local draft/publish states, and a persistent Follow interaction.
-- **Workspace foundations:** primary-provider identity linking, provider-safe profile imagery, account connection recovery, global command actions, reliable sync triggers, recoverable Trash, and the responsive References sidebar.
+- **Global Media Library:** real shared assets with project associations, storage usage, search/filter/sort, uploads, drag-and-drop, grid/list views, metadata, multi-select, mobile sheets, and safe reuse across the editor and design surfaces.
+- **Workspace foundations:** primary-provider identity linking, provider-safe profile imagery, account connection recovery, global command actions, reliable sync triggers, recoverable Trash, guarded unauthenticated startup, and the responsive References sidebar.
 
-<details><summary><strong>See the complete 1.1.6 release notes</strong></summary>
+<details><summary><strong>See the complete 1.1.7 release notes</strong></summary>
 
-Read [docs/release-1.1.6.md](docs/release-1.1.6.md) for the full feature inventory, behavior notes, verification status, and known release boundaries.
+Read [docs/release-1.1.7.md](docs/release-1.1.7.md) for the full feature inventory, behavior notes, verification status, and known release boundaries.
 
 </details>
 
@@ -97,7 +98,7 @@ The README and product surfaces take visual cues from [React Bits LogoLoop](http
 ## 📚 Documentation map
 
 - [Documentation index](docs/README.md)
-- [1.1.6 release notes](docs/release-1.1.6.md)
+- [1.1.7 release notes](docs/release-1.1.7.md)
 - [Product and user guide](docs/user-guide.md)
 - [Settings reference](docs/settings.md)
 - [Architecture](docs/architecture.md)

@@ -147,6 +147,8 @@ export default function Editor({
   )
   const [libraryImages, setLibraryImages] = useState<any[]>([])
   const [mediaOpen, setMediaOpen] = useState(false)
+  const mediaButtonRef = useRef<HTMLButtonElement | null>(null)
+  const [mediaPopoverPosition, setMediaPopoverPosition] = useState({ left: 12, top: 12 })
   const [pageTemplatesOpen, setPageTemplatesOpen] = useState(false)
   useEffect(() => {
     if (!novelId) return
@@ -2013,6 +2015,31 @@ export default function Editor({
     [libraryImages, report]
   )
 
+  const updateMediaPopoverPosition = useCallback(() => {
+    const button = mediaButtonRef.current
+    if (!button) return
+    const rect = button.getBoundingClientRect()
+    const width = 260
+    const height = 300
+    const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - width - 12))
+    const below = rect.bottom + 8
+    const top = below + height <= window.innerHeight
+      ? below
+      : Math.max(12, rect.top - height - 8)
+    setMediaPopoverPosition({ left, top })
+  }, [])
+
+  useEffect(() => {
+    if (!mediaOpen) return undefined
+    updateMediaPopoverPosition()
+    window.addEventListener('resize', updateMediaPopoverPosition)
+    window.addEventListener('scroll', updateMediaPopoverPosition, true)
+    return () => {
+      window.removeEventListener('resize', updateMediaPopoverPosition)
+      window.removeEventListener('scroll', updateMediaPopoverPosition, true)
+    }
+  }, [mediaOpen, updateMediaPopoverPosition])
+
   const insertPageTemplate = useCallback(
     (templateId) => {
       const template = PAGE_TEMPLATES.find((item) => item.id === templateId)
@@ -3776,19 +3803,24 @@ export default function Editor({
                 <button
                   type="button"
                   className="editor-media-icon has-editor-tooltip"
+                  ref={mediaButtonRef}
                   data-tooltip="Insert from Media Library"
                   aria-label="Open Media Library images"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={(event) => {
                     event.stopPropagation()
                     setPageTemplatesOpen(false)
-                    setMediaOpen((open) => !open)
+                    if (!mediaOpen) updateMediaPopoverPosition()
+                    setMediaOpen(!mediaOpen)
                   }}
                 >
                   <Icon icon="fa-regular fa-image" />
                 </button>
                 {mediaOpen && (
-                  <div className="editor-media-popover">
+                  <div
+                    className="editor-media-popover"
+                    style={{ left: mediaPopoverPosition.left, top: mediaPopoverPosition.top }}
+                  >
                     <strong>Media Library</strong>
                     <div>
                       {libraryImages.map((item) => (
@@ -4412,7 +4444,7 @@ export default function Editor({
                 {/* ── Page information ─────────────────────────────────── */}
                 {pageSize !== 'continuous' && (
                   <div className="editor-page-status" aria-live="polite">
-                    <span>{pageOption.label}</span>
+                    <span title={pageOption.label}>{pageOption.label.split(' (')[0]}</span>
 
                     <span>
                       {pageCount} {pageCount === 1 ? 'page' : 'pages'}

@@ -4,7 +4,7 @@
 
 # MoonScribe server guide
 
-> Current release: **1.1.6**. The server guide covers the identity-linking, sync, and Live Share behavior shipped in this release.
+> Current release: **1.1.7**. The server guide covers the identity-linking, sync, and Live Share behavior shipped in this release.
 
 > A practical guide to the sync server, auth flow, routes, and the meanings behind common failure states.
 

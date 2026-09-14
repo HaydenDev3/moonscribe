@@ -1,7 +1,7 @@
 // Integration tests for the data layer against fake-indexeddb.
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 import 'fake-indexeddb/auto'
-import { getDB } from '../src/db/db'
+import { getDB, switchDatabaseProfile } from '../src/db/db'
 import { createNovel, updateNovel, getNovel, deleteNovel, listNovels } from '../src/db/novels'
 import {
   createChapter,
@@ -20,10 +20,25 @@ import { recordSession, todaySessionStats } from '../src/db/stats'
 import { exportBackup, importBackup } from '../src/db/backup'
 import { toWire, fromWire } from '../src/sync/serialize'
 import { createFolder, listFolders, moveFolder } from '../src/db/folders'
+import { createTile, listMoodboard, updateTile, deleteTile } from '../src/db/moodboard'
 
 beforeEach(async () => {
   const db = await getDB()
-  await Promise.all(['novels', 'chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'meta'].map((s) => db.clear(s)))
+  await Promise.all(['novels', 'chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'meta', 'moodboard'].map((s) => db.clear(s)))
+})
+
+describe('media library records', () => {
+  it('persists metadata, folder association, replacement, and deletion', async () => {
+    const media = await createTile('media-novel', { kind: 'image', image: 'data:image/png;base64,abc', text: 'castle.png' })
+    await updateTile(media.id, { description: 'Castle concept art', tags: ['Veyra', 'Concept Art'], folderId: 'locations' })
+    let [saved] = await listMoodboard('media-novel')
+    expect(saved).toMatchObject({ description: 'Castle concept art', tags: ['Veyra', 'Concept Art'], folderId: 'locations' })
+    await updateTile(media.id, { image: 'data:image/png;base64,replaced', text: 'castle-final.png' })
+    saved = (await listMoodboard('media-novel'))[0]
+    expect(saved.text).toBe('castle-final.png')
+    await deleteTile(media.id)
+    expect(await listMoodboard('media-novel')).toHaveLength(0)
+  })
 })
 
 describe('novels', () => {
@@ -48,6 +63,22 @@ describe('novels', () => {
     expect(b.genres).toEqual([])
     await updateNovel(a.id, { genres: ['Romance'] })
     expect((await getNovel(a.id)).genres).toEqual(['Romance'])
+  })
+
+  it('isolates browser libraries when switching account profiles', async () => {
+    await switchDatabaseProfile('local')
+    const local = await createNovel({ title: 'Local library' })
+    await switchDatabaseProfile('account-a')
+    await (await getDB()).clear('novels')
+    expect(await listNovels()).toEqual([])
+    const accountA = await createNovel({ title: 'Account A library' })
+    await switchDatabaseProfile('account-b')
+    await (await getDB()).clear('novels')
+    expect(await listNovels()).toEqual([])
+    await switchDatabaseProfile('account-a')
+    expect((await listNovels()).map((novel) => novel.id)).toEqual([accountA.id])
+    await switchDatabaseProfile('local')
+    expect((await listNovels()).map((novel) => novel.id)).toEqual([local.id])
   })
 })
 
@@ -212,6 +243,28 @@ describe('backup', () => {
     expect(restored.length).toBe(1)
     expect(restored[0].title).toBe('Backup Me')
     expect((await listChapters(restored[0].id)).length).toBe(1)
+  })
+
+  it('round-trips manuscript and presentation settings together', async () => {
+    const n = await createNovel({ title: 'Designed Backup' })
+    await updateNovel(n.id, { layout: {
+        pageSize: 'a5',
+        cover: { title: 'Designed Backup', titleColor: '#f4d58b' },
+        interiorLayout: {
+          orientation: 'landscape',
+          bodyFont: 'Lora',
+          margins: { top: 18, bottom: 22, inside: 28, outside: 16 },
+        },
+      } })
+    await createChapter(n.id, { title: 'Opening', content: '<p>Keep this prose.</p>' })
+    const backup = await exportBackup()
+    await deleteNovel(n.id)
+    await importBackup(backup)
+
+    const restored = await getNovel(n.id)
+    expect(restored.layout.interiorLayout).toMatchObject({ orientation: 'landscape', bodyFont: 'Lora' })
+    expect(restored.layout.interiorLayout.margins).toEqual({ top: 18, bottom: 22, inside: 28, outside: 16 })
+    expect((await listChapters(n.id))[0].content).toContain('Keep this prose.')
   })
 
   it('serializes cover blobs and restores them as usable blobs', async () => {

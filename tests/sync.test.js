@@ -121,6 +121,14 @@ describe('applyIncoming (LWW)', () => {
 })
 
 describe('push / pull against a mock server', () => {
+  it('keeps local edits pending when a device goes offline', async () => {
+    await createNovel({ title: 'Offline draft' })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await expect(push()).rejects.toThrow(/unreachable/i)
+    expect((await collectPending()).some((record) => record.store === 'novels')).toBe(true)
+  })
+
   it('pushes pending records and clears them', async () => {
     await createNovel({ title: 'To The Cloud' })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -179,6 +187,21 @@ describe('conflict handling', () => {
     expect(conflicts).toHaveLength(1)
     const db = await getDB()
     expect((await db.get('chapters', ch.id)).title).toBe('Mine') // not silently overwritten
+  })
+
+  it('accepts a newer edit from another device without losing its revision metadata', async () => {
+    const novel = await createNovel({ title: 'Shared novel' })
+    const ch = await createChapter(novel.id, { title: 'Device one', content: '<p>local</p>' })
+    const db = await getDB()
+    await db.put('chapters', { ...ch, pendingSync: false })
+    await applyIncoming(incomingFor(ch, {
+      title: 'Device two', content: '<p>remote</p>', rev: (ch.rev || 1) + 1,
+    }, ch.updatedAt + 1000))
+
+    const merged = await db.get('chapters', ch.id)
+    expect(merged.title).toBe('Device two')
+    expect(merged.content).toContain('remote')
+    expect(merged.rev).toBeGreaterThan(ch.rev)
   })
 
   it('keep theirs adopts the remote version and clears the conflict', async () => {

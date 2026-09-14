@@ -7,11 +7,14 @@ export default function StartupDigest() {
   const { settings, syncUsername } = useApp() as any
   const [open, setOpen] = useState(false)
   useEffect(() => {
-    if (settings?.startupDigest === false || !settings || !localStorage || localStorage.getItem(todayKey())) return
+    // The daily briefing belongs to the author's studio, never the public or
+    // signed-out landing surface. Also close it immediately if a session ends.
+    if (!syncUsername) { setOpen(false); return }
+    if (settings?.startupDigest === false || !settings || typeof localStorage === 'undefined' || localStorage.getItem(todayKey())) return
     localStorage.setItem(todayKey(), 'shown')
     setOpen(true)
     if (settings.startupSound !== false) import('../utils/sounds').then(({ playStartupSound }) => playStartupSound({ masterEnabled: settings.soundEnabled, channelEnabled: settings.startupSound, masterVolume: settings.soundVolume, channelVolume: settings.startupSoundVolume }))
-  }, [settings])
+  }, [settings, syncUsername])
   if (!open) return null
   const playDigestSound = async () => {
     if (settings.startupSound === false) return

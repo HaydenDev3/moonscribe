@@ -32,6 +32,7 @@ export default function AuthorWebsite() {
   useEffect(() => {
     let live = true
     const name = settings?.writerName || syncUsername || ''
+    setSite(defaultAuthorWebsite(name))
     getAuthorWebsite(name)
       .then((v) => live && setSite(normalizeAuthorWebsite(v, name)))
       .catch(() => live && setSite(defaultAuthorWebsite(name)))

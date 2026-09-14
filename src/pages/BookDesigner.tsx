@@ -1487,6 +1487,8 @@ export default function BookDesigner({
                     key={s.key}
                     className={`ds-icon-btn studio-rail-icon ${panelOpen && section === s.key ? 'active' : ''}`}
                     aria-label={s.label}
+                    aria-pressed={panelOpen && section === s.key}
+                    type="button"
                     onClick={() => openSection(s.key)}
                     title={s.label}
                   >
@@ -1504,6 +1506,7 @@ export default function BookDesigner({
                 key={tool.key}
                 type="button"
                 className={section === tool.key ? 'active' : ''}
+                aria-pressed={section === tool.key}
                 onClick={() => {
                   setSection(tool.key)
                   setPanelOpen(true)
@@ -1607,6 +1610,7 @@ export default function BookDesigner({
                   <TabsTrigger
                     key={mode.key}
                     className={`ds-stage-tab min-h-11 shrink-0 rounded-lg px-3 text-xs focus-visible:outline-2 focus-visible:outline-[#c79b53] ${previewMode === mode.key ? 'active' : ''}`}
+                    aria-pressed={previewMode === mode.key}
                     onClick={() => {
                       setPreviewMode(mode.key)
                       if (mode.key === 'cover' || mode.key === 'flat-wrap') {
@@ -1671,18 +1675,22 @@ export default function BookDesigner({
                 <Icon icon="fa-solid fa-ellipsis" />
               </button>
               <button
+                type="button"
                 className="ds-action-btn"
                 disabled={!canUndo}
                 onClick={undo}
                 title="Undo (Ctrl+Z)"
+                aria-label="Undo"
               >
                 <Icon icon="fa-solid fa-rotate-left" />
               </button>
               <button
+                type="button"
                 className="ds-action-btn"
                 disabled={!canRedo}
                 onClick={redo}
                 title="Redo (Ctrl+Y)"
+                aria-label="Redo"
               >
                 <Icon icon="fa-solid fa-rotate-right" />
               </button>
@@ -1721,6 +1729,7 @@ export default function BookDesigner({
                       key={value}
                       type="button"
                       className={designerViewport === value ? 'active' : ''}
+                      aria-pressed={designerViewport === value}
                       onClick={() => chooseDesignerViewport(value)}
                     >
                       <Icon
@@ -1753,7 +1762,9 @@ export default function BookDesigner({
                   {['front', 'spine', 'back'].map((surface) => (
                     <button
                       key={surface}
+                      type="button"
                       className={coverSurface === surface ? 'active' : ''}
+                      aria-pressed={coverSurface === surface}
                       onClick={() => {
                         setCoverSurface(surface)
                         setSpinFrozen(true)
@@ -1766,7 +1777,9 @@ export default function BookDesigner({
                   ))}
                 </div>
                 <button
+                  type="button"
                   className={`ds-action-btn ${spinFrozen ? 'active' : ''}`}
+                  aria-pressed={spinFrozen}
                   onClick={() => setSpinFrozen((v) => !v)}
                   title={spinFrozen ? 'Unfreeze spin' : 'Freeze spin'}
                 >
@@ -1774,7 +1787,9 @@ export default function BookDesigner({
                   {spinFrozen ? 'Spin' : 'Freeze'}
                 </button>
                 <button
+                  type="button"
                   className={`ds-action-btn ${coverFocused ? 'active' : ''}`}
+                  aria-pressed={coverFocused}
                   onClick={() => setCoverFocused((v) => !v)}
                   title={
                     coverFocused
@@ -1786,6 +1801,7 @@ export default function BookDesigner({
                   {coverFocused ? 'Exit focus' : 'Full screen'}
                 </button>
                 <button
+                  type="button"
                   className="ds-action-btn"
                   onClick={() => exportCoverPng(novel, cover, designerFontOptions)}
                 >

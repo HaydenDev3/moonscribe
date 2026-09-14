@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildStyledHtml, filterSceneBreaks, prepareExport } from '../src/utils/exportDocument'
+import { buildStyledHtml, filterSceneBreaks, prepareExport, resolveExportLayout } from '../src/utils/exportDocument'
 
 const novel = { title: 'Moon & Ember', byline: 'A. Writer' }
 const chapters = [
@@ -40,5 +40,26 @@ describe('export document preparation', () => {
     expect(html).toContain('&lt;Moon &amp; Ember&gt;')
     expect(html).toContain('@media print')
     expect(html).not.toContain('<h1><Moon')
+  })
+
+  it('carries Interior Layout settings into the browser proof export', () => {
+    const layout = resolveExportLayout({ pageSize: 'a4', pageMargin: 20, interiorLayout: {
+      pageSize: 'a5', orientation: 'landscape',
+      margins: { top: 18, bottom: 22, inside: 28, outside: 16 },
+      bodyFont: 'Lora', bodySize: 12, lineHeight: 1.6,
+      paragraphStyle: 'left', firstLineIndent: 1.1,
+      chapterFont: 'Cormorant Garamond', chapterSize: 26,
+      chapterAlignment: 'left',
+    } })
+
+    expect(layout.pageSize).toEqual({ w: 210, h: 148 })
+    expect(layout.pageMargins).toMatchObject({ top: 18, bottom: 22, inside: 28, outside: 16 })
+    expect(layout.printFont).toBe('Lora')
+    expect(layout.textAlign).toBe('left')
+
+    const html = buildStyledHtml(novel, prepareExport(novel, chapters).items, { layout })
+    expect(html).toContain('@page{size:210mm 148mm;margin:18mm 16mm 22mm 28mm}')
+    expect(html).toContain('font-size:12pt;text-align:left')
+    expect(html).toContain('text-indent:1.1em')
   })
 })

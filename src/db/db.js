@@ -29,7 +29,7 @@ export async function switchDatabaseProfile(profile) {
   legacyDbPromise = null
   nativeHydrationPromise = null
   activeProfile = safeProfile
-  localStorage.setItem('moonscribe:profile', safeProfile)
+  if (typeof localStorage !== 'undefined') localStorage.setItem('moonscribe:profile', safeProfile)
 }
 
 function getLegacyDB() {

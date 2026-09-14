@@ -1,6 +1,6 @@
 # Data safety, backup, recovery, and sync
 
-> Current release: **1.1.6**.
+> Current release: **1.1.7**.
 
 ## Guarantees and non-guarantees
 
@@ -26,7 +26,7 @@ Trash is a soft-delete layer. Records retain their stable IDs and supporting dat
 
 Use Settings to download a complete JSON backup. For sensitive offline storage, choose encrypted backup and retain the passphrase separately. Validate important backups by importing them into a disposable browser profile or staging environment.
 
-Designer palettes, templates, typography, Interior Layout settings, manuscript page-break metadata, and Author Website drafts should be included in the relevant local application/novel records. Verify these surfaces after restore rather than assuming a manuscript-only export contains every presentation setting. The Author Website Follow state is device-local in 1.1.6 and is not a portable social relationship.
+Designer palettes, templates, typography, Interior Layout settings, manuscript page-break metadata, and Author Website drafts should be included in the relevant local application/novel records. Verify these surfaces after restore rather than assuming a manuscript-only export contains every presentation setting. The Author Website Follow state is device-local in 1.1.7 and is not a portable social relationship.
 
 ## Restore procedure
 

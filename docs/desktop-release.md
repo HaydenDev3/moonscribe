@@ -37,10 +37,10 @@ and provenance rather than a private signing secret.
 ### Windows beta without platform signing
 
 Before the Windows signing certificate is available, publish a beta using a tag
-such as `v1.1.6-beta.1`. The Windows beta workflow creates a GitHub prerelease
+such as `v1.1.7-beta.1`. The Windows beta workflow creates a GitHub prerelease
 and NSIS installer using the updater signing key, but the installer itself is
 intentionally unsigned. Windows SmartScreen may warn beta testers about it.
-Use the stable `v1.1.6` workflow only after a trusted Windows certificate is
+Use the stable `v1.1.7` workflow only after a trusted Windows certificate is
 configured.
 
 Resend must have a verified sending domain and a sender address on that domain.

@@ -1,6 +1,6 @@
 # Development guide
 
-> Current release: **1.1.6**.
+> Current release: **1.1.7**.
 
 ## Setup
 
@@ -46,4 +46,4 @@ Add tests for domain utilities and database operations. High-risk manual journey
 
 Use semantic versions. Keep pre-release versions while release blockers remain. Database and settings migrations are independently versioned and must be forward-tested and rollback-aware.
 
-The 1.1.6 verification baseline is `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build`. When changing Designer or Interior Layout, manually check a palette change, a template application, custom selector keyboard navigation, distinct preview pages, drop-cap toggling, page-break rendering, and responsive overflow.
+The 1.1.7 verification baseline is `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build`. When changing Designer or Interior Layout, manually check a palette change, a template application, custom selector keyboard navigation, distinct preview pages, drop-cap toggling, page-break rendering, and responsive overflow.
