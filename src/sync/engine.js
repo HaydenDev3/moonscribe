@@ -36,13 +36,17 @@ export async function getConfig() {
   // Older OAuth responses persisted APP_ORIGIN (often localhost) even when
   // the app was opened through a public tunnel/domain. Heal that configuration
   // to same-origin so API, collaboration, and cover sync remain reachable.
-  if (server && typeof window !== 'undefined' && !import.meta.env.VITE_API_URL && !import.meta.env.VITE_SYNC_SERVER) {
+  if (server && typeof window !== 'undefined') {
     try {
       const storedHost = new URL(server).hostname
       const currentHost = window.location.hostname
       const storedIsLocal = storedHost === 'localhost' || storedHost === '127.0.0.1'
       const currentIsLocal = currentHost === 'localhost' || currentHost === '127.0.0.1'
-      if (storedIsLocal && !currentIsLocal) {
+      const configuredHost = (() => {
+        try { return new URL(apiBaseUrl()).hostname } catch { return '' }
+      })()
+      const configuredIsLocal = configuredHost === 'localhost' || configuredHost === '127.0.0.1'
+      if (storedIsLocal && (!currentIsLocal || !configuredIsLocal)) {
         server = apiBaseUrl()
         await setMeta('syncServer', server)
       }
