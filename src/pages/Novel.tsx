@@ -44,6 +44,8 @@ import { designById, DESIGN_MIME } from '../designs/registry'
 import { getWorkspacePreferences, updateWorkspacePreferences } from '../db/workspacePreferences'
 import { syncChapterContinuity } from '../db/continuity'
 import { getMeta } from '../db/meta'
+import { getReadMarker, saveReadMarker } from '../db/collaboration'
+import { revealHtmlThroughAnchor, paragraphAnchor } from '../utils/spoilerSafety'
 const Characters = lazy(() => import('./Characters'))
 const Entities = lazy(() => import('./Entities'))
 const Relationships = lazy(() => import('./Relationships'))
@@ -380,7 +382,28 @@ export default function Novel() {
     !novel?.sharedRole ||
     novel.sharedRole === 'editor' ||
     novel.sharedRole === 'commenter' ||
-    novel.sharedRole === 'viewer'
+    novel.sharedRole === 'viewer' ||
+    novel.sharedRole === 'beta-reader'
+
+  const isBetaReader = novel?.sharedRole === 'beta-reader'
+  const [betaMarker, setBetaMarker] = useState(null)
+  useEffect(() => {
+    let cancelled = false
+    if (!isBetaReader || !chapter?.id) { setBetaMarker(null); return undefined }
+    getMeta('syncAccountId', null).then((readerId) => getReadMarker(id, readerId, chapter.id)).then((marker) => {
+      if (!cancelled) setBetaMarker(marker)
+    })
+    return () => { cancelled = true }
+  }, [id, chapter?.id, isBetaReader])
+
+  const betaHtml = isBetaReader ? revealHtmlThroughAnchor(chapter?.content || '', betaMarker) : chapter?.content
+  const onBetaReadProgress = useCallback(async (index, block) => {
+    if (!isBetaReader || !chapter?.id) return
+    const readerId = await getMeta('syncAccountId', null)
+    if (!readerId) return
+    const marker = await saveReadMarker(id, readerId, { chapterId: chapter.id, anchor: paragraphAnchor(index, block), furthestPosition: index })
+    setBetaMarker(marker)
+  }, [chapter?.id, id, isBetaReader])
 
   useEffect(() => {
     const onCollaboration = (event) => {
@@ -2485,7 +2508,7 @@ export default function Novel() {
                   >
                     <Editor
                       key={`${chapter.id}-${restoreTick}`}
-                      initialHtml={chapter.content}
+                      initialHtml={betaHtml}
                       title={titleDraft}
                       onTitleChange={setTitleDraft}
                       onTitleBlur={commitTitle}
@@ -2520,6 +2543,7 @@ export default function Novel() {
                       collaborators={collaboratorPresence}
                       chapterId={chapter.id}
                       novelId={id}
+                      onReadProgress={isBetaReader ? onBetaReadProgress : undefined}
                     />
                   </div>
 

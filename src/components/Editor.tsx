@@ -135,6 +135,7 @@ export default function Editor({
   chapterId = null,
   novelId = null,
   onReady = undefined,
+  onReadProgress = undefined,
 }) {
   const ref = useRef<HTMLDivElement | null>(null)
   const wrapRef = useRef(null)
@@ -192,6 +193,23 @@ export default function Editor({
   }, [collaborators, chapterId, initialHtml])
 
   const { openContextMenu } = useContextMenu()
+
+  useEffect(() => {
+    if (!readOnly || !onReadProgress || !wrapRef.current) return undefined
+    const scrollRoot = wrapRef.current
+    let timer = null
+    const report = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => {
+        const blocks = [...(ref.current?.querySelectorAll('p, h1, h2, h3, blockquote, li') || [])]
+        const visible = blocks.findIndex((block) => block.getBoundingClientRect().bottom > 0)
+        if (visible >= 0) void onReadProgress(visible, blocks[visible].outerHTML)
+      }, 500)
+    }
+    scrollRoot.addEventListener('scroll', report, { passive: true })
+    report()
+    return () => { clearTimeout(timer); scrollRoot.removeEventListener('scroll', report) }
+  }, [onReadProgress, readOnly])
 
   // ── Toolbar state ────────────────────────────────────────────────────────
   const [colorPop, setColorPop] = useState(null)
