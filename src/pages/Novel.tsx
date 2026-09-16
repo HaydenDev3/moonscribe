@@ -44,7 +44,7 @@ import { designById, DESIGN_MIME } from '../designs/registry'
 import { getWorkspacePreferences, updateWorkspacePreferences } from '../db/workspacePreferences'
 import { syncChapterContinuity } from '../db/continuity'
 import { getMeta } from '../db/meta'
-import { getReadMarker, saveReadMarker } from '../db/collaboration'
+import { betaFeedbackPayload, getReadMarker, saveReadMarker } from '../db/collaboration'
 import { revealHtmlThroughAnchor, paragraphAnchor } from '../utils/spoilerSafety'
 const Characters = lazy(() => import('./Characters'))
 const Entities = lazy(() => import('./Entities'))
@@ -1030,6 +1030,17 @@ export default function Novel() {
     if (!commentDraft || !chapter) return
     if (!commentDraft.comment.trim()) {
       toast('Add a note to save the comment.')
+      return
+    }
+    if (novel?.sharedRole === 'beta-reader') {
+      const creatorId = (await getMeta('syncAccountId', null)) || syncUsername
+      await createAnnotation(id, {
+        chapterId: chapter.id,
+        ...betaFeedbackPayload({ chapterId: chapter.id, quote: commentDraft.quote, comment: commentDraft.comment.trim(), creatorId }),
+        type: commentDraft.type,
+      } as any)
+      setCommentDraft(null)
+      toast('Private beta feedback saved for the author team.')
       return
     }
     if (novel?.sharedRole && liveDocRef.current) {

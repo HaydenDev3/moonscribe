@@ -81,7 +81,7 @@ export async function saveReadMarker(novelId, readerId, marker) {
   return putRecord('readMarkers', next)
 }
 
-export function betaFeedbackPayload({ chapterId, anchor, quote, kind = 'comment', comment = '', creatorId, role = 'beta-reader' }) {
+export function betaFeedbackPayload({ chapterId, anchor = null, quote, kind = 'comment', comment = '', creatorId, role = 'beta-reader' }) {
   return {
     chapterId,
     anchor: anchor || null,

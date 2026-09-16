@@ -20,7 +20,7 @@ export async function listAnnotations(novelId, chapterId = null) {
     .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0))
 }
 
-export async function createAnnotation(novelId, { chapterId, quote = '', comment = '', type = 'note' } = {}) {
+export async function createAnnotation(novelId, { chapterId, quote = '', comment = '', type = 'note', anchor = null, kind = 'comment', visibility = null, creatorId = null, role = null } = {}) {
   const now = Date.now()
   const annotation = {
     id: uid(),
@@ -31,7 +31,12 @@ export async function createAnnotation(novelId, { chapterId, quote = '', comment
     type: ANNOTATION_TYPES.some(([k]) => k === type) ? type : 'note',
     resolved: false,
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    anchor,
+    kind,
+    visibility,
+    creatorId,
+    role
   }
   return putRecord('annotations', annotation)
 }
