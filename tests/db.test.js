@@ -22,6 +22,7 @@ import { toWire, fromWire } from '../src/sync/serialize'
 import { createFolder, listFolders, moveFolder } from '../src/db/folders'
 import { createTile, listMoodboard, updateTile, deleteTile } from '../src/db/moodboard'
 import { betaFeedbackPayload, listContinuityConflicts, listFactProvenance, resolveContinuityConflict, saveContinuityConflict, saveFactProvenance, saveReadMarker } from '../src/db/collaboration'
+import { inspectDataIntegrity } from '../src/db/integrity'
 
 beforeEach(async () => {
   const db = await getDB()
@@ -60,6 +61,17 @@ describe('collaboration records', () => {
     const db = await getDB()
     expect((await db.getAllFromIndex('readMarkers', 'by-novel', 'reader-novel'))).toHaveLength(2)
     expect(betaFeedbackPayload({ chapterId: 'one', anchor: 'p-4', kind: 'highlight', creatorId: 'reader-a' })).toMatchObject({ visibility: 'team', role: 'beta-reader', kind: 'highlight' })
+  })
+})
+
+describe('integrity diagnostics', () => {
+  it('reports pending local records and accepted server gaps without mutating data', async () => {
+    const n = await createNovel({ title: 'Integrity' })
+    const report = await inspectDataIntegrity({ novelId: n.id, acceptedRecords: [{ store: 'chapters', id: 'missing' }] })
+    expect(report.pendingCount).toBeGreaterThan(0)
+    expect(report.serverMismatches).toEqual(['chapters:missing'])
+    expect(report.ok).toBe(false)
+    expect(await getDB()).toBeTruthy()
   })
 })
 
