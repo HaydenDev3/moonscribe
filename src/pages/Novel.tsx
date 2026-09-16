@@ -46,6 +46,7 @@ import { syncChapterContinuity } from '../db/continuity'
 import { getMeta } from '../db/meta'
 import { betaFeedbackPayload, getReadMarker, saveReadMarker } from '../db/collaboration'
 import { revealHtmlThroughAnchor, paragraphAnchor } from '../utils/spoilerSafety'
+import { canExportSharedNovel, canOpenBetaChapter } from '../utils/collaborationAccess'
 const Characters = lazy(() => import('./Characters'))
 const Entities = lazy(() => import('./Entities'))
 const Relationships = lazy(() => import('./Relationships'))
@@ -387,11 +388,18 @@ export default function Novel() {
 
   const isBetaReader = novel?.sharedRole === 'beta-reader'
   const [betaMarker, setBetaMarker] = useState(null)
+  const [readableBetaChapters, setReadableBetaChapters] = useState([])
   useEffect(() => {
     let cancelled = false
     if (!isBetaReader || !chapter?.id) { setBetaMarker(null); return undefined }
-    getMeta('syncAccountId', null).then((readerId) => getReadMarker(id, readerId, chapter.id)).then((marker) => {
-      if (!cancelled) setBetaMarker(marker)
+    getMeta('syncAccountId', null).then(async (readerId) => {
+      const marker = await getReadMarker(id, readerId, chapter.id)
+      const db = await (await import('../db/db')).getDB()
+      const all = readerId ? await db.getAllFromIndex('readMarkers', 'by-novel', id) : []
+      if (!cancelled) {
+        setBetaMarker(marker)
+        setReadableBetaChapters(all.filter((item) => item.readerId === readerId).map((item) => item.chapterId))
+      }
     })
     return () => { cancelled = true }
   }, [id, chapter?.id, isBetaReader])
@@ -819,6 +827,10 @@ export default function Novel() {
   const selectChapter = useCallback(
     async (chOrId) => {
       const chId = typeof chOrId === 'string' ? chOrId : chOrId.id
+      if (!canOpenBetaChapter(novelRef.current, chId, [currentIdRef.current, ...readableBetaChapters])) {
+        toast('That chapter remains hidden until the beta reading marker reaches it.')
+        return
+      }
       if (!openChapterTabs.includes(chId) && openChapterTabs.length >= MAX_OPEN_TABS) {
         toast('Eight chapters are already open. Close a tab before opening another.')
         return
@@ -860,7 +872,7 @@ export default function Novel() {
         scrollTop: 0,
       })
     },
-    [captureReplaySnapshot, resetSession, toast, openChapterTabs, activeSection]
+    [captureReplaySnapshot, resetSession, toast, openChapterTabs, activeSection, readableBetaChapters]
   )
 
   useEffect(() => {
@@ -2091,7 +2103,7 @@ export default function Novel() {
                 style={{ display: 'none' }}
                 onChange={handleImportRtf}
               />
-              {novel?.sharedRole !== 'beta-reader' && <button className="button button-ghost" onClick={() => setExportOpen(true)}>
+              {canExportSharedNovel(novel) && <button className="button button-ghost" onClick={() => setExportOpen(true)}>
                 <Icon icon="fa-solid fa-download" style={{ marginRight: 6 }} /> Export
               </button>}
             </div>
@@ -2906,7 +2918,7 @@ export default function Novel() {
           novel={novel}
           onClose={() => setMobileHubOpen(false)}
           onOpenLibrary={() => setLibraryOpen(true)}
-          onExport={() => novel?.sharedRole !== 'beta-reader' && setExportOpen(true)}
+          onExport={() => canExportSharedNovel(novel) && setExportOpen(true)}
           onSettings={() => openSettings()}
         />
       )}
@@ -3009,7 +3021,7 @@ export default function Novel() {
 
       <AuthModal open={connectOpen} onClose={() => setConnectOpen(false)} />
       <ExportModal
-        open={exportOpen && novel?.sharedRole !== 'beta-reader'}
+        open={exportOpen && canExportSharedNovel(novel)}
         onClose={() => setExportOpen(false)}
         novel={novel}
         chapters={chapters}

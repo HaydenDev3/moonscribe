@@ -590,6 +590,22 @@ describe('sync', () => {
     expect((await marker.json()).accepted).toContain('readMarkers:beta-marker')
   })
 
+  it('deduplicates continuity notifications by conflict and recipient', async () => {
+    await startServer()
+    const owner = (await register('notify-owner')).body
+    const editor = (await register('notify-editor')).body
+    db.prepare("UPDATE users SET role = 'beta_tester', roles = 'user,beta_tester' WHERE username = 'notify-editor'").run()
+    await post('/api/sync/push', { records: [{ store: 'novels', id: 'notify-novel', novelId: 'notify-novel', updatedAt: 1, deleted: false, payload: { title: 'Notify' } }] }, owner.token)
+    await post('/api/shares/presence', { novelId: 'notify-novel' }, owner.token)
+    const invite = await (await post('/api/shares/invite', { novelId: 'notify-novel', role: 'editor' }, owner.token)).json()
+    await post('/api/shares/accept', { code: invite.code }, editor.token)
+    const conflict = { store: 'continuityConflicts', id: 'conflict-1', novelId: 'notify-novel', updatedAt: 5, deleted: false, payload: { ownerRecipientId: owner.accountId, establishedValue: '30', introducedValue: '31', status: 'open' } }
+    await post('/api/sync/push', { records: [conflict] }, editor.token)
+    await post('/api/sync/push', { records: [{ ...conflict, updatedAt: 6 }] }, editor.token)
+    const notices = await (await get('/api/notifications', owner.token)).json()
+    expect(notices.notifications.filter((item) => item.metadata?.conflictId === 'conflict-1')).toHaveLength(1)
+  })
+
   it('pushes and pulls records with last-writer-wins', async () => {
     await startServer()
     const reg = await register('finn')
