@@ -13,7 +13,7 @@ export async function getWorkspacePreferences(novelId) {
   // Add newly introduced default-visible workspaces to existing novels while
   // preserving any deliberate visibility choices for older workspaces.
   const enabled = record?.enabled ? [...new Set([...record.enabled, 'interior-layout'])] : defaults.enabled
-  return { id: novelId, novelId, ...defaults, ...(record || {}), enabled, names: { ...(record?.names || {}) }, panels: { ...(record?.panels || {}) }, continuity: { ...DEFAULT_CONTINUITY_SETTINGS, ...(record?.continuity || {}) }, exportPresets: { ...(record?.exportPresets || {}) } }
+  return { id: novelId, novelId, ...defaults, ...(record || {}), enabled, names: { ...(record?.names || {}) }, panels: { ...(record?.panels || {}) }, continuity: { ...DEFAULT_CONTINUITY_SETTINGS, ...(record?.continuity || {}) }, designPresets: { ...(record?.designPresets || {}) }, exportPresets: { ...(record?.exportPresets || {}) } }
 }
 
 export async function updateWorkspacePreferences(novelId, patch) {

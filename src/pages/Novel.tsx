@@ -40,7 +40,7 @@ import { computeNumbers, titleFor, isContainer } from '../utils/numbering'
 import Icon from '../components/Icon'
 import DesignPalette from '../components/DesignPalette'
 import { designById, DESIGN_MIME } from '../designs/registry'
-import { getWorkspacePreferences } from '../db/workspacePreferences'
+import { getWorkspacePreferences, updateWorkspacePreferences } from '../db/workspacePreferences'
 const Characters = lazy(() => import('./Characters'))
 const Entities = lazy(() => import('./Entities'))
 const Relationships = lazy(() => import('./Relationships'))
@@ -294,6 +294,8 @@ export default function Novel() {
   const [editorDesign, setEditorDesign] = useState(null)
   const [customDesignBg, setCustomDesignBg] = useState('#ffffff')
   const [customDesignText, setCustomDesignText] = useState('#1a1a18')
+  const [designPresets, setDesignPresets] = useState({})
+  const [designPresetName, setDesignPresetName] = useState('')
   const [designsOpen, setDesignsOpen] = useState(false)
   const [designOver, setDesignOver] = useState(false)
   const [mergeSource, setMergeSource] = useState(null)
@@ -305,6 +307,11 @@ export default function Novel() {
   const [collaborationRoomState, setCollaborationRoomState] = useState(null)
   const [sessionTick, setSessionTick] = useState(0)
   const [sessionPaused, setSessionPaused] = useState(false)
+
+  useEffect(() => {
+    if (!novel?.id) return
+    getWorkspacePreferences(novel.id).then((prefs) => setDesignPresets(prefs.designPresets || {})).catch(() => {})
+  }, [novel?.id])
 
   // A project may choose a different landing workspace. Only apply it when
   // opening the bare novel route; explicit links remain authoritative.
@@ -1440,6 +1447,16 @@ export default function Novel() {
     },
     [id, toast, customDesignBg, customDesignText]
   )
+
+  const saveDesignPreset = async () => {
+    const name = designPresetName.trim()
+    if (!name || !novel?.id) return
+    const next = { ...designPresets, [name]: { editorDesign, customPageBg: customDesignBg, customPageText: customDesignText } }
+    setDesignPresets(next)
+    setDesignPresetName('')
+    await updateWorkspacePreferences(novel.id, { designPresets: next })
+    toast(`Saved design preset “${name}”.`)
+  }
 
   const onDropDesign = useCallback(
     (e) => {
@@ -2694,6 +2711,36 @@ export default function Novel() {
                       </button>
                     </div>
                     <DesignPalette compact activeId={editorDesign} onPick={applyEditorDesign} />
+                    <div className="design-saved-presets">
+                      <div className="design-saved-presets-head">
+                        <span>Saved project presets</span>
+                        <small>Palette and typography foundations</small>
+                      </div>
+                      {Object.keys(designPresets).length > 0 && (
+                        <Select
+                          ariaLabel="Saved design preset"
+                          value=""
+                          onChange={(name) => {
+                            const preset = designPresets[name]
+                            if (!preset) return
+                            const nextDesign = preset.editorDesign || 'custom'
+                            const nextBg = preset.customPageBg || '#ffffff'
+                            const nextText = preset.customPageText || '#1a1a18'
+                            setEditorDesign(nextDesign)
+                            setCustomDesignBg(nextBg)
+                            setCustomDesignText(nextText)
+                            if (nextDesign === 'custom') {
+                              updateNovel(novel.id, { layout: { ...(novelRef.current?.layout || {}), editorDesign: 'custom', customPageBg: nextBg, customPageText: nextText } })
+                            } else applyEditorDesign(nextDesign)
+                          }}
+                          options={[{ value: '', label: 'Use a saved preset' }, ...Object.keys(designPresets).map((name) => ({ value: name, label: name }))]}
+                        />
+                      )}
+                      <div className="design-save-row">
+                        <input aria-label="New design preset name" value={designPresetName} onChange={(event) => setDesignPresetName(event.target.value)} placeholder="Preset name" />
+                        <button type="button" className="button button-quiet" disabled={!designPresetName.trim()} onClick={() => void saveDesignPreset()}>Save</button>
+                      </div>
+                    </div>
                     <p className="small muted" style={{ margin: '10px 0 0' }}>
                       Click to apply, or drag onto the page.
                     </p>

@@ -2404,7 +2404,23 @@ body::after {
 .workspace-manager-summary span { display: inline-flex; align-items: center; gap: 7px; }
 .workspace-manager-summary i { color: var(--accent); font-size: .72rem; }
 .workspace-manager-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; max-height: min(52vh, 480px); overflow-y: auto; padding: 2px 3px 3px 0; }
-.workspace-manager-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto 22px; align-items: center; gap: 10px; min-height: 64px; padding: 10px 11px; border: 1px solid var(--border-soft); border-radius: 12px; background: color-mix(in srgb, var(--surface) 72%, transparent); cursor: pointer; transition: border-color .18s var(--ease), background .18s var(--ease), transform .18s var(--ease), box-shadow .18s var(--ease); }
+.workspace-manager-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto auto 22px; align-items: center; gap: 10px; min-height: 64px; padding: 10px 11px; border: 1px solid var(--border-soft); border-radius: 12px; background: color-mix(in srgb, var(--surface) 72%, transparent); cursor: pointer; transition: border-color .18s var(--ease), background .18s var(--ease), transform .18s var(--ease), box-shadow .18s var(--ease); }
+.workspace-manager-move { display: inline-flex; gap: 3px; }
+.workspace-manager-move button { width: 22px; height: 22px; border: 1px solid var(--border-soft); border-radius: 6px; color: var(--grey); background: transparent; cursor: pointer; }
+.workspace-manager-move button:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); }
+.workspace-manager-move button:disabled { opacity: .35; cursor: not-allowed; }
+.workspace-manager-default-view { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin: 14px 0; padding: 12px; border: 1px solid var(--border-soft); border-radius: 12px; background: color-mix(in srgb, var(--surface) 72%, transparent); }
+.workspace-manager-default-view span { min-width: 0; }
+.workspace-manager-default-view strong, .workspace-manager-default-view small { display: block; }
+.workspace-manager-default-view strong { color: var(--charcoal); font: 600 .78rem var(--font-ui); }
+.workspace-manager-default-view small { margin-top: 4px; color: var(--grey); font: 500 .68rem var(--font-ui); }
+.workspace-manager-default-view select { min-width: 170px; }
+.design-saved-presets { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.design-saved-presets-head span, .design-saved-presets-head small { display: block; }
+.design-saved-presets-head span { color: var(--charcoal); font: 600 .75rem var(--font-ui); }
+.design-saved-presets-head small { margin-top: 3px; color: var(--grey); font: .68rem var(--font-ui); }
+.design-save-row { display: flex; gap: 8px; }
+.design-save-row input { min-width: 0; flex: 1; }
 .workspace-manager-row:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 7%, var(--surface)); box-shadow: 0 8px 20px rgba(0,0,0,.14); }
 .workspace-manager-row.is-enabled { border-color: color-mix(in srgb, var(--accent) 25%, var(--border-soft)); }
 .workspace-manager-row.is-required { cursor: default; }

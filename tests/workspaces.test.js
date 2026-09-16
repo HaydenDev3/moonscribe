@@ -21,9 +21,13 @@ describe('configurable workspaces', () => {
     const a = await createNovel({ title: 'A' }); const b = await createNovel({ title: 'B' })
     await updateWorkspacePreferences(a.id, {
       defaultView: 'design',
+      order: ['write', 'design', 'planning'],
+      designPresets: { dusk: { editorDesign: 'custom', customPageBg: '#211a25', customPageText: '#f5eadb' } },
       exportPresets: { paperback: { format: 'pdf', printPreset: 'kdp-paperback', lineSpacing: '1.5' } },
     })
     expect((await getWorkspacePreferences(a.id)).defaultView).toBe('design')
+    expect((await getWorkspacePreferences(a.id)).order.slice(0, 2)).toEqual(['write', 'design'])
+    expect((await getWorkspacePreferences(a.id)).designPresets.dusk.customPageBg).toBe('#211a25')
     expect((await getWorkspacePreferences(a.id)).exportPresets.paperback.printPreset).toBe('kdp-paperback')
     expect((await getWorkspacePreferences(b.id)).defaultView).toBe('write')
     expect((await getWorkspacePreferences(b.id)).exportPresets).toEqual({})

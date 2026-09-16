@@ -25,5 +25,5 @@ export const WORKSPACE_REGISTRY = [
 
 export function workspaceFor(key) { return WORKSPACE_REGISTRY.find((item) => item.key === key) || WORKSPACE_REGISTRY[0] }
 export function defaultWorkspacePreferences() {
-  return { enabled: WORKSPACE_REGISTRY.filter((item) => item.defaultVisible).map((item) => item.key), order: WORKSPACE_REGISTRY.map((item) => item.key), pinned: 'write', defaultView: 'write', names: {}, layout: 'comfortable', panels: {}, exportPresets: {} }
+  return { enabled: WORKSPACE_REGISTRY.filter((item) => item.defaultVisible).map((item) => item.key), order: WORKSPACE_REGISTRY.map((item) => item.key), pinned: 'write', defaultView: 'write', names: {}, layout: 'comfortable', panels: {}, designPresets: {}, exportPresets: {} }
 }

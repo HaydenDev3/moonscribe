@@ -175,6 +175,16 @@ export default function Sidebar({
     const next = await updateWorkspacePreferences(novel.id, { enabled: [...enabled] })
     setWorkspacePrefs(next)
   }
+  const moveWorkspace = async (key, direction) => {
+    const current = workspacePrefs || (await getWorkspacePreferences(novel.id))
+    const order = [...(current.order || WORKSPACE_REGISTRY.map((item) => item.key))]
+    const index = order.indexOf(key)
+    const nextIndex = index + direction
+    if (index < 0 || nextIndex < 0 || nextIndex >= order.length) return
+    ;[order[index], order[nextIndex]] = [order[nextIndex], order[index]]
+    const next = await updateWorkspacePreferences(novel.id, { order })
+    setWorkspacePrefs(next)
+  }
 
   const toggleNavGroup = (group) =>
     setNavCollapsed((s) => {
@@ -1112,7 +1122,7 @@ export default function Sidebar({
               (item) =>
                 !(settings.hiddenSidebarTabs || []).includes(item.to) &&
                 (!workspacePrefs || (workspacePrefs.enabled || []).includes(item.to))
-            ),
+            ).sort((a, b) => (workspacePrefs?.order || []).indexOf(a.to) - (workspacePrefs?.order || []).indexOf(b.to)),
           }))
             .filter((g) => g.items.length > 0)
             .map((g) => {
@@ -1253,6 +1263,10 @@ export default function Sidebar({
                   </span>
                   <span className={`workspace-manager-state${enabled ? ' is-on' : ''}`}>
                     {enabled ? 'Visible' : 'Hidden'}
+                  </span>
+                  <span className="workspace-manager-move">
+                    <button type="button" aria-label={`Move ${item.label} up`} disabled={item.key === 'write'} onClick={(event) => { event.preventDefault(); void moveWorkspace(item.key, -1) }}>↑</button>
+                    <button type="button" aria-label={`Move ${item.label} down`} onClick={(event) => { event.preventDefault(); void moveWorkspace(item.key, 1) }}>↓</button>
                   </span>
                   <input
                     type="checkbox"
