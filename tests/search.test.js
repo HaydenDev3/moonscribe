@@ -2,17 +2,19 @@
 import { beforeEach, describe, it, expect } from 'vitest'
 import 'fake-indexeddb/auto'
 import { getDB } from '../src/db/db'
-import { createNovel } from '../src/db/novels'
+import { createNovel, updateNovel } from '../src/db/novels'
 import { createChapter, trashChapter } from '../src/db/chapters'
 import { createCharacter, trashCharacter } from '../src/db/characters'
 import { createNote } from '../src/db/notes'
 import { createWorldItem } from '../src/db/world'
 import { createRelationship } from '../src/db/relationships'
 import { searchAll } from '../src/db/search'
+import { setMeta } from '../src/db/meta'
+import { saveReadMarker } from '../src/db/collaboration'
 
 beforeEach(async () => {
   const db = await getDB()
-  await Promise.all(['novels', 'chapters', 'characters', 'notes', 'relationships', 'stats', 'meta', 'world'].map((s) => db.clear(s)))
+  await Promise.all(['novels', 'chapters', 'characters', 'notes', 'relationships', 'stats', 'meta', 'world', 'readMarkers'].map((s) => db.clear(s)))
 })
 
 describe('searchAll', () => {
@@ -71,5 +73,17 @@ describe('searchAll', () => {
     const res = await searchAll('velvet')
     expect(res.chapters).toHaveLength(1)
     expect(res.chapters[0].title).toBe('Untitled')
+  })
+
+  it('does not search unrevealed beta-reader chapters or binder metadata', async () => {
+    await setMeta('syncAccountId', 'reader-1')
+    const n = await createNovel({ title: 'Beta draft' })
+    await updateNovel(n.id, { sharedRole: 'beta-reader' })
+    const visible = await createChapter(n.id, { title: 'Visible', content: '<p>reveal-me</p><p>still-visible</p>' })
+    await createChapter(n.id, { title: 'Later', content: '<p>spoiler-word</p>' })
+    await saveReadMarker(n.id, 'reader-1', { chapterId: visible.id, furthestPosition: 0 })
+    const res = await searchAll('spoiler-word')
+    expect(res.chapters).toEqual([])
+    expect((await searchAll('reveal-me')).chapters).toHaveLength(1)
   })
 })

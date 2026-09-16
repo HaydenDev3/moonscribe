@@ -1,5 +1,7 @@
 import { getDB } from './db'
 import { listMoodboard } from './moodboard'
+import { getMeta } from './meta'
+import { revealHtmlThroughAnchor } from '../utils/spoilerSafety'
 
 // Offline, structure-aware search across every novel. Grouped results feed
 // the command palette (Ctrl+K). A simple lowercase substring match over the
@@ -13,6 +15,14 @@ export async function searchAll(query) {
   const db = await getDB()
   const novels = await db.getAll('novels')
   const novelTitle = new Map(novels.map((n) => [n.id, n.title || 'Untitled']))
+  const readerId = await getMeta('syncAccountId', null)
+  const betaNovelIds = new Set(novels.filter((novel) => novel.sharedRole === 'beta-reader').map((novel) => novel.id))
+  const markers = new Map()
+  if (readerId && betaNovelIds.size) {
+    for (const marker of await db.getAll('readMarkers')) {
+      if (betaNovelIds.has(marker.novelId) && marker.readerId === readerId) markers.set(`${marker.novelId}:${marker.chapterId}`, marker)
+    }
+  }
 
   const matches = (text) => (text || '').toLowerCase().includes(q)
   const rank = (title) => {
@@ -33,19 +43,26 @@ export async function searchAll(query) {
   const chapters = []
   for (const c of await db.getAllFromIndex('chapters', 'by-novel')) {
     if (c.trashedAt) continue
-    const title = c.title || 'Untitled chapter'
-    const body = (c.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+    let chapter = c
+    if (betaNovelIds.has(c.novelId)) {
+      const marker = markers.get(`${c.novelId}:${c.id}`)
+      if (!marker) continue
+      chapter = { ...c, content: revealHtmlThroughAnchor(c.content, marker) }
+    }
+    const title = chapter.title || 'Untitled chapter'
+    const body = (chapter.content || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
     if (matches(title) || matches(body)) {
       const source = matches(title) ? title : body
       const at = source.toLowerCase().indexOf(q)
       const start = Math.max(0, at - 70)
       const snippet = source.slice(start, start + 180)
-      chapters.push({ id: c.id, novelId: c.novelId, title, subtitle: novelTitle.get(c.novelId) || '', preview: `${start ? '…' : ''}${snippet}${start + 180 < source.length ? '…' : ''}`, match: q, score: rank(title) + (matches(title) ? 10 : 0) })
+      chapters.push({ id: chapter.id, novelId: chapter.novelId, title, subtitle: novelTitle.get(chapter.novelId) || '', preview: `${start ? '…' : ''}${snippet}${start + 180 < source.length ? '…' : ''}`, match: q, score: rank(title) + (matches(title) ? 10 : 0) })
     }
   }
 
   const characters = []
   for (const c of await db.getAllFromIndex('characters', 'by-novel')) {
+    if (betaNovelIds.has(c.novelId)) continue
     if (c.trashedAt) continue
     const name = c.name || 'A character'
     if (matches(name) || matches(c.role) || matches(c.appearance) || matches(c.personality) || matches(c.notes)) {
@@ -55,6 +72,7 @@ export async function searchAll(query) {
 
   const notes = []
   for (const n of await db.getAllFromIndex('notes', 'by-novel')) {
+    if (betaNovelIds.has(n.novelId)) continue
     if (n.trashedAt) continue
     const title = n.title || 'Untitled note'
     if (matches(title) || matches(n.content)) {
@@ -64,6 +82,7 @@ export async function searchAll(query) {
 
   const world = []
   for (const w of await db.getAllFromIndex('world', 'by-novel')) {
+    if (betaNovelIds.has(w.novelId)) continue
     if (w.trashedAt) continue
     const name = w.name || 'Untitled'
     if (matches(name) || matches(w.summary) || matches(w.details) || matches((w.tags || []).join(' '))) {
@@ -73,6 +92,7 @@ export async function searchAll(query) {
 
   const relationships = []
   for (const r of await db.getAllFromIndex('relationships', 'by-novel')) {
+    if (betaNovelIds.has(r.novelId)) continue
     const names = [r.a, r.b].filter(Boolean).join(' & ')
     if (matches(names) || matches(r.description)) {
       relationships.push({ id: r.id, novelId: r.novelId, title: names || 'A relationship', subtitle: r.description || novelTitle.get(r.novelId) || '', score: rank(names) })
@@ -81,6 +101,7 @@ export async function searchAll(query) {
 
   const glossary = []
   for (const t of await db.getAllFromIndex('glossary', 'by-novel')) {
+    if (betaNovelIds.has(t.novelId)) continue
     if (t.trashedAt) continue
     const term = t.term || 'Untitled term'
     if (matches(term) || matches(t.definition) || matches((t.aliases || []).join(' '))) {
