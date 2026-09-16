@@ -139,6 +139,10 @@ export default function PrintView() {
     return <div style={{ padding: 'var(--space-7)', textAlign: 'center', color: 'var(--grey)' }}>Setting the type…</div>
   }
 
+  if (novel.sharedRole === 'beta-reader') {
+    return <div style={{ padding: 'var(--space-7)', textAlign: 'center', color: 'var(--grey)' }}><strong>Print preview is unavailable in beta-reader mode.</strong><p>Continue reading the revealed manuscript to keep later content private.</p><button className="button button-ghost" onClick={() => navigate(`/novel/${id}`)}>Return to manuscript</button></div>
+  }
+
   return (
     <div className={`print-view mobile-print-page-${mobilePrintPage}`}>
       <style>{pageCss}</style>

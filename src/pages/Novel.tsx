@@ -2091,9 +2091,9 @@ export default function Novel() {
                 style={{ display: 'none' }}
                 onChange={handleImportRtf}
               />
-              <button className="button button-ghost" onClick={() => setExportOpen(true)}>
+              {novel?.sharedRole !== 'beta-reader' && <button className="button button-ghost" onClick={() => setExportOpen(true)}>
                 <Icon icon="fa-solid fa-download" style={{ marginRight: 6 }} /> Export
-              </button>
+              </button>}
             </div>
             <button
               className="button button-ghost"
@@ -2906,7 +2906,7 @@ export default function Novel() {
           novel={novel}
           onClose={() => setMobileHubOpen(false)}
           onOpenLibrary={() => setLibraryOpen(true)}
-          onExport={() => setExportOpen(true)}
+          onExport={() => novel?.sharedRole !== 'beta-reader' && setExportOpen(true)}
           onSettings={() => openSettings()}
         />
       )}
@@ -3009,7 +3009,7 @@ export default function Novel() {
 
       <AuthModal open={connectOpen} onClose={() => setConnectOpen(false)} />
       <ExportModal
-        open={exportOpen}
+        open={exportOpen && novel?.sharedRole !== 'beta-reader'}
         onClose={() => setExportOpen(false)}
         novel={novel}
         chapters={chapters}

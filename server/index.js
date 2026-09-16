@@ -768,12 +768,12 @@ function setupSchema(db) {
   db.prepare('DELETE FROM share_presence WHERE last_seen_at < ?').run(Date.now() - 24 * 60 * 60 * 1000)
 }
 
-function createNotification(db, { userId, type = 'system', category = 'system', priority = 'normal', title, body, actionUrl = null, metadata = null, expiresAt = null }) {
-  const id = randomBytes(16).toString('hex')
+function createNotification(db, { id: suppliedId = null, userId, type = 'system', category = 'system', priority = 'normal', title, body, actionUrl = null, metadata = null, expiresAt = null }) {
+  const id = suppliedId || randomBytes(16).toString('hex')
   const now = Date.now()
-  db.prepare('INSERT INTO notifications (id, user_id, type, category, priority, title, body, action_url, created_at, expires_at, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, type, category, priority, title, body, actionUrl, now, expiresAt, metadata ? JSON.stringify(metadata) : null)
+  const inserted = db.prepare('INSERT OR IGNORE INTO notifications (id, user_id, type, category, priority, title, body, action_url, created_at, expires_at, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, userId, type, category, priority, title, body, actionUrl, now, expiresAt, metadata ? JSON.stringify(metadata) : null)
   const room = notificationSockets.get(String(userId))
-  if (room?.size) {
+  if (inserted.changes && room?.size) {
     const row = db.prepare('SELECT id, type, category, priority, title, body, action_url, read_at, created_at, metadata FROM notifications WHERE id = ? AND user_id = ?').get(id, userId)
     const payload = JSON.stringify({ type: 'notification:new', notification: { id: row.id, type: row.type, category: row.category, priority: row.priority, title: row.title, body: row.body, actionUrl: row.action_url || null, readAt: row.read_at || null, createdAt: row.created_at, metadata: row.metadata ? JSON.parse(row.metadata) : null } })
     for (const socket of room) if (socket.readyState === 1) socket.send(payload)
@@ -2501,6 +2501,24 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
                 r.deleted ? 1 : 0
               )
               accepted.push(key)
+              if (r.store === 'continuityConflicts' && r.payload && !r.deleted && r.payload.status !== 'resolved') {
+                const recipients = new Set([r.payload.ownerRecipientId, r.payload.factOwnerId])
+                if (access?.role && access.role !== 'owner') recipients.add(access.ownerUserId)
+                for (const recipient of recipients) {
+                  if (!recipient || String(recipient) === String(userId)) continue
+                  createNotification(database, {
+                    id: `continuity-conflict:${r.id}:${recipient}`,
+                    userId: String(recipient),
+                    type: 'collaboration',
+                    category: 'continuity',
+                    priority: r.payload.severity === 'block' ? 'high' : 'normal',
+                    title: 'Continuity conflict needs review',
+                    body: `${r.payload.establishedValue || 'An established fact'} conflicts with ${r.payload.introducedValue || 'a new fact'}.`,
+                    actionUrl: r.payload.introducedChapterId ? `/novel/${r.novelId}?chapter=${r.payload.introducedChapterId}` : null,
+                    metadata: { conflictId: r.id, novelId: r.novelId, establishedChapterId: r.payload.establishedChapterId, introducedChapterId: r.payload.introducedChapterId },
+                  })
+                }
+              }
               cloudRecords.push({ userId: targetUserId, store: r.store, id: String(r.id), novelId: r.novelId ? String(r.novelId) : null, payload: r.deleted ? null : (r.payload ?? null), updatedAt: Math.max(0, Math.min(r.updatedAt, serverNow + 5 * 60 * 1000)), deleted: Boolean(r.deleted) })
             }
             database.exec('COMMIT')
