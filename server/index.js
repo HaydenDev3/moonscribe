@@ -80,6 +80,9 @@ const STORES = new Set([
   'annotations',
   'branches',
   'suggestions'
+  ,'factProvenance'
+  ,'continuityConflicts'
+  ,'readMarkers'
 ])
 
 // ---- OAuth ----
@@ -2212,6 +2215,22 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
     }
     const roomStateFor = (access) => access?.role === 'owner' || access?.hostLive ? 'live' : 'owner-away'
     const roomPayload = (access) => ({ state: roomStateFor(access), readOnly: roomStateFor(access) !== 'live' })
+    const sharedRecordAllowed = (access, record) => {
+      if (!access || access.role === 'owner' || !record) return true
+      if (access.role === 'beta-reader') {
+        if (record.store === 'readMarkers') return !record.deleted && String(record.payload?.readerId || '') === String(userId)
+        return record.store === 'annotations' && !record.deleted && record.payload?.visibility === 'team' && String(record.payload?.creatorId || '') === String(userId)
+      }
+      if (access.role === 'viewer' || access.role === 'commenter') return record.store === 'annotations'
+      return true
+    }
+    const sharedRecordVisible = (role, record, viewerId) => {
+      if (role !== 'beta-reader' || !record || record.deleted) return true
+      if (['factProvenance', 'continuityConflicts'].includes(record.store)) return false
+      if (record.store === 'readMarkers') return String(record.payload?.readerId || '') === String(viewerId)
+      if (record.store === 'annotations') return record.payload?.visibility !== 'team'
+      return true
+    }
     const shareError = (res, status, code, error) => json(res, status, { error, code })
     const roomFor = (novelId, ownerUserId) => {
       const id = String(novelId || '')
@@ -2230,8 +2249,9 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
          ORDER BY updated_at ASC`
       ).all(ownerUserId, novelId, novelId)
       return rows.filter((r) => {
+        const payload = r.deleted ? null : safeJson(r.payload)
+        if (!sharedRecordVisible(role, { ...r, payload }, userId)) return false
         if (r.store !== 'chapters' || r.deleted) return true
-        const payload = safeJson(r.payload)
         return !payload?.conflictFork
       }).map((r) => {
         const payload = r.deleted ? null : safeJson(r.payload)
@@ -2262,7 +2282,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         const room = roomFor(novelId, userId)
         const occupied = database.prepare('SELECT COUNT(*) AS count FROM novel_members WHERE novel_id = ? AND (expires_at IS NULL OR expires_at > ?)').get(String(novelId), Date.now()).count + 1
         if (occupied >= room.maxUsers) return shareError(res, 409, 'ROOM_FULL', `This room is full (${room.maxUsers} users maximum).`)
-        const selectedRole = ['viewer', 'commenter', 'editor'].includes(role) ? role : room.defaultRole
+        const selectedRole = ['viewer', 'commenter', 'editor', 'beta-reader'].includes(role) ? role : room.defaultRole
         const duration = Number(accessDurationMs)
         const accessExpiresAt = Number.isFinite(duration) && duration > 0
           ? Date.now() + Math.max(15 * 60 * 1000, Math.min(duration, 365 * 24 * 60 * 60 * 1000))
@@ -2349,7 +2369,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
         const access = accessFor(novelId)
         if (!access || access.role !== 'owner') return json(res, 403, { error: 'Only the owner can change room settings.' })
         const capacity = Math.max(2, Math.min(12, Number(maxUsers) || 4))
-        const selectedRole = ['viewer', 'commenter', 'editor'].includes(defaultRole) ? defaultRole : 'editor'
+        const selectedRole = ['viewer', 'commenter', 'editor', 'beta-reader'].includes(defaultRole) ? defaultRole : 'editor'
         const occupied = database.prepare('SELECT COUNT(*) AS count FROM novel_members WHERE novel_id = ? AND (expires_at IS NULL OR expires_at > ?)').get(String(novelId), Date.now()).count + 1
         if (capacity < occupied) return json(res, 400, { error: `Remove collaborators before lowering the limit below ${occupied}.` })
         database.prepare(`INSERT INTO share_rooms (novel_id, owner_user_id, max_users, default_role, updated_at) VALUES (?, ?, ?, ?, ?)
@@ -2467,8 +2487,8 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
                 rejected.push({ key, reason: 'The host is offline. Shared edits remain safely on this device.' })
                 continue
               }
-              if ((access?.role === 'viewer' || access?.role === 'commenter') && r.store !== 'annotations') {
-                rejected.push({ key, reason: 'This shared novel is in proofread mode.' })
+              if (!sharedRecordAllowed(access, r)) {
+                rejected.push({ key, reason: access?.role === 'beta-reader' ? 'Beta readers can only submit private feedback and read progress.' : 'This shared novel is in proofread mode.' })
                 continue
               }
               upsert.run(
@@ -2522,8 +2542,10 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
       const membershipFor = database.prepare('SELECT role, expires_at FROM novel_members WHERE novel_id = ? AND owner_user_id = ? AND member_user_id = ? AND (expires_at IS NULL OR expires_at > ?)')
       const records = rows.map((r) => {
         const payload = r.deleted ? null : safeJson(r.payload)
+        const membership = r.user_id === userId ? null : membershipFor.get(r.novel_id, r.user_id, userId, Date.now())
+        const role = r.user_id === userId ? 'owner' : membership?.role || 'viewer'
+        if (!sharedRecordVisible(role, { ...r, payload }, userId)) return null
         if (payload && r.store === 'novels' && r.user_id !== userId) {
-          const membership = membershipFor.get(r.novel_id, r.user_id, userId, Date.now())
            payload.sharedRole = membership?.role || 'viewer'
            payload.sharedExpiresAt = membership?.expires_at || null
            payload.sharedOwnerId = r.user_id
@@ -2539,7 +2561,7 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           deleted: !!r.deleted,
           payload
         }
-      })
+      }).filter(Boolean)
       json(res, 200, { serverTime: Date.now(), records })
       return
     }
@@ -2735,8 +2757,13 @@ export function createMoonScribeServer({ db, dataDir, rateLimit, distDir, corsOr
           ws.send(JSON.stringify({ type: 'record:error', error: 'The owner is offline. Live editing is paused.' }))
           return
         }
-        if ((ws.role === 'viewer' || ws.role === 'commenter') && record.store !== 'annotations') {
-          ws.send(JSON.stringify({ type: 'record:error', error: 'This permission only allows proofread comments.' }))
+        const websocketRecordAllowed = ws.role === 'owner'
+          || (ws.role === 'beta-reader'
+            ? ((record.store === 'readMarkers' && !record.deleted && String(record.payload?.readerId || '') === String(ws.userId))
+              || (record.store === 'annotations' && !record.deleted && record.payload?.visibility === 'team' && String(record.payload?.creatorId || '') === String(ws.userId)))
+            : (ws.role === 'viewer' || ws.role === 'commenter' ? record.store === 'annotations' : true))
+        if (!websocketRecordAllowed) {
+          ws.send(JSON.stringify({ type: 'record:error', error: ws.role === 'beta-reader' ? 'Beta readers can only submit private feedback and read progress.' : 'This permission only allows proofread comments.' }))
           return
         }
         const payloadJson = record.deleted ? null : JSON.stringify(record.payload ?? null)

@@ -11,9 +11,9 @@ const environment = import.meta.env.VITE_MOONSCRIBE_ENV || (import.meta.env.DEV 
 // reached version 11 with an incomplete object-store set after an interrupted
 // upgrade. Opening at a new version reruns the non-destructive store creation
 // loop below and repairs those profiles without clearing their writing.
-const DB_VERSION = 13
+const DB_VERSION = 14
 
-const STORES = ['novels', 'chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'projectFiles', 'workspacePreferences', 'accountPreferences', 'authorWebsites', 'glossary', 'annotations', 'branches', 'suggestions', 'research', 'storyThreads', 'sceneChecklists', 'betaPackages', 'tombstones', 'meta', 'snapshots']
+const STORES = ['novels', 'chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'world', 'moodboard', 'projectFiles', 'workspacePreferences', 'accountPreferences', 'authorWebsites', 'glossary', 'annotations', 'branches', 'suggestions', 'research', 'storyThreads', 'sceneChecklists', 'betaPackages', 'factProvenance', 'continuityConflicts', 'readMarkers', 'tombstones', 'meta', 'snapshots']
 
 let dbPromise = null
 let legacyDbPromise = null
@@ -58,6 +58,9 @@ function getLegacyDB() {
           storyThreads: { keyPath: 'id', index: 'by-novel' },
           sceneChecklists: { keyPath: 'id', index: 'by-novel' },
           betaPackages: { keyPath: 'id', index: 'by-novel' },
+          factProvenance: { keyPath: 'id', index: 'by-novel' },
+          continuityConflicts: { keyPath: 'id', index: 'by-novel' },
+          readMarkers: { keyPath: 'id', index: 'by-novel' },
           tombstones: { keyPath: 'id' },
           meta: { keyPath: 'key' },
           snapshots: { keyPath: 'id', index: 'by-chapter' }

@@ -42,6 +42,8 @@ import ErrorBoundary from '../components/ErrorBoundary'
 import DesignPalette from '../components/DesignPalette'
 import { designById, DESIGN_MIME } from '../designs/registry'
 import { getWorkspacePreferences, updateWorkspacePreferences } from '../db/workspacePreferences'
+import { syncChapterContinuity } from '../db/continuity'
+import { getMeta } from '../db/meta'
 const Characters = lazy(() => import('./Characters'))
 const Entities = lazy(() => import('./Entities'))
 const Relationships = lazy(() => import('./Relationships'))
@@ -590,6 +592,9 @@ export default function Novel() {
         // socket. Keeping them out of the ordinary pending-sync queue prevents
         // the same edit from being treated as a two-device conflict.
         await updateChapter(chId, patch, { sync: !novelRef.current.sharedRole })
+        if (canEditSharedNovel && novelRef.current.sharedRole !== 'beta-reader') {
+          await syncChapterContinuity(novelId, chId, { content: html, revision, userId: (await getMeta('syncAccountId', null)) || syncUsername })
+        }
         persistedRevisionRef.current = Math.max(persistedRevisionRef.current, revision)
 
         const prev = lastCountRef.current[chId]
@@ -627,7 +632,7 @@ export default function Novel() {
         )
       })
     return saveQueueRef.current
-  }, [toast])
+  }, [canEditSharedNovel, syncUsername, toast])
 
   saveNowRef.current = saveNow
 

@@ -568,6 +568,28 @@ describe('sync', () => {
     expect(await response.json()).toMatchObject({ code: 'INVITE_EXPIRED' })
   })
 
+  it('enforces beta-reader read-only access and hides team feedback from beta readers', async () => {
+    await startServer()
+    const owner = (await register('beta-owner')).body
+    const reader = (await register('beta-reader-user')).body
+    db.prepare("UPDATE users SET role = 'beta_tester', roles = 'user,beta_tester' WHERE username = 'beta-reader-user'").run()
+    await post('/api/sync/push', { records: [
+      { store: 'novels', id: 'beta-novel', novelId: 'beta-novel', updatedAt: 1, deleted: false, payload: { title: 'Beta draft' } },
+      { store: 'chapters', id: 'beta-chapter', novelId: 'beta-novel', updatedAt: 2, deleted: false, payload: { title: 'One', content: '<p>Visible</p>' } },
+      { store: 'annotations', id: 'team-note', novelId: 'beta-novel', updatedAt: 3, deleted: false, payload: { visibility: 'team', creatorId: owner.accountId, chapterId: 'beta-chapter' } },
+    ] }, owner.token)
+    await post('/api/shares/presence', { novelId: 'beta-novel', chapterId: 'beta-chapter' }, owner.token)
+    const invite = await (await post('/api/shares/invite', { novelId: 'beta-novel', role: 'beta-reader' }, owner.token)).json()
+    const accepted = await post('/api/shares/accept', { code: invite.code }, reader.token)
+    expect(accepted.status).toBe(200)
+    const bootstrap = await accepted.json()
+    expect(bootstrap.records.some((record) => record.id === 'team-note')).toBe(false)
+    const chapterWrite = await post('/api/sync/push', { records: [{ store: 'chapters', id: 'beta-chapter', novelId: 'beta-novel', updatedAt: 4, deleted: false, payload: { title: 'Nope' } }] }, reader.token)
+    expect((await chapterWrite.json()).rejected[0].reason).toContain('Beta readers')
+    const marker = await post('/api/sync/push', { records: [{ store: 'readMarkers', id: 'beta-marker', novelId: 'beta-novel', updatedAt: 5, deleted: false, payload: { readerId: reader.accountId, chapterId: 'beta-chapter', anchor: 'p-1' } }] }, reader.token)
+    expect((await marker.json()).accepted).toContain('readMarkers:beta-marker')
+  })
+
   it('pushes and pulls records with last-writer-wins', async () => {
     await startServer()
     const reg = await register('finn')

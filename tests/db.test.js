@@ -21,10 +21,11 @@ import { exportBackup, importBackup } from '../src/db/backup'
 import { toWire, fromWire } from '../src/sync/serialize'
 import { createFolder, listFolders, moveFolder } from '../src/db/folders'
 import { createTile, listMoodboard, updateTile, deleteTile } from '../src/db/moodboard'
+import { betaFeedbackPayload, listContinuityConflicts, listFactProvenance, resolveContinuityConflict, saveContinuityConflict, saveFactProvenance, saveReadMarker } from '../src/db/collaboration'
 
 beforeEach(async () => {
   const db = await getDB()
-  await Promise.all(['novels', 'chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'meta', 'moodboard'].map((s) => db.clear(s)))
+  await Promise.all(['novels', 'chapters', 'folders', 'characters', 'notes', 'relationships', 'stats', 'meta', 'moodboard', 'factProvenance', 'continuityConflicts', 'readMarkers'].map((s) => db.clear(s)))
 })
 
 describe('media library records', () => {
@@ -38,6 +39,27 @@ describe('media library records', () => {
     expect(saved.text).toBe('castle-final.png')
     await deleteTile(media.id)
     expect(await listMoodboard('media-novel')).toHaveLength(0)
+  })
+})
+
+describe('collaboration records', () => {
+  it('persists fact provenance and deduplicates a continuity conflict', async () => {
+    await saveFactProvenance('collab-novel', { factKey: 'mira', factType: 'age', value: '30', chapterId: 'one', userId: 'author' })
+    await saveFactProvenance('collab-novel', { factKey: 'mira', factType: 'age', value: '31', chapterId: 'two', userId: 'editor' })
+    expect((await listFactProvenance('collab-novel')).map((row) => row.normalizedValue)).toEqual(['30', '31'])
+    const conflict = await saveContinuityConflict('collab-novel', { factKey: 'mira', establishedValue: '30', introducedValue: '31', establishedChapterId: 'one', introducedChapterId: 'two' })
+    const duplicate = await saveContinuityConflict('collab-novel', { factKey: 'mira', establishedValue: '30', introducedValue: '31', establishedChapterId: 'one', introducedChapterId: 'two' })
+    expect(duplicate.id).toBe(conflict.id)
+    expect(await listContinuityConflicts('collab-novel')).toHaveLength(1)
+    expect((await resolveContinuityConflict(conflict.id, 'accepted', 'collab-novel')).status).toBe('accepted')
+  })
+
+  it('keeps read markers per reader and produces team-visible feedback payloads', async () => {
+    await saveReadMarker('reader-novel', 'reader-a', { chapterId: 'one', anchor: 'p-4', furthestPosition: 4 })
+    await saveReadMarker('reader-novel', 'reader-b', { chapterId: 'one', anchor: 'p-2', furthestPosition: 2 })
+    const db = await getDB()
+    expect((await db.getAllFromIndex('readMarkers', 'by-novel', 'reader-novel'))).toHaveLength(2)
+    expect(betaFeedbackPayload({ chapterId: 'one', anchor: 'p-4', kind: 'highlight', creatorId: 'reader-a' })).toMatchObject({ visibility: 'team', role: 'beta-reader', kind: 'highlight' })
   })
 })
 

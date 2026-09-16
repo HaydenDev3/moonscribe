@@ -3,6 +3,8 @@
 // characters who vanished mid-story, and names that never got a profile.
 import { getDB } from './db'
 import { DEFAULT_CONTINUITY_SETTINGS, getWorkspacePreferences } from './workspacePreferences'
+import { getMeta } from './meta'
+import { listFactProvenance, saveContinuityConflict, saveFactProvenance } from './collaboration'
 
 const SEVERITY = { hint: 0, watch: 1, flag: 2 }
 
@@ -40,6 +42,57 @@ function factValues(character, texts, factType) {
     if (match?.[1]) values.push({ value: match[1].trim().toLowerCase(), chapterId: c.id, chapterTitle: c.title || 'Untitled' })
   })
   return values
+}
+
+// Save/sync-boundary continuity pass. It records who introduced a fact before
+// comparing it, so collaborators can review a durable diff even if the owner
+// was offline when the edit arrived.
+export async function syncChapterContinuity(novelId, chapterId, { content = '', revision = null, userId = null } = {}) {
+  const db = await getDB()
+  const chapter = await db.get('chapters', chapterId)
+  if (!chapter || chapter.novelId !== novelId) return { facts: [], conflicts: [] }
+  const preferences = await getWorkspacePreferences(novelId)
+  const settings = { ...DEFAULT_CONTINUITY_SETTINGS, ...(preferences.continuity || {}) }
+  const characters = (await db.getAllFromIndex('characters', 'by-novel', novelId)).filter((c) => !c.trashedAt)
+  const actor = userId || await getMeta('syncAccountId', null)
+  const facts = []
+  for (const character of characters) {
+    for (const factType of settings.factTypes || []) {
+      const values = factValues(character, [{ c: chapter, text: strip(content || chapter.content) }], factType)
+      for (const item of values) {
+        const fact = await saveFactProvenance(novelId, {
+          factKey: character.id || character.name,
+          factType,
+          normalizedValue: item.value,
+          sourceChapterId: chapterId,
+          introducingUserId: actor,
+          sourceRevision: revision,
+        })
+        facts.push(fact)
+      }
+    }
+  }
+  const conflicts = []
+  for (const fact of facts) {
+    const prior = (await listFactProvenance(novelId, fact.factKey)).filter((item) => item.factType === fact.factType && item.normalizedValue !== fact.normalizedValue && item.id !== fact.id)
+    for (const established of prior) {
+      const conflict = await saveContinuityConflict(novelId, {
+        identity: [novelId, fact.factKey, fact.factType, established.normalizedValue, fact.normalizedValue, established.sourceChapterId, fact.sourceChapterId].join(':'),
+        factKey: fact.factKey,
+        factType: fact.factType,
+        establishedValue: established.normalizedValue,
+        introducedValue: fact.normalizedValue,
+        establishedChapterId: established.sourceChapterId,
+        introducedChapterId: fact.sourceChapterId,
+        introducedByUserId: fact.introducingUserId,
+        ownerRecipientId: (await db.get('novels', novelId))?.ownerId || null,
+        factOwnerId: established.introducingUserId || null,
+        severity: settings.severity,
+      })
+      conflicts.push(conflict)
+    }
+  }
+  return { facts, conflicts }
 }
 
 // Build a report for one novel. Returns { issues, counts } where each issue is

@@ -5,6 +5,7 @@ import { DEFAULT_CONTINUITY_SETTINGS, getWorkspacePreferences, updateWorkspacePr
 import { useApp } from '../context/AppContext'
 import EmptyState from '../components/EmptyState'
 import Icon from '../components/Icon'
+import { listContinuityConflicts, resolveContinuityConflict } from '../db/collaboration'
 
 const SEVERITY_ICON = { flag: 'fa-solid fa-circle-exclamation', watch: 'fa-solid fa-triangle-exclamation', hint: 'fa-solid fa-circle-info' }
 
@@ -16,15 +17,20 @@ export default function Continuity({ novelId, embedded }) {
   const [report, setReport] = useState(null)
   const [running, setRunning] = useState(false)
   const [continuity, setContinuity] = useState(DEFAULT_CONTINUITY_SETTINGS)
+  const [conflicts, setConflicts] = useState([])
 
   useEffect(() => {
-    if (nid) getWorkspacePreferences(nid).then((preferences) => setContinuity(preferences.continuity || DEFAULT_CONTINUITY_SETTINGS))
+    if (nid) {
+      getWorkspacePreferences(nid).then((preferences) => setContinuity(preferences.continuity || DEFAULT_CONTINUITY_SETTINGS))
+      listContinuityConflicts(nid).then(setConflicts)
+    }
   }, [nid])
 
   const run = useCallback(async () => {
     setRunning(true)
     const r = await continuityReport(nid)
     setReport(r)
+    setConflicts(await listContinuityConflicts(nid))
     setRunning(false)
   }, [nid])
 
@@ -100,6 +106,22 @@ export default function Continuity({ novelId, embedded }) {
             </label>
           </div>
         </div>
+
+        {conflicts.length > 0 && (
+          <section className="continuity-conflicts" aria-label="Collaborative continuity conflicts">
+            <div className="section-heading"><h3>Collaborative conflicts</h3><span className="muted small">Human review required</span></div>
+            {conflicts.map((conflict) => (
+              <article className="continuity-conflict-card" key={conflict.id}>
+                <strong>{conflict.factType || 'Story fact'} conflict</strong>
+                <div className="continuity-conflict-diff">
+                  <span><small>Established here</small>{conflict.establishedValue}</span>
+                  <span><small>Introduced here</small>{conflict.introducedValue}</span>
+                </div>
+                <button className="button button-quiet" onClick={async () => { await resolveContinuityConflict(conflict.id, 'resolved', nid); setConflicts(await listContinuityConflicts(nid)) }}>Mark reviewed</button>
+              </article>
+            ))}
+          </section>
+        )}
 
         {report && report.issues.length === 0 ? (
           <EmptyState icon="fa-solid fa-circle-check" title="Nothing to flag">

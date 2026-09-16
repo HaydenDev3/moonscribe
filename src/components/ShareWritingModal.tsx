@@ -28,6 +28,11 @@ const SHARE_ROLES = [
     label: 'Can read & proofread',
     hint: 'Read, highlight passages and leave comments',
   },
+  {
+    value: 'beta-reader',
+    label: 'Beta reader',
+    hint: 'Progressive read-only access with private feedback',
+  },
 ]
 const ACCESS_DURATIONS = [
   { value: '3600000', label: '1 hour' },
