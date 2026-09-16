@@ -446,7 +446,7 @@ export default function Settings() {
               </div>
               {aboutPage === 0 && (
                 <div
-                  className="settings-row about-release about-release-current"
+                  className="settings-row about-release"
                   style={{ marginTop: 'var(--space-5)' }}
                 >
                   <span className="about-release-mark">
@@ -454,11 +454,35 @@ export default function Settings() {
                   </span>
                   <div className="min-w-0">
                     <div className="settings-row-title">
-                      Version 1.1.7 <em>Current</em>
+                      Version 1.1.8 <em>Current</em>
                     </div>
                     <div className="settings-row-sub">
-                      Current release — writing, publishing, media, recovery, and book-production
-                      improvements
+                      Current release — project customisation, production exports, continuity, and workspace control
+                    </div>
+                    <div className="settings-row-detail">
+                      Added configurable continuity checks, project-level editor typography and sync preferences,
+                      saved workspace defaults, reusable design and export presets, KDP/IngramSpark print presets,
+                      workspace ordering controls, and a visible local-first privacy statement. Updated conflict
+                      handling, responsive workspace controls, and project preference isolation while preserving the
+                      writing, publishing, recovery, and book-production foundations from 1.1.7.
+                    </div>
+                  </div>
+                </div>
+              )}
+              {aboutPage === 0 && (
+                <div
+                  className="settings-row about-release"
+                  style={{ marginTop: 'var(--space-5)' }}
+                >
+                  <span className="about-release-mark">
+                    <Icon icon="fa-solid fa-star" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="settings-row-title">
+                      Version 1.1.7 <em>Reserved</em>
+                    </div>
+                    <div className="settings-row-sub">
+                      Reserved release — writing, publishing, media, recovery, and book-production improvements
                     </div>
                     <div className="settings-row-detail">
                       Added a shared Global Media Library, authenticated Author Website publishing,
