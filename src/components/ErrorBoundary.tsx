@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from 'react'
 
-type ErrorBoundaryProps = { children?: ReactNode }
+type ErrorBoundaryProps = { children?: ReactNode; label?: string }
 type ErrorBoundaryState = { errored: boolean }
 
 // Catches render errors anywhere in the app and offers a soft landing instead
@@ -26,8 +26,8 @@ export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBo
         <div className="app-error-fallback">
           <div className="app-error-card">
             <div className="feature-disabled-kicker">App safeguard</div>
-            <h2>Something slipped in the ink.</h2>
-            <p>Your work is still safe. We kept the rest of the studio available and paused the failing area until it can be repaired.</p>
+            <h2>{this.props.label ? `${this.props.label} needs a fresh page.` : 'Something slipped in the ink.'}</h2>
+            <p>Your work is still safe. We kept the rest of the studio available and paused this area until it can be repaired.</p>
             <div className="feature-disabled-actions">
               <button className="button button-primary" onClick={() => window.location.reload()} type="button">
                 Reload the page

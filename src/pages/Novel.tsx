@@ -38,6 +38,7 @@ import { downloadText, safeName } from '../utils/download'
 import { timeAgo } from '../utils/dates'
 import { computeNumbers, titleFor, isContainer } from '../utils/numbering'
 import Icon from '../components/Icon'
+import ErrorBoundary from '../components/ErrorBoundary'
 import DesignPalette from '../components/DesignPalette'
 import { designById, DESIGN_MIME } from '../designs/registry'
 import { getWorkspacePreferences, updateWorkspacePreferences } from '../db/workspacePreferences'
@@ -2258,15 +2259,15 @@ export default function Novel() {
             </div>
           ) : activeSection === 'design' ? (
             <div className="mode-body">
-              <BookDesigner novelId={id} embedded />
+              <ErrorBoundary label="Designer"><BookDesigner novelId={id} embedded /></ErrorBoundary>
             </div>
           ) : activeSection === 'interior-layout' ? (
             <div className="mode-body interior-layout-mode">
-              <InteriorLayoutPage novelId={id} embedded />
+              <ErrorBoundary label="Interior Layout"><InteriorLayoutPage novelId={id} embedded /></ErrorBoundary>
             </div>
           ) : activeSection === 'media' ? (
             <div className="mode-body">
-              <MediaLibrary novelId={id} embedded />
+              <ErrorBoundary label="Media Library"><MediaLibrary novelId={id} embedded /></ErrorBoundary>
             </div>
           ) : activeSection === 'analytics' ? (
             <div className="mode-body">

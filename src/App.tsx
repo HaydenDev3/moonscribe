@@ -198,7 +198,7 @@ export default function App() {
           <Route path="/contact" element={<PublicPage page="contact" />} />
           <Route path="/dashboard" element={enterStudio(<FeatureGuard featureName="dashboard" title="Dashboard unavailable"><Dashboard /></FeatureGuard>)} />
           <Route path="/trash" element={enterStudio(<Trash />)} />
-          <Route path="/author-website" element={enterStudio(<AuthorWebsite />)} />
+          <Route path="/author-website" element={enterStudio(<ErrorBoundary label="Author Website"><AuthorWebsite /></ErrorBoundary>)} />
           <Route path="/@:username" element={<PublicAuthorWebsite />} />
           <Route path="/@:username/about" element={<PublicAuthorWebsite />} />
           <Route path="/admin" element={enterStudio(<AdminDashboard />)} />
@@ -207,14 +207,14 @@ export default function App() {
             element={enterStudio(
               <FeatureGuard featureName="print-view" title="Print preview unavailable">
                 <Suspense fallback={<Loading />}>
-                  <PrintView />
+                  <ErrorBoundary label="Print preview"><PrintView /></ErrorBoundary>
                 </Suspense>
               </FeatureGuard>
             )}
           />
-          <Route path="/novel/:id" element={enterStudio(<FeatureGuard featureName="novel" title="Novel workspace unavailable"><Novel /></FeatureGuard>)} />
+          <Route path="/novel/:id" element={enterStudio(<FeatureGuard featureName="novel" title="Novel workspace unavailable"><ErrorBoundary label="Novel workspace"><Novel /></ErrorBoundary></FeatureGuard>)} />
           {/* Every section is a mode of the writer workspace. */}
-          <Route path="/novel/:id/:mode" element={enterStudio(<FeatureGuard featureName="novel-mode" title="Writer mode unavailable"><Novel /></FeatureGuard>)} />
+          <Route path="/novel/:id/:mode" element={enterStudio(<FeatureGuard featureName="novel-mode" title="Writer mode unavailable"><ErrorBoundary label="Novel workspace"><Novel /></ErrorBoundary></FeatureGuard>)} />
           {/* Legacy binder deep links still resolve to the inline mode. */}
           <Route path="/novel/:id/binder/:section" element={enterStudio(<FeatureGuard featureName="binder" title="Binder unavailable"><Novel /></FeatureGuard>)} />
           <Route path="*" element={<NotFound />} />
