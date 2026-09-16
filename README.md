@@ -7,7 +7,7 @@
 ### A calm, local-first studio for stories that take time.
 
 <p>
-  <a href="https://github.com/HaydenDev3/moonscribe"><img alt="Version 1.1.7" src="https://img.shields.io/badge/release-1.1.7-8b7cf6?style=for-the-badge&logo=starship&logoColor=white" /></a>
+  <a href="https://github.com/HaydenDev3/moonscribe"><img alt="Version 1.1.8" src="https://img.shields.io/badge/release-1.1.8-8b7cf6?style=for-the-badge&logo=starship&logoColor=white" /></a>
   <img alt="React 19" src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=111827" />
   <img alt="TypeScript strict" src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
   <img alt="PWA installable" src="https://img.shields.io/badge/PWA-installable-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white" />
@@ -28,6 +28,10 @@ MoonScribe keeps drafting, story memory, planning, collaboration, and finished-b
 <td width="33%"><h3>🧭 Remember</h3>Characters, relationships, glossary, timeline, continuity, milestones, moodboards, corkboards, and references.</td>
 <td width="33%"><h3>✦ Design</h3>Cover templates, palettes, typography effects, ornaments, trim settings, print previews, and a live 3D book.</td>
 </tr></table>
+
+### What arrived in 1.1.8
+
+1.1.8 is code-complete and in verification. It adds collaboration-safe continuity provenance, spoiler-safe beta-reader access, project customisation, recovery boundaries, integrity diagnostics, and enforced release gates. See the [1.1.8 release notes](docs/release-1.1.8.md).
 
 ### What arrived in 1.1.7
 
@@ -99,6 +103,7 @@ The README and product surfaces take visual cues from [React Bits LogoLoop](http
 
 - [Documentation index](docs/README.md)
 - [1.1.7 release notes](docs/release-1.1.7.md)
+- [1.1.8 release notes](docs/release-1.1.8.md)
 - [Product and user guide](docs/user-guide.md)
 - [Settings reference](docs/settings.md)
 - [Architecture](docs/architecture.md)

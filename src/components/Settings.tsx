@@ -457,14 +457,16 @@ export default function Settings() {
                       Version 1.1.8 <em>Current</em>
                     </div>
                     <div className="settings-row-sub">
-                      Current release — project customisation, production exports, continuity, and workspace control
+                      Code-complete, in verification — collaboration, recovery, privacy, and desktop parity
                     </div>
                     <div className="settings-row-detail">
-                      Added configurable continuity checks, project-level editor typography and sync preferences,
-                      saved workspace defaults, reusable design and export presets, KDP/IngramSpark print presets,
-                      workspace ordering controls, and a visible local-first privacy statement. Updated conflict
-                      handling, responsive workspace controls, and project preference isolation while preserving the
-                      writing, publishing, recovery, and book-production foundations from 1.1.7.
+                      Added project-level editor customisation, sync preferences, workspace defaults and panel ordering,
+                      design and per-format export presets, KDP/IngramSpark print presets, configurable continuity
+                      checking, collaborator fact provenance and persisted conflict diffs, beta-reader progressive
+                      reading with private feedback, spoiler-safe search/navigation/export protection, recovery
+                      boundaries, integrity diagnostics, notification deduplication, and an enforced bundle gate.
+                      Updated IndexedDB/native sync migrations, account/profile isolation, responsive overlays, and
+                      local-first privacy messaging. Desktop runtime verification remains open; 1.1.7 stays reserved.
                     </div>
                   </div>
                 </div>
