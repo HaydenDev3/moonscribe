@@ -202,7 +202,7 @@ export default function Editor({
   const [fontFamily, setFontFamily] = useState(defaultBodyFont)
   const [titleFontFamily, setTitleFontFamily] = useState(defaultTitleFont)
   const [typographyTarget, setTypographyTarget] = useState<'body' | 'title'>('body')
-  const [fontSize, setFontSize] = useState('12')
+  const [fontSize, setFontSize] = useState(() => String(typography?.bodyStyle?.fontSize || '12').replace(/pt$/i, ''))
 
   const [pageSize, setPageSize] = useState(() => {
     if (pageLayout?.pageSize) return migratePageSize(pageLayout.pageSize)
@@ -213,7 +213,7 @@ export default function Editor({
     }
   })
 
-  const [lineSpacing, setLineSpacing] = useState('1.5')
+  const [lineSpacing, setLineSpacing] = useState(() => String(typography?.bodyStyle?.lineHeight || '1.5'))
   const [toolbarIdle, setToolbarIdle] = useState(false)
   const editorPreferenceKey = `moonscribe:editor-density:${syncUsername || 'local'}`
   const [editorDensity, setEditorDensity] = useState(() => {
@@ -234,6 +234,11 @@ export default function Editor({
   useEffect(() => {
     if (typeof settings?.writingHud === 'boolean') setWritingHud(settings.writingHud)
   }, [settings?.writingHud])
+  useEffect(() => {
+    if (typography?.bodyStyle?.fontFamily) setFontFamily(String(typography.bodyStyle.fontFamily))
+    if (typography?.bodyStyle?.fontSize) setFontSize(String(typography.bodyStyle.fontSize).replace(/pt$/i, ''))
+    if (typography?.bodyStyle?.lineHeight) setLineSpacing(String(typography.bodyStyle.lineHeight))
+  }, [typography?.bodyStyle?.fontFamily, typography?.bodyStyle?.fontSize, typography?.bodyStyle?.lineHeight])
   const [dictationSupported, setDictationSupported] = useState(false)
   const [dictating, setDictating] = useState(false)
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
@@ -2887,9 +2892,10 @@ export default function Editor({
   const handleSizeChange = useCallback(
     (val) => {
       setFontSize(val)
+      onTypographyChange({ bodyStyle: { ...(typography?.bodyStyle || {}), fontSize: `${val}pt` } })
       applyStyle('fontSize', `${val}pt`)
     },
-    [applyStyle]
+    [applyStyle, onTypographyChange, typography]
   )
 
   const handleTextColorChange = useCallback(
@@ -2910,12 +2916,13 @@ export default function Editor({
     (val) => {
       setLineSpacing(val)
       onLineSpacingChange?.(val)
+      onTypographyChange({ bodyStyle: { ...(typography?.bodyStyle || {}), lineHeight: val } })
 
       requestAnimationFrame(() => {
         recalcRef.current?.()
       })
     },
-    [onLineSpacingChange]
+    [onLineSpacingChange, onTypographyChange, typography]
   )
 
   // ── Save selection ───────────────────────────────────────────────────────
@@ -4158,7 +4165,7 @@ export default function Editor({
                         }
                       : {}),
                     '--editor-line-height': lineSpacing,
-                    '--editor-font-size': ps ? '12pt' : undefined,
+                    '--editor-font-size': `${fontSize}pt`,
                   } as React.CSSProperties
                 }
               >

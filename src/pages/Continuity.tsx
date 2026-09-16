@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { continuityReport, severityLabel } from '../db/continuity'
+import { DEFAULT_CONTINUITY_SETTINGS, getWorkspacePreferences, updateWorkspacePreferences } from '../db/workspacePreferences'
 import { useApp } from '../context/AppContext'
 import EmptyState from '../components/EmptyState'
 import Icon from '../components/Icon'
@@ -14,6 +15,11 @@ export default function Continuity({ novelId, embedded }) {
   const navigate = useNavigate()
   const [report, setReport] = useState(null)
   const [running, setRunning] = useState(false)
+  const [continuity, setContinuity] = useState(DEFAULT_CONTINUITY_SETTINGS)
+
+  useEffect(() => {
+    if (nid) getWorkspacePreferences(nid).then((preferences) => setContinuity(preferences.continuity || DEFAULT_CONTINUITY_SETTINGS))
+  }, [nid])
 
   const run = useCallback(async () => {
     setRunning(true)
@@ -21,6 +27,13 @@ export default function Continuity({ novelId, embedded }) {
     setReport(r)
     setRunning(false)
   }, [nid])
+
+  const updateContinuity = async (patch) => {
+    const next = { ...continuity, ...patch }
+    setContinuity(next)
+    await updateWorkspacePreferences(nid, { continuity: next })
+    await run()
+  }
 
   useEffect(() => {
     run()
@@ -59,6 +72,34 @@ export default function Continuity({ novelId, embedded }) {
             <span className="stat">{(report?.issues || []).filter((i) => i.kind === 'design').length} design checks</span>
           </div>
         )}
+
+        <div className="continuity-settings" aria-label="Continuity settings">
+          <strong>Track manuscript facts</strong>
+          <div className="continuity-setting-options">
+            {[
+              ['age', 'Age'],
+              ['eyeColor', 'Eye colour'],
+              ['relationshipStatus', 'Relationship status'],
+              ['aliases', 'Aliases'],
+            ].map(([value, label]) => (
+              <label key={value}>
+                <input
+                  type="checkbox"
+                  checked={continuity.factTypes.includes(value)}
+                  onChange={() => updateContinuity({ factTypes: continuity.factTypes.includes(value) ? continuity.factTypes.filter((item) => item !== value) : [...continuity.factTypes, value] })}
+                />
+                {label}
+              </label>
+            ))}
+            <label>
+              Severity
+              <select value={continuity.severity} onChange={(event) => updateContinuity({ severity: event.target.value })}>
+                <option value="warn">Warn</option>
+                <option value="block">Block</option>
+              </select>
+            </label>
+          </div>
+        </div>
 
         {report && report.issues.length === 0 ? (
           <EmptyState icon="fa-solid fa-circle-check" title="Nothing to flag">

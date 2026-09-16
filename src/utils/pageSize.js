@@ -22,6 +22,12 @@ export const PAGE_MARGIN_PRESETS = [
   { key: 'manuscript', label: 'Manuscript (32 mm)', value: 32 },
 ]
 
+export const PRINT_VENDOR_PRESETS = [
+  { key: 'custom', label: 'Custom settings', pageSize: '', bleed: 0 },
+  { key: 'kdp-paperback', label: 'KDP paperback · 6×9″', pageSize: 'us-trade', bleed: 3.175 },
+  { key: 'ingramspark-paperback', label: 'IngramSpark paperback · 6×9″', pageSize: 'us-trade', bleed: 3.175 },
+]
+
 export function mmToTwips(mm) {
   return Math.round((Number(mm) || 0) * MM_TO_TWIPS)
 }

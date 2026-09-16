@@ -50,6 +50,9 @@ const DEFAULT_SETTINGS = {
   spellCheck: true,
   autoCorrect: true,
   autosaveDelay: 1800,
+  backgroundSync: true,
+  syncFrequency: 'balanced', // 'realtime' | 'balanced' | 'relaxed'
+  conflictResolution: 'ask', // 'ask' | 'prefer-local' | 'prefer-remote'
   dropCaps: false,             // decorative first-letter on chapter openings
   typewriterMode: false,       // keep current line vertically centred while typing
   timewarmth: false,           // subtle amber warmth toward evening
@@ -1126,7 +1129,7 @@ export function AppProvider({ children }) {
   // is typing. Reconnect/focus still reconcile immediately, and failed batches
   // back off rather than creating a tight retry loop.
   useEffect(() => {
-    if (!sync.server) return undefined
+    if (!sync.server || settings.backgroundSync === false) return undefined
     let stopped = false
     let batchTimer: ReturnType<typeof setTimeout> | undefined
     let retryTimer: ReturnType<typeof setTimeout> | undefined
@@ -1158,6 +1161,7 @@ export function AppProvider({ children }) {
       }
     }
 
+    const syncDelays = { realtime: 800, balanced: 1200, relaxed: 5000 }
     const scheduleBatch = () => {
       // Online edits should enter the cloud sync queue immediately. The
       // IndexedDB write remains the safety net, but displaying "Saved locally"
@@ -1166,7 +1170,7 @@ export function AppProvider({ children }) {
       if (batchTimer) clearTimeout(batchTimer)
       // Coalesce autosave bursts so typing does not produce a cloud request
       // (and a visible status transition) every few hundred milliseconds.
-      batchTimer = setTimeout(runSync, 1200)
+      batchTimer = setTimeout(runSync, syncDelays[settings.syncFrequency] || syncDelays.balanced)
     }
     const reconcileNow = () => {
       failureCount = 0
@@ -1189,7 +1193,7 @@ export function AppProvider({ children }) {
       window.removeEventListener('online', reconcileNow)
       document.removeEventListener('visibilitychange', onVisible)
     }
-  }, [sync.server])
+  }, [settings.backgroundSync, settings.syncFrequency, sync.server])
 
   const accountRoles = useMemo(() => normalizeRoles(account.roles), [account.roles])
   const hasRole = useCallback((role) => accountRoles.includes(role), [accountRoles])

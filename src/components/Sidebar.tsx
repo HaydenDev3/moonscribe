@@ -1220,6 +1220,21 @@ export default function Sidebar({
               <Icon icon="fa-solid fa-circle-info" /> Changes save instantly
             </span>
           </div>
+          <label className="workspace-manager-default-view">
+            <span>
+              <strong>Open this novel in</strong>
+              <small>Choose the first workspace shown when you open the project.</small>
+            </span>
+            <Select
+              ariaLabel="Default workspace"
+              value={workspacePrefs?.defaultView || 'write'}
+              onChange={async (value) => {
+                const next = await updateWorkspacePreferences(novel.id, { defaultView: value })
+                setWorkspacePrefs(next)
+              }}
+              options={WORKSPACE_REGISTRY.filter((item) => item.key === 'write' || (workspacePrefs?.enabled || []).includes(item.key)).map((item) => ({ value: item.key, label: item.label }))}
+            />
+          </label>
           <div className="workspace-manager-list">
             {WORKSPACE_REGISTRY.map((item) => {
               const enabled =

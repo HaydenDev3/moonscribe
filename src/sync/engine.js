@@ -449,6 +449,8 @@ export async function collectPending() {
 export async function applyIncoming(records) {
   if (!records || !records.length) return { applied: 0 }
   const db = await getDB()
+  const syncPreferences = (await getMeta('settings', {})) || {}
+  const conflictResolution = syncPreferences.conflictResolution || 'ask'
   let applied = 0
   const writes = []
   const dailyDeltas = []
@@ -485,8 +487,15 @@ export async function applyIncoming(records) {
         writes.push({ type: 'put', store: r.store, record: { ...incoming, parentId: local.parentId || null, order: local.order, updatedAt: Date.now(), pendingSync: true } })
         continue
       }
-      conflictWork.push(() => recordConflict(r.store, key, local, incoming))
-      continue
+      if (conflictResolution === 'prefer-local') {
+        writes.push({ type: 'put', store: r.store, record: { ...local, pendingSync: true } })
+        continue
+      } else if (conflictResolution === 'ask') {
+        conflictWork.push(() => recordConflict(r.store, key, local, incoming))
+        continue
+      }
+      // Prefer remote continues through the normal incoming-write path below.
+      // The local pending marker is removed with the accepted remote record.
     }
 
     if (sharedRecord) conflictWork.push(() => clearRecordConflict(r.store, key))

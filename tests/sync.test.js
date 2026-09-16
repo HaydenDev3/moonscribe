@@ -189,6 +189,16 @@ describe('conflict handling', () => {
     expect((await db.get('chapters', ch.id)).title).toBe('Mine') // not silently overwritten
   })
 
+  it('respects the prefer-local conflict preference', async () => {
+    const novel = await createNovel({ title: 'N' })
+    const ch = await createChapter(novel.id, { title: 'Mine', content: '<p>mine</p>' })
+    const db = await getDB()
+    await db.put('meta', { key: 'settings', value: { conflictResolution: 'prefer-local' } })
+    await applyIncoming(incomingFor(ch, { title: 'Theirs', content: '<p>theirs</p>' }))
+    expect((await db.get('chapters', ch.id)).title).toBe('Mine')
+    expect(await listConflicts()).toHaveLength(0)
+  })
+
   it('accepts a newer edit from another device without losing its revision metadata', async () => {
     const novel = await createNovel({ title: 'Shared novel' })
     const ch = await createChapter(novel.id, { title: 'Device one', content: '<p>local</p>' })

@@ -2,6 +2,7 @@
 // trouble spots — POVs who never appear, scenes set somewhere unknown,
 // characters who vanished mid-story, and names that never got a profile.
 import { getDB } from './db'
+import { DEFAULT_CONTINUITY_SETTINGS, getWorkspacePreferences } from './workspacePreferences'
 
 const SEVERITY = { hint: 0, watch: 1, flag: 2 }
 
@@ -22,10 +23,31 @@ function characterAppears(character, text) {
   return [fullName, firstName, ...(Array.isArray(character?.aliases) ? character.aliases : [])].filter(Boolean).some((name) => mentions(name, text))
 }
 
+const FACT_PATTERNS = {
+  age: (name) => new RegExp(`\\b${name}\\b[^.!?]{0,100}?\\b(?:is|was|turned|turns)\\s+(\\d{1,3})\\s+years?\\s+old\\b`, 'i'),
+  eyeColor: (name) => new RegExp(`\\b${name}\\b[^.!?]{0,100}?\\b((?:bright|pale|dark|deep|light)?\\s*(?:blue|green|brown|grey|gray|hazel|amber|black))\\s+eyes?\\b`, 'i'),
+  relationshipStatus: (name) => new RegExp(`\\b${name}\\b[^.!?]{0,100}?\\b(married|single|dating|engaged|divorced|widowed)\\b`, 'i'),
+  aliases: (name) => new RegExp(`\\b${name}\\b[^.!?]{0,100}?\\b(?:known|referred)\\s+as\\s+["“']([^"”']+)["”']`, 'i')
+}
+
+function factValues(character, texts, factType) {
+  const name = String(character?.name || '').trim().replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')
+  const pattern = FACT_PATTERNS[factType]?.(name)
+  if (!pattern) return []
+  const values = []
+  texts.forEach(({ c, text }) => {
+    const match = text.match(pattern)
+    if (match?.[1]) values.push({ value: match[1].trim().toLowerCase(), chapterId: c.id, chapterTitle: c.title || 'Untitled' })
+  })
+  return values
+}
+
 // Build a report for one novel. Returns { issues, counts } where each issue is
 // { severity, kind, title, detail, chapterId? }.
 export async function continuityReport(novelId) {
   const db = await getDB()
+  const preferences = await getWorkspacePreferences(novelId)
+  const continuity = { ...DEFAULT_CONTINUITY_SETTINGS, ...(preferences.continuity || {}) }
   const novel = await db.get('novels', novelId)
   const chapters = (await db.getAllFromIndex('chapters', 'by-novel', novelId))
     .filter((c) => !c.trashedAt)
@@ -36,6 +58,26 @@ export async function continuityReport(novelId) {
   const issues = []
   const withWords = chapters.filter((c) => strip(c.content))
   const texts = chapters.map((c) => ({ c, text: strip(c.content) }))
+
+  // Compare explicit facts expressed in the manuscript. This deliberately
+  // avoids guessing from prose: only clear statements are reported.
+  const factLabels = { age: 'age', eyeColor: 'eye colour', relationshipStatus: 'relationship status', aliases: 'alias' }
+  for (const character of characters) {
+    for (const factType of continuity.factTypes || []) {
+      const values = factValues(character, texts, factType)
+      const distinct = [...new Set(values.map((item) => item.value))]
+      if (distinct.length < 2) continue
+      const first = values.find((item) => item.value === distinct[0])
+      const latest = values.find((item) => item.value === distinct[distinct.length - 1])
+      issues.push({
+        severity: continuity.severity === 'block' ? SEVERITY.flag : SEVERITY.watch,
+        kind: 'fact-conflict',
+        title: `“${character.name}” has conflicting ${factLabels[factType] || factType}`,
+        detail: `${first.value} appears in “${first.chapterTitle}”, while ${latest.value} appears in “${latest.chapterTitle}”. Review the wording or update the character profile.`,
+        chapterId: latest.chapterId
+      })
+    }
+  }
 
   // Design metadata is part of the finished book too. Keep these checks in
   // continuity so a manuscript can be reviewed before it reaches print.

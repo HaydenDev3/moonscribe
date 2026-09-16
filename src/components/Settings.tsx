@@ -3670,6 +3670,40 @@ function Performance({ settings, updateSettings }) {
       </div>
       <div className="settings-row">
         <div>
+          <div className="settings-row-title">Sync frequency</div>
+          <div className="settings-row-sub">Choose how quickly local changes are sent after you pause writing.</div>
+        </div>
+        <Select
+          ariaLabel="Sync frequency"
+          width={160}
+          value={settings.syncFrequency || 'balanced'}
+          onChange={(v) => updateSettings({ syncFrequency: v })}
+          options={[
+            { value: 'realtime', label: 'Realtime', hint: '1 sec' },
+            { value: 'balanced', label: 'Balanced', hint: '1.2 sec' },
+            { value: 'relaxed', label: 'Relaxed', hint: '5 sec' },
+          ]}
+        />
+      </div>
+      <div className="settings-row">
+        <div>
+          <div className="settings-row-title">Conflict preference</div>
+          <div className="settings-row-sub">Choose what happens when another device changed the same record.</div>
+        </div>
+        <Select
+          ariaLabel="Conflict preference"
+          width={180}
+          value={settings.conflictResolution || 'ask'}
+          onChange={(v) => updateSettings({ conflictResolution: v })}
+          options={[
+            { value: 'ask', label: 'Always ask' },
+            { value: 'prefer-local', label: 'Prefer this device' },
+            { value: 'prefer-remote', label: 'Prefer other device' },
+          ]}
+        />
+      </div>
+      <div className="settings-row">
+        <div>
           <div className="settings-row-title">Lightweight interface</div>
           <div className="settings-row-sub">
             Reduce decorative rendering to keep older devices responsive.
@@ -4252,6 +4286,11 @@ function PrivacyData({ toast, refreshNovels, fileRef }) {
         </li>
         <li>
           <span className="privacy-dot ok" /> Your data stays on your device by default.
+        </li>
+        <li>
+          <span className="privacy-dot ok" /> Sync is optional. MoonScribe sends project changes to
+          your signed-in sync account only when you enable sync; exports and backups stay under your
+          control.
         </li>
         <li>
           <span className="privacy-dot ok" /> Backups can be encrypted with AES-256 (PBKDF2). The

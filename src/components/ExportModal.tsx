@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Modal from './Modal'
 import Icon from './Icon'
 import { htmlToMarkdown } from '../utils/htmlToMarkdown'
@@ -14,6 +14,8 @@ import { designPrintTheme } from '../designs/registry'
 import { buildPrintFontOptions } from '../utils/fonts'
 import { useApp } from '../context/AppContext'
 import Select from './Select'
+import { getWorkspacePreferences, updateWorkspacePreferences } from '../db/workspacePreferences'
+import { PRINT_VENDOR_PRESETS } from '../utils/pageSize'
 
 const EXTENSIONS = { epub: 'epub', docx: 'docx', markdown: 'md', txt: 'txt', html: 'html', json: 'json' }
 
@@ -29,7 +31,16 @@ export default function ExportModal({ open, onClose, novel, chapters, toast, imp
   const [lineSpacing, setLineSpacing] = useState('1.5')
   const printFontOptions = useMemo(() => buildPrintFontOptions({ systemFonts, customFonts }), [customFonts, systemFonts])
   const [printFont, setPrintFont] = useState('Georgia')
+  const [printPreset, setPrintPreset] = useState('custom')
+  const [presets, setPresets] = useState({})
+  const [presetName, setPresetName] = useState('')
+  const [selectedPreset, setSelectedPreset] = useState('')
   const [exporting, setExporting] = useState(false)
+
+  useEffect(() => {
+    if (!novel?.id) return
+    getWorkspacePreferences(novel.id).then((prefs) => setPresets(prefs.exportPresets || {})).catch(() => {})
+  }, [novel?.id])
 
   const options = useMemo(() => ({
     includeFrontMatter,
@@ -56,9 +67,9 @@ export default function ExportModal({ open, onClose, novel, chapters, toast, imp
 
     try {
       const geometry = {
-        pageSize: novel.layout?.pageSize,
+        pageSize: PRINT_VENDOR_PRESETS.find((preset) => preset.key === printPreset)?.pageSize || novel.layout?.pageSize,
         pageMargin: novel.layout?.pageMargin,
-        bleed: novel.layout?.bleed,
+        bleed: PRINT_VENDOR_PRESETS.find((preset) => preset.key === printPreset)?.bleed ?? novel.layout?.bleed,
       }
       const layout = {
         ...geometry,
@@ -161,6 +172,39 @@ export default function ExportModal({ open, onClose, novel, chapters, toast, imp
               <span className="export-file-pill">.{format === 'pdf' ? 'pdf' : EXTENSIONS[format]}</span>
             </div>
 
+            <div className="export-setting-group">
+              <h4>Saved preset</h4>
+              <div className="export-preset-row">
+                <Select
+                  ariaLabel="Saved export preset"
+                  value={selectedPreset}
+                  onChange={(value) => {
+                    setSelectedPreset(value)
+                    const saved = presets[value]
+                    if (!saved) return
+                    setFormat(saved.format || 'pdf')
+                    setIncludeFrontMatter(saved.includeFrontMatter !== false)
+                    setIncludeChapterNumbers(saved.includeChapterNumbers !== false)
+                    setIncludeSceneBreaks(saved.includeSceneBreaks !== false)
+                    setIncludePartHeadings(saved.includePartHeadings !== false)
+                    setIncludeWordStats(!!saved.includeWordStats)
+                    setUseDesignerTheme(saved.useDesignerTheme !== false)
+                    setLineSpacing(saved.lineSpacing || '1.5')
+                    setPrintFont(saved.printFont || 'Georgia')
+                    setPrintPreset(saved.printPreset || 'custom')
+                  }}
+                  options={[{ value: '', label: 'Choose a saved preset' }, ...Object.keys(presets).map((name) => ({ value: name, label: name }))]}
+                />
+                <input aria-label="New export preset name" value={presetName} onChange={(event) => setPresetName(event.target.value)} placeholder="Preset name" />
+                <button type="button" className="button button-quiet" disabled={!presetName.trim()} onClick={async () => {
+                  const next = { ...presets, [presetName.trim()]: { format, ...options, printPreset } }
+                  setPresets(next)
+                  setPresetName('')
+                  await updateWorkspacePreferences(novel.id, { exportPresets: next })
+                }}>Save</button>
+              </div>
+            </div>
+
             {supportsContentOptions ? (
               <>
                 <div className="export-setting-group">
@@ -178,6 +222,12 @@ export default function ExportModal({ open, onClose, novel, chapters, toast, imp
                     <h4>Typography</h4>
                     <label><span>Typeface</span><Select ariaLabel="Typeface" value={printFont} onChange={setPrintFont} options={printFontOptions.map((font) => ({ value: font.value, label: font.label }))} /></label>
                     <label><span>Line spacing</span><Select ariaLabel="Line spacing" value={lineSpacing} onChange={setLineSpacing} options={[{ value: '1', label: 'Single' }, { value: '1.15', label: 'Compact' }, { value: '1.5', label: 'Book' }, { value: '2', label: 'Double' }]} /></label>
+                  </div>
+                )}
+                {format === 'pdf' && (
+                  <div className="export-setting-group">
+                    <h4>Print vendor</h4>
+                    <label><span>Trim and bleed preset</span><Select ariaLabel="Print vendor preset" value={printPreset} onChange={setPrintPreset} options={PRINT_VENDOR_PRESETS.map((preset) => ({ value: preset.key, label: preset.label }))} /></label>
                   </div>
                 )}
               </>

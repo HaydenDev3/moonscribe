@@ -40,6 +40,7 @@ import { computeNumbers, titleFor, isContainer } from '../utils/numbering'
 import Icon from '../components/Icon'
 import DesignPalette from '../components/DesignPalette'
 import { designById, DESIGN_MIME } from '../designs/registry'
+import { getWorkspacePreferences } from '../db/workspacePreferences'
 const Characters = lazy(() => import('./Characters'))
 const Entities = lazy(() => import('./Entities'))
 const Relationships = lazy(() => import('./Relationships'))
@@ -304,6 +305,18 @@ export default function Novel() {
   const [collaborationRoomState, setCollaborationRoomState] = useState(null)
   const [sessionTick, setSessionTick] = useState(0)
   const [sessionPaused, setSessionPaused] = useState(false)
+
+  // A project may choose a different landing workspace. Only apply it when
+  // opening the bare novel route; explicit links remain authoritative.
+  useEffect(() => {
+    if (!id || mode || section || location.pathname !== `/novel/${id}`) return
+    let cancelled = false
+    getWorkspacePreferences(id).then((prefs) => {
+      if (cancelled || !prefs.defaultView || prefs.defaultView === 'write') return
+      navigate(`/novel/${id}/${prefs.defaultView}`, { replace: true })
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [id, mode, section, location.pathname, navigate])
 
   // refs for save flow (avoid stale closures in debounce)
   const currentIdRef = useRef(null)
